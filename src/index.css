@@ -2,95 +2,121 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
+/* CIG CONTROL - Industrial SaaS Design System */
+/* Dark Industrial Theme with Modern Aesthetic */
+
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Core Background - Industrial Dark */
+    --background: 220 15% 8%;
+    --foreground: 210 20% 95%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    /* Card Surfaces */
+    --card: 220 15% 12%;
+    --card-foreground: 210 20% 95%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    /* Popover */
+    --popover: 220 15% 10%;
+    --popover-foreground: 210 20% 95%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    /* Primary - Industrial Blue */
+    --primary: 210 90% 55%;
+    --primary-foreground: 220 15% 8%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    /* Secondary - Steel Gray */
+    --secondary: 220 15% 18%;
+    --secondary-foreground: 210 20% 90%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    /* Muted Surfaces */
+    --muted: 220 12% 16%;
+    --muted-foreground: 215 15% 55%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    /* Accent - Tech Cyan */
+    --accent: 185 85% 45%;
+    --accent-foreground: 220 15% 8%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    /* Destructive - Industrial Red */
+    --destructive: 0 75% 50%;
+    --destructive-foreground: 210 20% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    /* Borders & Inputs */
+    --border: 220 15% 20%;
+    --input: 220 15% 15%;
+    --ring: 210 90% 55%;
 
-    --radius: 0.5rem;
+    /* Radius */
+    --radius: 0.625rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* CIG Central Colors */
+    --cig-blue: 210 90% 55%;
+    --cig-blue-glow: 210 100% 65%;
+    
+    /* CIV Sales - Green */
+    --civ-green: 145 70% 45%;
+    --civ-green-glow: 145 80% 55%;
+    
+    /* CIP Production - Orange */
+    --cip-orange: 25 90% 55%;
+    --cip-orange-glow: 25 100% 65%;
+    
+    /* CIC Materials - Purple */
+    --cic-purple: 280 70% 55%;
+    --cic-purple-glow: 280 80% 65%;
+    
+    /* CIF Financial - Red */
+    --cif-red: 350 75% 55%;
+    --cif-red-glow: 350 85% 65%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Success & Warning */
+    --success: 145 70% 45%;
+    --success-foreground: 220 15% 8%;
+    --warning: 40 95% 55%;
+    --warning-foreground: 220 15% 8%;
 
-    --sidebar-primary: 240 5.9% 10%;
+    /* Chart Colors */
+    --chart-1: 210 90% 55%;
+    --chart-2: 145 70% 45%;
+    --chart-3: 25 90% 55%;
+    --chart-4: 280 70% 55%;
+    --chart-5: 350 75% 55%;
+    --chart-6: 185 85% 45%;
 
-    --sidebar-primary-foreground: 0 0% 98%;
+    /* Sidebar */
+    --sidebar-background: 220 15% 6%;
+    --sidebar-foreground: 210 20% 85%;
+    --sidebar-primary: 210 90% 55%;
+    --sidebar-primary-foreground: 220 15% 8%;
+    --sidebar-accent: 220 15% 14%;
+    --sidebar-accent-foreground: 210 20% 95%;
+    --sidebar-border: 220 15% 15%;
+    --sidebar-ring: 210 90% 55%;
 
-    --sidebar-accent: 240 4.8% 95.9%;
+    /* Industrial Gradients */
+    --gradient-cig: linear-gradient(135deg, hsl(210 90% 55%), hsl(185 85% 45%));
+    --gradient-civ: linear-gradient(135deg, hsl(145 70% 45%), hsl(160 75% 50%));
+    --gradient-cip: linear-gradient(135deg, hsl(25 90% 55%), hsl(35 95% 60%));
+    --gradient-cic: linear-gradient(135deg, hsl(280 70% 55%), hsl(260 75% 60%));
+    --gradient-cif: linear-gradient(135deg, hsl(350 75% 55%), hsl(10 80% 55%));
+    --gradient-dark: linear-gradient(180deg, hsl(220 15% 10%), hsl(220 15% 6%));
+    --gradient-card: linear-gradient(145deg, hsl(220 15% 14%), hsl(220 15% 10%));
+    --gradient-glass: linear-gradient(135deg, hsla(220, 15%, 20%, 0.3), hsla(220, 15%, 10%, 0.2));
 
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Shadows */
+    --shadow-sm: 0 2px 4px hsla(220, 15%, 0%, 0.3);
+    --shadow-md: 0 4px 12px hsla(220, 15%, 0%, 0.4);
+    --shadow-lg: 0 8px 24px hsla(220, 15%, 0%, 0.5);
+    --shadow-glow-blue: 0 0 20px hsla(210, 90%, 55%, 0.3);
+    --shadow-glow-green: 0 0 20px hsla(145, 70%, 45%, 0.3);
+    --shadow-glow-orange: 0 0 20px hsla(25, 90%, 55%, 0.3);
+    --shadow-glow-purple: 0 0 20px hsla(280, 70%, 55%, 0.3);
+    --shadow-glow-red: 0 0 20px hsla(350, 75%, 55%, 0.3);
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --background: 220 15% 8%;
+    --foreground: 210 20% 95%;
   }
 }
 
@@ -100,6 +126,320 @@ All colors MUST be HSL.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Rajdhani', 'Inter', system-ui, sans-serif;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+}
+
+@layer components {
+  /* Industrial Card Styles */
+  .card-industrial {
+    @apply relative overflow-hidden rounded-lg border border-border/50 bg-card;
+    background: var(--gradient-card);
+    box-shadow: var(--shadow-md);
+  }
+
+  .card-industrial::before {
+    content: '';
+    @apply absolute inset-0 rounded-lg pointer-events-none;
+    background: var(--gradient-glass);
+  }
+
+  /* Module Cards */
+  .card-cig {
+    @apply card-industrial;
+    border-left: 3px solid hsl(var(--cig-blue));
+  }
+
+  .card-civ {
+    @apply card-industrial;
+    border-left: 3px solid hsl(var(--civ-green));
+  }
+
+  .card-cip {
+    @apply card-industrial;
+    border-left: 3px solid hsl(var(--cip-orange));
+  }
+
+  .card-cic {
+    @apply card-industrial;
+    border-left: 3px solid hsl(var(--cic-purple));
+  }
+
+  .card-cif {
+    @apply card-industrial;
+    border-left: 3px solid hsl(var(--cif-red));
+  }
+
+  /* KPI Cards with Glow */
+  .kpi-card {
+    @apply relative p-5 rounded-lg border border-border/30 bg-card overflow-hidden;
+    background: var(--gradient-card);
+    transition: all 0.3s ease;
+  }
+
+  .kpi-card:hover {
+    @apply border-primary/50;
+    box-shadow: var(--shadow-glow-blue);
+    transform: translateY(-2px);
+  }
+
+  .kpi-card-cig:hover {
+    border-color: hsl(var(--cig-blue) / 0.5);
+    box-shadow: var(--shadow-glow-blue);
+  }
+
+  .kpi-card-civ:hover {
+    border-color: hsl(var(--civ-green) / 0.5);
+    box-shadow: var(--shadow-glow-green);
+  }
+
+  .kpi-card-cip:hover {
+    border-color: hsl(var(--cip-orange) / 0.5);
+    box-shadow: var(--shadow-glow-orange);
+  }
+
+  .kpi-card-cic:hover {
+    border-color: hsl(var(--cic-purple) / 0.5);
+    box-shadow: var(--shadow-glow-purple);
+  }
+
+  .kpi-card-cif:hover {
+    border-color: hsl(var(--cif-red) / 0.5);
+    box-shadow: var(--shadow-glow-red);
+  }
+
+  /* Navigation Tab Styles */
+  .nav-tab {
+    @apply px-6 py-3 text-sm font-semibold uppercase tracking-wider transition-all duration-200;
+    @apply text-muted-foreground hover:text-foreground;
+    @apply border-b-2 border-transparent;
+  }
+
+  .nav-tab-active {
+    @apply text-primary border-primary;
+  }
+
+  .nav-tab-cig.nav-tab-active {
+    color: hsl(var(--cig-blue));
+    border-color: hsl(var(--cig-blue));
+  }
+
+  .nav-tab-civ.nav-tab-active {
+    color: hsl(var(--civ-green));
+    border-color: hsl(var(--civ-green));
+  }
+
+  .nav-tab-cip.nav-tab-active {
+    color: hsl(var(--cip-orange));
+    border-color: hsl(var(--cip-orange));
+  }
+
+  .nav-tab-cic.nav-tab-active {
+    color: hsl(var(--cic-purple));
+    border-color: hsl(var(--cic-purple));
+  }
+
+  .nav-tab-cif.nav-tab-active {
+    color: hsl(var(--cif-red));
+    border-color: hsl(var(--cif-red));
+  }
+
+  /* Sidebar Styles */
+  .sidebar-industrial {
+    @apply bg-sidebar border-r border-sidebar-border;
+    background: var(--gradient-dark);
+  }
+
+  .sidebar-item {
+    @apply flex items-center gap-3 px-4 py-2.5 text-sm font-medium;
+    @apply text-sidebar-foreground/70 hover:text-sidebar-foreground;
+    @apply hover:bg-sidebar-accent rounded-md transition-all duration-200;
+  }
+
+  .sidebar-item-active {
+    @apply bg-sidebar-accent text-sidebar-foreground;
+  }
+
+  /* Chart Container */
+  .chart-container {
+    @apply p-4 rounded-lg border border-border/30 bg-card/50;
+    background: var(--gradient-card);
+  }
+
+  /* Status Indicators */
+  .status-indicator {
+    @apply w-2.5 h-2.5 rounded-full;
+  }
+
+  .status-success {
+    @apply bg-success;
+    box-shadow: 0 0 8px hsl(var(--success) / 0.6);
+  }
+
+  .status-warning {
+    @apply bg-warning;
+    box-shadow: 0 0 8px hsl(var(--warning) / 0.6);
+  }
+
+  .status-danger {
+    @apply bg-destructive;
+    box-shadow: 0 0 8px hsl(var(--destructive) / 0.6);
+  }
+
+  /* Industrial Button */
+  .btn-industrial {
+    @apply px-4 py-2 rounded-md font-semibold text-sm;
+    @apply bg-primary text-primary-foreground;
+    @apply hover:bg-primary/90 transition-all duration-200;
+    @apply shadow-md hover:shadow-lg;
+  }
+
+  /* Animated Gradient Border */
+  .gradient-border {
+    @apply relative rounded-lg;
+  }
+
+  .gradient-border::before {
+    content: '';
+    @apply absolute -inset-0.5 rounded-lg opacity-75;
+    background: var(--gradient-cig);
+    filter: blur(4px);
+    z-index: -1;
+  }
+
+  /* Data Grid */
+  .data-grid {
+    @apply grid gap-4;
+  }
+
+  /* Scrollbar Styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+}
+
+@layer utilities {
+  /* Text Colors for Modules */
+  .text-cig {
+    color: hsl(var(--cig-blue));
+  }
+  .text-civ {
+    color: hsl(var(--civ-green));
+  }
+  .text-cip {
+    color: hsl(var(--cip-orange));
+  }
+  .text-cic {
+    color: hsl(var(--cic-purple));
+  }
+  .text-cif {
+    color: hsl(var(--cif-red));
+  }
+
+  /* Background Colors for Modules */
+  .bg-cig {
+    background-color: hsl(var(--cig-blue));
+  }
+  .bg-civ {
+    background-color: hsl(var(--civ-green));
+  }
+  .bg-cip {
+    background-color: hsl(var(--cip-orange));
+  }
+  .bg-cic {
+    background-color: hsl(var(--cic-purple));
+  }
+  .bg-cif {
+    background-color: hsl(var(--cif-red));
+  }
+
+  /* Gradient Backgrounds */
+  .bg-gradient-cig {
+    background: var(--gradient-cig);
+  }
+  .bg-gradient-civ {
+    background: var(--gradient-civ);
+  }
+  .bg-gradient-cip {
+    background: var(--gradient-cip);
+  }
+  .bg-gradient-cic {
+    background: var(--gradient-cic);
+  }
+  .bg-gradient-cif {
+    background: var(--gradient-cif);
+  }
+
+  /* Glow Effects */
+  .glow-cig {
+    box-shadow: var(--shadow-glow-blue);
+  }
+  .glow-civ {
+    box-shadow: var(--shadow-glow-green);
+  }
+  .glow-cip {
+    box-shadow: var(--shadow-glow-orange);
+  }
+  .glow-cic {
+    box-shadow: var(--shadow-glow-purple);
+  }
+  .glow-cif {
+    box-shadow: var(--shadow-glow-red);
+  }
+
+  /* Animation Classes */
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-out;
+  }
+
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-out;
+  }
+
+  .animate-pulse-glow {
+    animation: pulseGlow 2s ease-in-out infinite;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    from { 
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to { 
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
   }
 }
