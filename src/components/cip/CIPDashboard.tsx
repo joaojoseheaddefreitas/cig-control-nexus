@@ -2,11 +2,12 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend,
 } from 'recharts';
-import { cipKPIs, cipChartData, setoresProducao, FOLGA_PRODUCAO } from '@/data/cipData';
+import { cipKPIs, cipChartData, setoresProducao, FOLGA_PRODUCAO, ordensProducao } from '@/data/cipData';
+import { carteiraPedidos } from '@/data/civData';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Activity, AlertTriangle, CheckCircle, Factory, Users, TrendingUp, Calendar } from 'lucide-react';
+import { Clock, Activity, AlertTriangle, CheckCircle, Factory, Users, TrendingUp, Calendar, Package, ShoppingCart } from 'lucide-react';
 
 const statusColors = {
   verde: '#22c55e',
@@ -16,11 +17,19 @@ const statusColors = {
 
 export function CIPDashboard() {
   const gargalos = setoresProducao.filter(s => s.gargalo);
+  const totalFuncionarios = setoresProducao.reduce((acc, s) => acc + s.operadores, 0);
+  const totalMaquinas = setoresProducao.reduce((acc, s) => acc + s.maquinas, 0);
+  const pedidosAProgramar = carteiraPedidos.filter(p => p.status === 'a_programar').length;
+  const opsEmProducao = ordensProducao.filter(o => o.status === 'em_producao').length;
+  const opsAguardando = ordensProducao.filter(o => o.status === 'aguardando').length;
+  
+  // Lotação média dos setores
+  const lotacaoMedia = setoresProducao.reduce((acc, s) => acc + Math.max(0, Math.min(100, s.lotacao)), 0) / setoresProducao.length;
   
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* KPIs Principais */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         <KPICard
           title="Capacidade Total"
           value={`${cipKPIs.capacidadeTotal.toFixed(0)}h`}
@@ -39,11 +48,11 @@ export function CIPDashboard() {
         />
         <KPICard
           title="OPs Ativas"
-          value={cipKPIs.opsAtivas}
-          subtitle={`${cipKPIs.opsConcluidas} concluídas`}
+          value={opsEmProducao}
+          subtitle={`${opsAguardando} aguardando`}
           icon={<Factory className="h-5 w-5" />}
           trend="up"
-          trendValue="+12 esta semana"
+          trendValue="Normal"
           variant="cip"
         />
         <KPICard
@@ -54,6 +63,20 @@ export function CIPDashboard() {
           trend="down"
           trendValue="Requer ação"
           variant="cip"
+        />
+        <KPICard
+          title="Funcionários"
+          value={totalFuncionarios}
+          subtitle={`${totalMaquinas} máquinas`}
+          icon={<Users className="h-5 w-5" />}
+          variant="cip"
+        />
+        <KPICard
+          title="Pedidos CIV"
+          value={pedidosAProgramar}
+          subtitle="A programar"
+          icon={<ShoppingCart className="h-5 w-5" />}
+          variant="civ"
         />
       </div>
 
@@ -66,9 +89,14 @@ export function CIPDashboard() {
           </span>
           <span className="text-xs text-muted-foreground">(Não editável - Regra industrial)</span>
         </div>
-        <Badge variant="outline" className="border-cip text-cip">
-          Capacidade Líquida: {((1 - FOLGA_PRODUCAO) * cipKPIs.capacidadeTotal).toFixed(0)}h
-        </Badge>
+        <div className="flex items-center gap-4">
+          <Badge variant="outline" className="border-cip text-cip">
+            Capacidade Líquida: {((1 - FOLGA_PRODUCAO) * cipKPIs.capacidadeTotal).toFixed(0)}h
+          </Badge>
+          <Badge variant={lotacaoMedia > 80 ? 'destructive' : lotacaoMedia > 60 ? 'default' : 'secondary'}>
+            Lotação Média: {lotacaoMedia.toFixed(0)}%
+          </Badge>
+        </div>
       </div>
 
       {/* Charts Row 1 */}
@@ -96,7 +124,7 @@ export function CIPDashboard() {
         </ModuleCard>
 
         {/* Capacidade por Setor */}
-        <ModuleCard title="Utilização por Setor" variant="cip">
+        <ModuleCard title="Lotação por Setor (%)" variant="cip">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={cipChartData.capacidadePorSetor} layout="vertical">
@@ -161,38 +189,95 @@ export function CIPDashboard() {
         </ModuleCard>
       </div>
 
-      {/* Gargalos */}
-      <ModuleCard title="Gargalos Identificados" variant="cip">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {gargalos.map((setor, index) => (
-            <div
-              key={index}
-              className="p-4 rounded-lg border border-destructive/50 bg-destructive/10"
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-semibold text-foreground">{setor.nome}</span>
-                <Badge variant="destructive">CRÍTICO</Badge>
-              </div>
-              <div className="grid grid-cols-2 gap-4 mt-3">
-                <div>
-                  <p className="text-xs text-muted-foreground">Horas Necessárias</p>
-                  <p className="text-lg font-bold text-destructive">{setor.horasNecessarias.toFixed(1)}h</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Horas Disponíveis</p>
-                  <p className="text-lg font-bold text-foreground">{setor.horasDisponiveis.toFixed(1)}h</p>
-                </div>
-              </div>
-              <div className="mt-3 flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-destructive" />
-                <span className="text-xs text-destructive">
-                  Déficit: {(setor.horasNecessarias - setor.horasDisponiveis).toFixed(1)}h ({Math.ceil((setor.horasNecessarias - setor.horasDisponiveis) / 8)} dias)
-                </span>
-              </div>
-            </div>
-          ))}
+      {/* Setores com Funcionários */}
+      <ModuleCard title="Setores de Produção - Funcionários e Lotação" variant="cip">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border/50">
+                <th className="text-left py-3 px-4 text-muted-foreground font-medium">Setor</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Operadores</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Máquinas</th>
+                <th className="text-right py-3 px-4 text-muted-foreground font-medium">Horas Disp.</th>
+                <th className="text-right py-3 px-4 text-muted-foreground font-medium">Horas Util.</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Lotação</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {setoresProducao.slice(0, 10).map((setor) => (
+                <tr key={setor.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
+                  <td className="py-3 px-4 text-foreground font-medium">{setor.nome}</td>
+                  <td className="py-3 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span className="text-foreground">{setor.operadores}</span>
+                    </div>
+                  </td>
+                  <td className="py-3 px-4 text-center text-foreground">{setor.maquinas}</td>
+                  <td className="py-3 px-4 text-right text-foreground">{setor.horasDisponiveis.toFixed(1)}h</td>
+                  <td className="py-3 px-4 text-right text-foreground">{setor.horasUtilizadas.toFixed(1)}h</td>
+                  <td className="py-3 px-4 text-center">
+                    <span className={`font-bold ${
+                      setor.lotacao > 85 ? 'text-red-500' :
+                      setor.lotacao > 70 ? 'text-amber-500' :
+                      'text-green-500'
+                    }`}>
+                      {Math.max(0, Math.min(100, setor.lotacao))}%
+                    </span>
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <Badge variant={setor.status === 'vermelho' ? 'destructive' : setor.status === 'amarelo' ? 'default' : 'secondary'}>
+                      {setor.status === 'vermelho' ? '🔴 Crítico' :
+                       setor.status === 'amarelo' ? '🟡 Atenção' :
+                       '🟢 Normal'}
+                    </Badge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </ModuleCard>
+
+      {/* Gargalos */}
+      {gargalos.length > 0 && (
+        <ModuleCard title="⚠️ Gargalos Identificados" variant="cip">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {gargalos.map((setor, index) => (
+              <div
+                key={index}
+                className="p-4 rounded-lg border border-destructive/50 bg-destructive/10"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-semibold text-foreground">{setor.nome}</span>
+                  <Badge variant="destructive">CRÍTICO</Badge>
+                </div>
+                <div className="grid grid-cols-3 gap-4 mt-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Operadores</p>
+                    <p className="text-lg font-bold text-foreground">{setor.operadores}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Horas Necessárias</p>
+                    <p className="text-lg font-bold text-destructive">{setor.horasNecessarias.toFixed(1)}h</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Horas Disponíveis</p>
+                    <p className="text-lg font-bold text-foreground">{setor.horasDisponiveis.toFixed(1)}h</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-destructive" />
+                  <span className="text-xs text-destructive">
+                    Déficit: {(setor.horasNecessarias - setor.horasDisponiveis).toFixed(1)}h ({Math.ceil((setor.horasNecessarias - setor.horasDisponiveis) / 8)} dias)
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </ModuleCard>
+      )}
     </div>
   );
 }
