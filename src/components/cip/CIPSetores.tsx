@@ -5,12 +5,29 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+import { Switch } from '@/components/ui/switch';
 import { setoresProducao, calcularDiasEquivalentes } from '@/data/cipData';
 import { KPICard } from '@/components/ui/KPICard';
-import { Layers, Users, TrendingUp, AlertTriangle, Pencil, Settings, BarChart3 } from 'lucide-react';
+import { Layers, Users, TrendingUp, AlertTriangle, Pencil, Settings, BarChart3, Power, Plus, Save, X } from 'lucide-react';
+import { toast } from 'sonner';
+
+interface SetorDetalhado {
+  id: number;
+  nome: string;
+  status: 'Normal' | 'Atenção' | 'Crítico';
+  carga: number;
+  equipe: { total: number; operadores: number; auxiliares: number };
+  maquinas: number;
+  horasDisponiveis: number;
+  eficiencia: number;
+  naFila: number;
+  emExecucao: number;
+  gargalo?: boolean;
+  ativo: boolean;
+}
 
 // Dados dos setores com informações completas
-const setoresDetalhados = [
+const setoresIniciais: SetorDetalhado[] = [
   { 
     id: 1,
     nome: 'Corte', 
@@ -21,7 +38,8 @@ const setoresDetalhados = [
     horasDisponiveis: 884,
     eficiencia: 85,
     naFila: 8,
-    emExecucao: 4
+    emExecucao: 4,
+    ativo: true
   },
   { 
     id: 2,
@@ -33,7 +51,8 @@ const setoresDetalhados = [
     horasDisponiveis: 628,
     eficiencia: 85,
     naFila: 6,
-    emExecucao: 6
+    emExecucao: 6,
+    ativo: true
   },
   { 
     id: 3,
@@ -45,7 +64,8 @@ const setoresDetalhados = [
     horasDisponiveis: 628,
     eficiencia: 85,
     naFila: 14,
-    emExecucao: 5
+    emExecucao: 5,
+    ativo: true
   },
   { 
     id: 4,
@@ -58,7 +78,8 @@ const setoresDetalhados = [
     eficiencia: 78,
     naFila: 12,
     emExecucao: 8,
-    gargalo: true
+    gargalo: true,
+    ativo: true
   },
   { 
     id: 5,
@@ -70,7 +91,8 @@ const setoresDetalhados = [
     horasDisponiveis: 1478,
     eficiencia: 80,
     naFila: 10,
-    emExecucao: 4
+    emExecucao: 4,
+    ativo: true
   },
   { 
     id: 6,
@@ -82,7 +104,8 @@ const setoresDetalhados = [
     horasDisponiveis: 785,
     eficiencia: 85,
     naFila: 14,
-    emExecucao: 2
+    emExecucao: 2,
+    ativo: true
   },
   { 
     id: 7,
@@ -94,7 +117,8 @@ const setoresDetalhados = [
     horasDisponiveis: 1212,
     eficiencia: 82,
     naFila: 10,
-    emExecucao: 4
+    emExecucao: 4,
+    ativo: true
   },
   { 
     id: 8,
@@ -106,7 +130,8 @@ const setoresDetalhados = [
     horasDisponiveis: 665,
     eficiencia: 90,
     naFila: 16,
-    emExecucao: 7
+    emExecucao: 7,
+    ativo: true
   },
 ];
 
@@ -168,11 +193,46 @@ function CircularGauge({ value, size = 160 }: { value: number; size?: number }) 
   );
 }
 
+// Props do SetorCard
+interface SetorCardProps {
+  setor: SetorDetalhado;
+  onToggle: (id: number) => void;
+  onEdit: (setor: SetorDetalhado) => void;
+}
+
 // Componente Card de Setor
-function SetorCard({ setor }: { setor: typeof setoresDetalhados[0] }) {
+function SetorCard({ setor, onToggle, onEdit }: SetorCardProps) {
   const [isEditing, setIsEditing] = useState(false);
+  const [editData, setEditData] = useState({
+    operadores: setor.equipe.operadores,
+    auxiliares: setor.equipe.auxiliares,
+    maquinas: setor.maquinas,
+    horasDisponiveis: setor.horasDisponiveis,
+    eficiencia: setor.eficiencia,
+  });
+
+  const handleSave = () => {
+    const updatedSetor: SetorDetalhado = {
+      ...setor,
+      equipe: {
+        ...setor.equipe,
+        operadores: editData.operadores,
+        auxiliares: editData.auxiliares,
+        total: editData.operadores + editData.auxiliares,
+      },
+      maquinas: editData.maquinas,
+      horasDisponiveis: editData.horasDisponiveis,
+      eficiencia: editData.eficiencia,
+    };
+    onEdit(updatedSetor);
+    setIsEditing(false);
+    toast.success(`Setor "${setor.nome}" atualizado! Programação e custos recalculados.`);
+  };
 
   const getStatusBadge = () => {
+    if (!setor.ativo) {
+      return <Badge className="bg-zinc-600 text-zinc-200">Inativo</Badge>;
+    }
     if (setor.gargalo) {
       return <Badge className="bg-red-600 text-white">Gargalo</Badge>;
     }
@@ -189,12 +249,12 @@ function SetorCard({ setor }: { setor: typeof setoresDetalhados[0] }) {
   };
 
   return (
-    <Card className="bg-card/60 backdrop-blur-sm border-border/50 p-5 relative overflow-hidden">
+    <Card className={`bg-card/60 backdrop-blur-sm border-border/50 p-5 relative overflow-hidden transition-opacity ${!setor.ativo ? 'opacity-50' : ''}`}>
       {/* Header */}
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div className="p-2 bg-blue-500/20 rounded-lg">
-            <BarChart3 className="h-5 w-5 text-blue-400" />
+          <div className={`p-2 rounded-lg ${setor.ativo ? 'bg-blue-500/20' : 'bg-zinc-500/20'}`}>
+            <BarChart3 className={`h-5 w-5 ${setor.ativo ? 'text-blue-400' : 'text-zinc-400'}`} />
           </div>
           <div>
             <h3 className="font-semibold text-foreground text-lg">{setor.nome}</h3>
@@ -202,74 +262,106 @@ function SetorCard({ setor }: { setor: typeof setoresDetalhados[0] }) {
           </div>
         </div>
         
-        <Dialog open={isEditing} onOpenChange={setIsEditing}>
-          <DialogTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-              <Pencil className="h-4 w-4" />
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="bg-card border-border">
-            <DialogHeader>
-              <DialogTitle>Editar Setor: {setor.nome}</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="operadores" className="text-right">Operadores</Label>
-                <Input 
-                  id="operadores" 
-                  defaultValue={setor.equipe.operadores} 
-                  type="number"
-                  className="col-span-3 bg-secondary/50" 
-                />
+        <div className="flex items-center gap-2">
+          {/* Toggle Ativo/Inativo */}
+          <div className="flex items-center gap-1">
+            <Switch 
+              checked={setor.ativo} 
+              onCheckedChange={() => {
+                onToggle(setor.id);
+                toast.info(`Setor "${setor.nome}" ${setor.ativo ? 'desativado' : 'ativado'}. Capacidade recalculada.`);
+              }}
+              className="data-[state=checked]:bg-green-500"
+            />
+          </div>
+          
+          {/* Botão Editar */}
+          <Dialog open={isEditing} onOpenChange={setIsEditing}>
+            <DialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
+                <Pencil className="h-4 w-4" />
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Settings className="h-5 w-5 text-cip" />
+                  Editar Setor: {setor.nome}
+                </DialogTitle>
+              </DialogHeader>
+              <div className="grid gap-4 py-4">
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="operadores" className="text-right">Operadores</Label>
+                  <Input 
+                    id="operadores" 
+                    value={editData.operadores}
+                    onChange={(e) => setEditData({...editData, operadores: parseInt(e.target.value) || 0})}
+                    type="number"
+                    className="col-span-3 bg-secondary/50" 
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="auxiliares" className="text-right">Auxiliares</Label>
+                  <Input 
+                    id="auxiliares" 
+                    value={editData.auxiliares}
+                    onChange={(e) => setEditData({...editData, auxiliares: parseInt(e.target.value) || 0})}
+                    type="number"
+                    className="col-span-3 bg-secondary/50" 
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="maquinas" className="text-right">Máquinas</Label>
+                  <Input 
+                    id="maquinas" 
+                    value={editData.maquinas}
+                    onChange={(e) => setEditData({...editData, maquinas: parseInt(e.target.value) || 0})}
+                    type="number"
+                    className="col-span-3 bg-secondary/50" 
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="horas" className="text-right">Horas Disp.</Label>
+                  <Input 
+                    id="horas" 
+                    value={editData.horasDisponiveis}
+                    onChange={(e) => setEditData({...editData, horasDisponiveis: parseInt(e.target.value) || 0})}
+                    type="number"
+                    className="col-span-3 bg-secondary/50" 
+                  />
+                </div>
+                <div className="grid grid-cols-4 items-center gap-4">
+                  <Label htmlFor="eficiencia" className="text-right">Eficiência %</Label>
+                  <Input 
+                    id="eficiencia" 
+                    value={editData.eficiencia}
+                    onChange={(e) => setEditData({...editData, eficiencia: parseInt(e.target.value) || 0})}
+                    type="number"
+                    className="col-span-3 bg-secondary/50" 
+                  />
+                </div>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="auxiliares" className="text-right">Auxiliares</Label>
-                <Input 
-                  id="auxiliares" 
-                  defaultValue={setor.equipe.auxiliares} 
-                  type="number"
-                  className="col-span-3 bg-secondary/50" 
-                />
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-400">
+                ⚠️ Alterações refletirão em: Programação, Custos e Indicadores.
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="maquinas" className="text-right">Máquinas</Label>
-                <Input 
-                  id="maquinas" 
-                  defaultValue={setor.maquinas} 
-                  type="number"
-                  className="col-span-3 bg-secondary/50" 
-                />
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" onClick={() => setIsEditing(false)}>
+                  <X className="h-4 w-4 mr-2" />
+                  Cancelar
+                </Button>
+                <Button onClick={handleSave} className="bg-cip hover:bg-cip/90">
+                  <Save className="h-4 w-4 mr-2" />
+                  Salvar
+                </Button>
               </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="horas" className="text-right">Horas Disp.</Label>
-                <Input 
-                  id="horas" 
-                  defaultValue={setor.horasDisponiveis} 
-                  type="number"
-                  className="col-span-3 bg-secondary/50" 
-                />
-              </div>
-              <div className="grid grid-cols-4 items-center gap-4">
-                <Label htmlFor="eficiencia" className="text-right">Eficiência %</Label>
-                <Input 
-                  id="eficiencia" 
-                  defaultValue={setor.eficiencia} 
-                  type="number"
-                  className="col-span-3 bg-secondary/50" 
-                />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setIsEditing(false)}>Cancelar</Button>
-              <Button onClick={() => setIsEditing(false)}>Salvar</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+            </DialogContent>
+          </Dialog>
+        </div>
       </div>
 
       {/* Gauge Circular */}
       <div className="flex justify-center mb-6">
-        <CircularGauge value={setor.carga} />
+        <CircularGauge value={setor.ativo ? setor.carga : 0} />
       </div>
 
       {/* Métricas Grid */}
@@ -331,33 +423,187 @@ function SetorCard({ setor }: { setor: typeof setoresDetalhados[0] }) {
 }
 
 export function CIPSetores() {
-  const totalSetores = setoresDetalhados.length;
-  const setoresAtivos = setoresDetalhados.filter(s => s.carga > 0);
-  const totalOperadores = setoresDetalhados.reduce((acc, s) => acc + s.equipe.total, 0);
-  const totalMaquinas = setoresDetalhados.reduce((acc, s) => acc + s.maquinas, 0);
-  const eficienciaMedia = setoresDetalhados.reduce((acc, s) => acc + s.eficiencia, 0) / setoresDetalhados.length;
-  const setoresGargalo = setoresDetalhados.filter(s => s.gargalo);
-  const totalNaFila = setoresDetalhados.reduce((acc, s) => acc + s.naFila, 0);
-  const totalEmExecucao = setoresDetalhados.reduce((acc, s) => acc + s.emExecucao, 0);
+  const [setores, setSetores] = useState<SetorDetalhado[]>(setoresIniciais);
+  const [novoSetorOpen, setNovoSetorOpen] = useState(false);
+  const [novoSetor, setNovoSetor] = useState({
+    nome: '',
+    operadores: 1,
+    auxiliares: 0,
+    maquinas: 0,
+    horasDisponiveis: 100,
+    eficiencia: 80,
+  });
+
+  // Handlers
+  const handleToggle = (id: number) => {
+    setSetores(prev => prev.map(s => 
+      s.id === id ? { ...s, ativo: !s.ativo } : s
+    ));
+  };
+
+  const handleEdit = (updatedSetor: SetorDetalhado) => {
+    setSetores(prev => prev.map(s => 
+      s.id === updatedSetor.id ? updatedSetor : s
+    ));
+  };
+
+  const handleAddSetor = () => {
+    if (!novoSetor.nome.trim()) {
+      toast.error('Informe o nome do setor');
+      return;
+    }
+
+    const newSetor: SetorDetalhado = {
+      id: setores.length + 1,
+      nome: novoSetor.nome,
+      status: 'Normal',
+      carga: 0,
+      equipe: {
+        total: novoSetor.operadores + novoSetor.auxiliares,
+        operadores: novoSetor.operadores,
+        auxiliares: novoSetor.auxiliares,
+      },
+      maquinas: novoSetor.maquinas,
+      horasDisponiveis: novoSetor.horasDisponiveis,
+      eficiencia: novoSetor.eficiencia,
+      naFila: 0,
+      emExecucao: 0,
+      ativo: true,
+    };
+
+    setSetores([...setores, newSetor]);
+    setNovoSetorOpen(false);
+    setNovoSetor({
+      nome: '',
+      operadores: 1,
+      auxiliares: 0,
+      maquinas: 0,
+      horasDisponiveis: 100,
+      eficiencia: 80,
+    });
+    toast.success(`Setor "${newSetor.nome}" adicionado! Capacidade recalculada.`);
+  };
+
+  // Cálculos
+  const setoresAtivos = setores.filter(s => s.ativo);
+  const totalSetoresCount = setores.length;
+  const totalOperadores = setoresAtivos.reduce((acc, s) => acc + s.equipe.total, 0);
+  const totalMaquinas = setoresAtivos.reduce((acc, s) => acc + s.maquinas, 0);
+  const eficienciaMedia = setoresAtivos.length > 0 
+    ? setoresAtivos.reduce((acc, s) => acc + s.eficiencia, 0) / setoresAtivos.length 
+    : 0;
+  const setoresGargalo = setoresAtivos.filter(s => s.gargalo);
+  const totalNaFila = setoresAtivos.reduce((acc, s) => acc + s.naFila, 0);
+  const totalEmExecucao = setoresAtivos.reduce((acc, s) => acc + s.emExecucao, 0);
 
   return (
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-2">
           <Layers className="h-6 w-6 text-cip" />
-          <h2 className="text-2xl font-bold text-foreground">Setores de Produção</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Setores de Produção</h2>
+            <p className="text-sm text-muted-foreground">
+              Gestão de capacidade e eficiência por setor
+            </p>
+          </div>
         </div>
-        <p className="text-sm text-muted-foreground">
-          Gestão de capacidade e eficiência por setor
-        </p>
+        
+        {/* Botão Novo Setor */}
+        <Dialog open={novoSetorOpen} onOpenChange={setNovoSetorOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-cip hover:bg-cip/90">
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Setor
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-card border-border">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Plus className="h-5 w-5 text-cip" />
+                Adicionar Novo Setor
+              </DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label>Nome do Setor *</Label>
+                <Input 
+                  value={novoSetor.nome}
+                  onChange={(e) => setNovoSetor({...novoSetor, nome: e.target.value})}
+                  placeholder="Ex: Pintura"
+                  className="bg-secondary/50" 
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Operadores</Label>
+                  <Input 
+                    type="number"
+                    value={novoSetor.operadores}
+                    onChange={(e) => setNovoSetor({...novoSetor, operadores: parseInt(e.target.value) || 0})}
+                    className="bg-secondary/50" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Auxiliares</Label>
+                  <Input 
+                    type="number"
+                    value={novoSetor.auxiliares}
+                    onChange={(e) => setNovoSetor({...novoSetor, auxiliares: parseInt(e.target.value) || 0})}
+                    className="bg-secondary/50" 
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Máquinas</Label>
+                  <Input 
+                    type="number"
+                    value={novoSetor.maquinas}
+                    onChange={(e) => setNovoSetor({...novoSetor, maquinas: parseInt(e.target.value) || 0})}
+                    className="bg-secondary/50" 
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Horas Disponíveis</Label>
+                  <Input 
+                    type="number"
+                    value={novoSetor.horasDisponiveis}
+                    onChange={(e) => setNovoSetor({...novoSetor, horasDisponiveis: parseInt(e.target.value) || 0})}
+                    className="bg-secondary/50" 
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Eficiência (%)</Label>
+                <Input 
+                  type="number"
+                  value={novoSetor.eficiencia}
+                  onChange={(e) => setNovoSetor({...novoSetor, eficiencia: parseInt(e.target.value) || 0})}
+                  className="bg-secondary/50" 
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setNovoSetorOpen(false)}>
+                <X className="h-4 w-4 mr-2" />
+                Cancelar
+              </Button>
+              <Button onClick={handleAddSetor} className="bg-cip hover:bg-cip/90">
+                <Save className="h-4 w-4 mr-2" />
+                Criar Setor
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title="Total Setores"
-          value={totalSetores}
+          value={totalSetoresCount}
           subtitle={`${setoresAtivos.length} ativos`}
           icon={<Layers className="h-5 w-5" />}
           variant="cip"
@@ -402,6 +648,11 @@ export function CIPSetores() {
               <p className="text-sm text-muted-foreground">Em Execução</p>
               <p className="text-2xl font-bold text-green-400">{totalEmExecucao}</p>
             </div>
+            <div className="h-8 w-px bg-border/50" />
+            <div>
+              <p className="text-sm text-muted-foreground">Setores Inativos</p>
+              <p className="text-2xl font-bold text-zinc-400">{setores.length - setoresAtivos.length}</p>
+            </div>
           </div>
           <div className="text-sm text-muted-foreground">
             {setoresGargalo.length > 0 && (
@@ -415,8 +666,13 @@ export function CIPSetores() {
 
       {/* Grid de Cards de Setores */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-        {setoresDetalhados.map((setor) => (
-          <SetorCard key={setor.id} setor={setor} />
+        {setores.map((setor) => (
+          <SetorCard 
+            key={setor.id} 
+            setor={setor} 
+            onToggle={handleToggle}
+            onEdit={handleEdit}
+          />
         ))}
       </div>
 
@@ -435,6 +691,10 @@ export function CIPSetores() {
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-red-500" />
             <span className="text-sm text-muted-foreground">Crítico (&gt;80%)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Power className="h-4 w-4 text-green-500" />
+            <span className="text-sm text-muted-foreground">Ativar/Desativar setor</span>
           </div>
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-red-500" />
