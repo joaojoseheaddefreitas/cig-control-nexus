@@ -20,6 +20,7 @@ import { CIPCadastroProdutos } from '@/components/cip/CIPCadastroProdutos';
 import { CIPRastreamento } from '@/components/cip/CIPRastreamento';
 import { CIPIA } from '@/components/cip/CIPIA';
 import { CIPAnalytics } from '@/components/cip/CIPAnalytics';
+import { CIPGlobalActions } from '@/components/cip/CIPGlobalActions';
 
 type TabType = 'dashboard' | 'carteira' | 'programacao' | 'producao' | 'setores' | 'cadastro_pedidos' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
 
@@ -137,6 +138,10 @@ export function DashboardCIP() {
             </p>
           </div>
         )}
+        
+        {/* Sistema Global de Entrada/Baixa/Expedição */}
+        <CIPGlobalActions />
+        
         {renderContent()}
       </main>
     </div>
