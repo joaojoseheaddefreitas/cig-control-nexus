@@ -224,6 +224,14 @@ export function CIPProgramacaoDiaria() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Indicador de Aba - ENTRADA */}
+      <div className="p-3 bg-success/10 border border-success/30 rounded-lg flex items-center gap-3">
+        <Plus className="h-5 w-5 text-success" />
+        <div>
+          <p className="text-sm font-medium text-foreground">Aba de ENTRADA – Liberação de OPs</p>
+          <p className="text-xs text-muted-foreground">Esta aba é para entrada de novas ordens de produção. Para baixas, use a aba "Programação / Baixas".</p>
+        </div>
+      </div>
       {/* Indicador Principal de Capacidade - OBRIGATÓRIO */}
       <div className={`p-6 rounded-lg border-2 ${
         statusGeral === 'verde' ? 'bg-green-500/10 border-green-500/50' :

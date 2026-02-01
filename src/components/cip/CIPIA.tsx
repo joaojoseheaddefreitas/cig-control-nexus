@@ -87,8 +87,20 @@ export function CIPIA() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Aviso: Apenas Leitura */}
+      <div className="p-4 bg-warning/10 border border-warning/30 rounded-lg flex items-start gap-3">
+        <Brain className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="text-sm font-medium text-foreground">IA – Modo Análise e Sugestões</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            A IA analisa dados em tempo real e sugere ações, mas <strong className="text-warning">NÃO executa alterações automaticamente</strong>.
+            Todas as decisões devem ser validadas e aplicadas manualmente pelo gestor.
+          </p>
+        </div>
+      </div>
+
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-lg bg-cip/20 flex items-center justify-center">
             <Brain className="h-6 w-6 text-cip" />
@@ -101,7 +113,7 @@ export function CIPIA() {
         <Button 
           onClick={handleAnalisar} 
           disabled={analisando}
-          className="bg-cip hover:bg-cip/90"
+          className="bg-cip hover:bg-cip/90 w-full sm:w-auto"
         >
           {analisando ? (
             <>
@@ -214,11 +226,12 @@ export function CIPIA() {
         </div>
       </ModuleCard>
 
-      {/* Disclaimer */}
-      <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-        <p className="text-sm text-amber-400">
-          ⚠️ A IA analisa e recomenda, mas <strong>NÃO executa ações automaticamente</strong>. 
-          Todas as decisões devem ser validadas e aplicadas manualmente pelo gestor.
+      {/* Disclaimer Final */}
+      <div className="p-4 bg-destructive/10 border border-destructive/30 rounded-lg">
+        <p className="text-sm text-destructive">
+          ⛔ <strong>REGRA DE OURO:</strong> A IA analisa e recomenda, mas <strong>NUNCA executa ações automaticamente</strong>. 
+          Não é permitido que a IA altere dados de produção, materiais, custos ou expedição.
+          Todas as decisões devem ser validadas e aplicadas pelo gestor através das abas de Entrada/Baixa.
         </p>
       </div>
     </div>
