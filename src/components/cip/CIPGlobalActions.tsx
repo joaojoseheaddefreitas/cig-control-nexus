@@ -230,68 +230,69 @@ export function CIPGlobalActions({ onRefresh }: CIPGlobalActionsProps) {
 
   return (
     <>
-      {/* Barra Global de Ações - FIXO NO TOPO */}
-      <div className="sticky top-0 z-40 bg-card/95 backdrop-blur border-b border-border/50 p-4 -mx-4 lg:-mx-6 mb-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
+      {/* Barra Global de Ações - FIXO NO TOPO - Responsivo */}
+      <div className="sticky top-0 z-40 bg-card/95 backdrop-blur border border-border/50 rounded-lg p-3 sm:p-4 mb-6 shadow-lg">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
           {/* Status de Capacidade */}
-          <div className="flex items-center gap-4">
+          <div className={cn(
+            "flex items-center justify-center gap-2 px-3 py-2 rounded-lg border-2 text-sm",
+            podeAdicionar 
+              ? "bg-success/10 border-success/50 text-success" 
+              : "bg-destructive/10 border-destructive/50 text-destructive"
+          )}>
             <div className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg border-2",
-              podeAdicionar 
-                ? "bg-green-500/10 border-green-500/50 text-green-400" 
-                : "bg-red-500/10 border-red-500/50 text-red-400"
-            )}>
-              <div className={cn(
-                "w-3 h-3 rounded-full animate-pulse",
-                podeAdicionar ? "bg-green-500" : "bg-red-500"
-              )} />
-              <span className="text-sm font-medium">
-                {podeAdicionar ? 'Aceita Pedidos' : 'BLOQUEADO'}
-              </span>
-              <Badge variant="outline" className="ml-2">
-                {ocupacaoAtual.toFixed(0)}% ocupação
-              </Badge>
-            </div>
+              "w-3 h-3 rounded-full animate-pulse flex-shrink-0",
+              podeAdicionar ? "bg-success" : "bg-destructive"
+            )} />
+            <span className="font-medium whitespace-nowrap">
+              {podeAdicionar ? 'Aceita Pedidos' : 'BLOQUEADO'}
+            </span>
+            <Badge variant="outline" className="ml-1 text-xs">
+              {ocupacaoAtual.toFixed(0)}%
+            </Badge>
           </div>
 
-          {/* Botões de Ação */}
-          <div className="flex items-center gap-3">
+          {/* Botões de Ação - Responsivos */}
+          <div className="grid grid-cols-3 gap-2 sm:flex sm:gap-3">
             {/* Botão ENTRADA */}
             <Button 
               onClick={() => setEntradaOpen(true)}
-              className="bg-green-600 hover:bg-green-700 text-white font-bold shadow-lg"
+              className="bg-success hover:bg-success/90 text-success-foreground font-bold shadow-lg flex-1 sm:flex-initial"
               disabled={!podeAdicionar}
+              size="sm"
             >
-              <Plus className="h-5 w-5 mr-2" />
-              ENTRADA
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">ENTRADA</span>
             </Button>
 
             {/* Botão BAIXA */}
             <Button 
               onClick={() => setBaixaOpen(true)}
-              className="bg-orange-600 hover:bg-orange-700 text-white font-bold shadow-lg"
+              className="bg-warning hover:bg-warning/90 text-warning-foreground font-bold shadow-lg flex-1 sm:flex-initial"
+              size="sm"
             >
-              <Minus className="h-5 w-5 mr-2" />
-              BAIXA
+              <Minus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">BAIXA</span>
             </Button>
 
             {/* Botão EXPEDIÇÃO */}
             <Button 
               onClick={() => setExpedicaoOpen(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-bold shadow-lg"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-lg flex-1 sm:flex-initial"
+              size="sm"
             >
-              <Truck className="h-5 w-5 mr-2" />
-              EXPEDIÇÃO
+              <Truck className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">EXPEDIÇÃO</span>
             </Button>
           </div>
         </div>
 
         {/* Aviso de bloqueio */}
         {!podeAdicionar && (
-          <div className="mt-3 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-red-500" />
-            <span className="text-sm text-red-400">
-              <strong>CAPACIDADE EXCEDIDA!</strong> Não é possível adicionar novos pedidos. Finalize pedidos existentes para liberar capacidade.
+          <div className="mt-3 p-2 sm:p-3 bg-destructive/10 border border-destructive/30 rounded-lg flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-destructive flex-shrink-0" />
+            <span className="text-xs sm:text-sm text-destructive">
+              <strong>BLOQUEADO:</strong> Capacidade excedida. Finalize pedidos para liberar.
             </span>
           </div>
         )}

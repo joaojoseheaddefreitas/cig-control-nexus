@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BarChart2, Calendar, Layers, Factory, Package, ClipboardList, 
-  Activity, Brain, LineChart, MapPin, Menu, X,
+  Brain, LineChart, MapPin, Menu, X, ChevronLeft, ChevronRight,
+  ArrowDownCircle, ArrowUpCircle, Truck
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 // Import all CIP tabs
 import { CIPDashboardNew } from '@/components/cip/CIPDashboardNew';
@@ -24,22 +26,24 @@ import { CIPGlobalActions } from '@/components/cip/CIPGlobalActions';
 
 type TabType = 'dashboard' | 'carteira' | 'programacao' | 'producao' | 'setores' | 'cadastro_pedidos' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
 
+// Menu items separados por função (Entrada vs Baixa)
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
-  { id: 'carteira', label: 'Carteira', icon: Package },
-  { id: 'programacao', label: 'Programação / Entrada', icon: Calendar },
-  { id: 'producao', label: 'Programação / Baixas', icon: Factory },
-  { id: 'setores', label: 'Setores', icon: Layers },
-  { id: 'cadastro_pedidos', label: 'Cadastro Pedidos', icon: ClipboardList },
-  { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package },
-  { id: 'rastreamento', label: 'Rastreamento', icon: MapPin },
-  { id: 'ia', label: 'Inteligência IA', icon: Brain },
-  { id: 'analytics', label: 'Analytics', icon: LineChart },
+  { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
+  { id: 'carteira', label: 'Carteira', icon: Package, tipo: 'visualizacao' },
+  { id: 'programacao', label: 'Programação / Entrada', icon: Calendar, tipo: 'entrada', badge: '+ Entrada' },
+  { id: 'producao', label: 'Programação / Baixas', icon: Factory, tipo: 'baixa', badge: '- Baixa' },
+  { id: 'setores', label: 'Setores', icon: Layers, tipo: 'configuracao' },
+  { id: 'cadastro_pedidos', label: 'Cadastro Pedidos', icon: ClipboardList, tipo: 'entrada' },
+  { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package, tipo: 'configuracao' },
+  { id: 'rastreamento', label: 'Rastreamento', icon: MapPin, tipo: 'visualizacao' },
+  { id: 'ia', label: 'Inteligência IA', icon: Brain, tipo: 'visualizacao' },
+  { id: 'analytics', label: 'Analytics', icon: LineChart, tipo: 'visualizacao' },
 ];
 
 export function DashboardCIP() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const isMobile = useIsMobile();
 
   const renderContent = () => {
@@ -63,76 +67,167 @@ export function DashboardCIP() {
     setSidebarOpen(false);
   };
 
-  const SidebarContent = () => (
+  const getTipoBadge = (tipo: string) => {
+    switch (tipo) {
+      case 'entrada':
+        return <span className="ml-auto text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">ENTRADA</span>;
+      case 'baixa':
+        return <span className="ml-auto text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">BAIXA</span>;
+      default:
+        return null;
+    }
+  };
+
+  const SidebarContent = ({ isCollapsed = false }: { isCollapsed?: boolean }) => (
     <>
-      <div className="mb-6">
-        <h3 className="text-cip font-display text-lg font-bold">CIP CONTROL 360</h3>
-        <p className="text-xs text-muted-foreground">Central de Inteligência da Produção</p>
+      <div className={cn("mb-6", isCollapsed && "text-center")}>
+        {!isCollapsed ? (
+          <>
+            <h3 className="text-cip font-display text-lg font-bold">CIP CONTROL 360</h3>
+            <p className="text-xs text-muted-foreground">Central de Inteligência da Produção</p>
+          </>
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-cip/20 flex items-center justify-center mx-auto">
+            <Factory className="h-4 w-4 text-cip" />
+          </div>
+        )}
       </div>
+      
       <nav className="space-y-1">
         {menuItems.map((item) => (
           <button
             key={item.id}
             onClick={() => handleTabChange(item.id as TabType)}
+            title={isCollapsed ? item.label : undefined}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all',
               activeTab === item.id
                 ? 'bg-cip/20 text-cip'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+              isCollapsed && 'justify-center px-2'
             )}
           >
             <item.icon className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{item.label}</span>
+            {!isCollapsed && (
+              <>
+                <span className="truncate flex-1 text-left">{item.label}</span>
+                {getTipoBadge(item.tipo)}
+              </>
+            )}
           </button>
         ))}
       </nav>
+
+      {/* Legenda de cores */}
+      {!isCollapsed && (
+        <div className="mt-6 pt-4 border-t border-border/30 space-y-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Legenda</p>
+          <div className="flex items-center gap-2 text-xs">
+            <ArrowUpCircle className="h-3 w-3 text-green-400" />
+            <span className="text-muted-foreground">Entrada = Libera OP</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <ArrowDownCircle className="h-3 w-3 text-orange-400" />
+            <span className="text-muted-foreground">Baixa = Registra produção</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <Truck className="h-3 w-3 text-blue-400" />
+            <span className="text-muted-foreground">Expedição = Encerra OP</span>
+          </div>
+        </div>
+      )}
     </>
   );
 
   return (
-    <div className="flex animate-fade-in">
-      {/* Mobile Header */}
+    <div className="flex animate-fade-in min-h-screen">
+      {/* Mobile Header - Sempre visível */}
       {isMobile && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
+        <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3 safe-area-top">
           <div className="flex items-center justify-between">
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon">
-                  <Menu className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <Menu className="h-6 w-6" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="left" className="w-64 p-4">
+              <SheetContent side="left" className="w-72 p-4 overflow-y-auto">
+                <SheetClose className="absolute right-4 top-4">
+                  <X className="h-5 w-5" />
+                </SheetClose>
                 <SidebarContent />
               </SheetContent>
             </Sheet>
             
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-cip animate-pulse" />
-              <span className="text-sm font-semibold text-cip">CIP</span>
+              <span className="text-sm font-semibold text-cip">CIP CONTROL 360</span>
             </div>
             
-            <div className="w-10" /> {/* Spacer for balance */}
+            <div className="w-10" />
+          </div>
+          
+          {/* Tab atual */}
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Aba:</span>
+            <span className="text-sm font-medium text-foreground">
+              {menuItems.find(m => m.id === activeTab)?.label}
+            </span>
+            {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada' && (
+              <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">ENTRADA</span>
+            )}
+            {menuItems.find(m => m.id === activeTab)?.tipo === 'baixa' && (
+              <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">BAIXA</span>
+            )}
           </div>
         </div>
       )}
 
-      {/* Desktop Sidebar */}
+      {/* Desktop Sidebar - Colapsável */}
       {!isMobile && (
-        <aside className="w-60 min-h-[calc(100vh-8rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0">
-          <SidebarContent />
+        <aside className={cn(
+          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative',
+          sidebarCollapsed ? 'w-16' : 'w-60'
+        )}>
+          {/* Botão de colapsar */}
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-6 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-secondary transition-colors z-10"
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="h-3 w-3" />
+            ) : (
+              <ChevronLeft className="h-3 w-3" />
+            )}
+          </button>
+          
+          <SidebarContent isCollapsed={sidebarCollapsed} />
         </aside>
       )}
 
       {/* Content */}
       <main className={cn(
-        'flex-1 p-4 lg:p-6 overflow-x-hidden',
-        isMobile && 'pt-20'
+        'flex-1 overflow-x-hidden',
+        isMobile ? 'pt-24 px-3 pb-4' : 'p-4 lg:p-6'
       )}>
+        {/* Header desktop */}
         {!isMobile && (
           <div className="mb-6">
-            <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
-              {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
+                {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
+              </h2>
+              {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada' && (
+                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-medium">
+                  ↑ ABA DE ENTRADA
+                </span>
+              )}
+              {menuItems.find(m => m.id === activeTab)?.tipo === 'baixa' && (
+                <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full font-medium">
+                  ↓ ABA DE BAIXA
+                </span>
+              )}
+            </div>
             <p className="text-muted-foreground mt-1">
               CIP CONTROL 360 – Central de Inteligência da Produção
             </p>
@@ -142,7 +237,10 @@ export function DashboardCIP() {
         {/* Sistema Global de Entrada/Baixa/Expedição */}
         <CIPGlobalActions />
         
-        {renderContent()}
+        {/* Conteúdo da aba */}
+        <div className="animate-fade-in">
+          {renderContent()}
+        </div>
       </main>
     </div>
   );

@@ -114,6 +114,14 @@ export function CIPProducao() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Indicador de Aba - BAIXA */}
+      <div className="p-3 bg-warning/10 border border-warning/30 rounded-lg flex items-center gap-3">
+        <ArrowDown className="h-5 w-5 text-warning" />
+        <div>
+          <p className="text-sm font-medium text-foreground">Aba de BAIXA – Registro de Produção</p>
+          <p className="text-xs text-muted-foreground">Esta aba é para baixa de produção (quantidade produzida, refugo, retrabalho). Para novas OPs, use "Programação / Entrada".</p>
+        </div>
+      </div>
       {/* KPIs */}
       <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
         <KPICard
