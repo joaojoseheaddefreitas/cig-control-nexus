@@ -166,11 +166,16 @@ export function CIPProgramacaoDiaria() {
       prazoEntrega: novaOP.prazoEntrega,
       setor: novaOP.setor,
       status: 'aguardando',
+      estadoAtual: 'aguardando',
       origem: novaOP.origem,
       horasNecessarias: novaOP.horasNecessarias,
       horasRealizadas: 0,
       prioridade: novaOP.prioridade,
       cliente: novaOP.cliente,
+      historicoSetores: [],
+      percentualConcluido: 0,
+      ultimaAtualizacao: new Date().toISOString(),
+      origemUltimaAtualizacao: novaOP.origem,
     };
 
     setLocalOPs([...localOPs, novaOrdem]);
@@ -211,11 +216,16 @@ export function CIPProgramacaoDiaria() {
       prazoEntrega: pedido.prazoPrometido,
       setor: 'Montagem da Estrutura',
       status: 'aguardando',
+      estadoAtual: 'aguardando',
       origem: 'pcp',
       horasNecessarias: horasEstimadas,
       horasRealizadas: 0,
       prioridade: pedido.prioridade === 'urgente' ? 'urgente' : pedido.prioridade === 'alta' ? 'alta' : 'normal',
       cliente: pedido.cliente,
+      historicoSetores: [],
+      percentualConcluido: 0,
+      ultimaAtualizacao: new Date().toISOString(),
+      origemUltimaAtualizacao: 'pcp',
     };
 
     setLocalOPs([...localOPs, novaOrdem]);

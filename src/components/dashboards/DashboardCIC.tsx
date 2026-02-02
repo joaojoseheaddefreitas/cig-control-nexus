@@ -28,19 +28,30 @@ import {
   Users,
   Brain,
   Activity,
+  Menu,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ArrowUpCircle,
+  ArrowDownCircle,
+  ClipboardList,
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 
 type TabType = 'dashboard' | 'consumo' | 'estoques' | 'compras' | 'fornecedores' | 'mrp' | 'ia' | 'analytics';
 
 const menuItems = [
-  { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
-  { id: 'consumo', label: 'Consumo de Materiais', icon: Activity },
-  { id: 'estoques', label: 'Estoques', icon: Warehouse },
-  { id: 'compras', label: 'Compras', icon: ShoppingCart },
-  { id: 'fornecedores', label: 'Fornecedores', icon: Users },
-  { id: 'mrp', label: 'Necessidades (MRP)', icon: Package },
-  { id: 'ia', label: 'Inteligência IA', icon: Brain },
-  { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+  { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
+  { id: 'consumo', label: 'Consumo de Materiais', icon: Activity, tipo: 'visualizacao' },
+  { id: 'estoques', label: 'Estoques', icon: Warehouse, tipo: 'entrada_saida', badge: 'ENTRADA' },
+  { id: 'compras', label: 'Compras', icon: ShoppingCart, tipo: 'visualizacao' },
+  { id: 'fornecedores', label: 'Fornecedores', icon: Users, tipo: 'visualizacao' },
+  { id: 'mrp', label: 'Necessidades (MRP)', icon: Package, tipo: 'baixa', badge: 'REQUISIÇÃO' },
+  { id: 'ia', label: 'Inteligência IA', icon: Brain, tipo: 'visualizacao' },
+  { id: 'analytics', label: 'Analytics', icon: BarChart2, tipo: 'visualizacao' },
 ];
 
 const consumoPeriodo = [
@@ -69,49 +80,204 @@ const fornecedoresTop = [
 
 export function DashboardCIC() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile();
 
-  return (
-    <div className="flex animate-fade-in">
-      {/* Sidebar */}
-      <aside className="w-56 min-h-[calc(100vh-8rem)] border-r border-border/50 bg-card/30 p-4">
-        <div className="mb-6">
-          <h3 className="text-cic font-display text-lg font-bold">CIC</h3>
-          <p className="text-xs text-muted-foreground">Compras e Materiais</p>
-        </div>
-        <nav className="space-y-1">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as TabType)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all ${
-                activeTab === item.id
-                  ? 'bg-cic/20 text-cic'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-              }`}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
+  const handleTabChange = (tabId: TabType) => {
+    setActiveTab(tabId);
+    setSidebarOpen(false);
+  };
 
-      {/* Content */}
-      <main className="flex-1 p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
-              Central de Inteligência de Compras
-            </h2>
-            <p className="text-muted-foreground mt-1">
-              Gestão de materiais e suprimentos
-            </p>
+  const getTipoBadge = (tipo: string) => {
+    switch (tipo) {
+      case 'entrada_saida':
+        return <span className="ml-auto text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">ENTRADA</span>;
+      case 'baixa':
+        return <span className="ml-auto text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">REQUISIÇÃO</span>;
+      default:
+        return null;
+    }
+  };
+
+  const SidebarContent = ({ isCollapsed = false }: { isCollapsed?: boolean }) => (
+    <>
+      <div className={cn("mb-6", isCollapsed && "text-center")}>
+        {!isCollapsed ? (
+          <>
+            <h3 className="text-cic font-display text-lg font-bold">CIC CONTROL</h3>
+            <p className="text-xs text-muted-foreground">Compras e Materiais</p>
+          </>
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-cic/20 flex items-center justify-center mx-auto">
+            <Warehouse className="h-4 w-4 text-cic" />
+          </div>
+        )}
+      </div>
+      
+      <nav className="space-y-1">
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => handleTabChange(item.id as TabType)}
+            title={isCollapsed ? item.label : undefined}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all',
+              activeTab === item.id
+                ? 'bg-cic/20 text-cic'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+              isCollapsed && 'justify-center px-2'
+            )}
+          >
+            <item.icon className="h-4 w-4 flex-shrink-0" />
+            {!isCollapsed && (
+              <>
+                <span className="truncate flex-1 text-left">{item.label}</span>
+                {getTipoBadge(item.tipo)}
+              </>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* Legenda */}
+      {!isCollapsed && (
+        <div className="mt-6 pt-4 border-t border-border/30 space-y-2">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Fluxo CIC</p>
+          <div className="flex items-center gap-2 text-xs">
+            <ArrowUpCircle className="h-3 w-3 text-green-400" />
+            <span className="text-muted-foreground">Entrada = Após conferência</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <ArrowDownCircle className="h-3 w-3 text-orange-400" />
+            <span className="text-muted-foreground">Saída = Via requisição</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <ClipboardList className="h-3 w-3 text-blue-400" />
+            <span className="text-muted-foreground">MRP = Necessidades</span>
           </div>
         </div>
+      )}
+    </>
+  );
+
+  return (
+    <div className="flex animate-fade-in min-h-screen">
+      {/* Mobile Header */}
+      {isMobile && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3 safe-area-top">
+          <div className="flex items-center justify-between">
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <Menu className="h-6 w-6" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-4 overflow-y-auto">
+                <SheetClose className="absolute right-4 top-4">
+                  <X className="h-5 w-5" />
+                </SheetClose>
+                <SidebarContent />
+              </SheetContent>
+            </Sheet>
+            
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-cic animate-pulse" />
+              <span className="text-sm font-semibold text-cic">CIC CONTROL</span>
+            </div>
+            
+            <div className="w-10" />
+          </div>
+          
+          <div className="mt-2 flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Aba:</span>
+            <span className="text-sm font-medium text-foreground">
+              {menuItems.find(m => m.id === activeTab)?.label}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <aside className={cn(
+          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative',
+          sidebarCollapsed ? 'w-16' : 'w-56'
+        )}>
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-6 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-secondary transition-colors z-10"
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="h-3 w-3" />
+            ) : (
+              <ChevronLeft className="h-3 w-3" />
+            )}
+          </button>
+          
+          <SidebarContent isCollapsed={sidebarCollapsed} />
+        </aside>
+      )}
+
+      {/* Content */}
+      <main className={cn(
+        'flex-1 space-y-6 overflow-x-hidden',
+        isMobile ? 'pt-24 px-3 pb-4' : 'p-4 lg:p-6'
+      )}>
+        {/* Header */}
+        {!isMobile && (
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
+                  {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
+                </h2>
+                {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada_saida' && (
+                  <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-medium">
+                    ↑ ENTRADA ESTOQUE
+                  </span>
+                )}
+                {menuItems.find(m => m.id === activeTab)?.tipo === 'baixa' && (
+                  <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full font-medium">
+                    ↓ REQUISIÇÃO MATERIAIS
+                  </span>
+                )}
+              </div>
+              <p className="text-muted-foreground mt-1">
+                CIC CONTROL – Gestão de Materiais e Suprimentos
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Aviso sobre fluxo */}
+        {(activeTab === 'estoques' || activeTab === 'mrp') && (
+          <div className="p-3 rounded-lg bg-cic/10 border border-cic/30">
+            <div className="flex items-start gap-3">
+              <Warehouse className="h-5 w-5 text-cic flex-shrink-0 mt-0.5" />
+              <div className="text-sm">
+                {activeTab === 'estoques' ? (
+                  <>
+                    <strong className="text-cic">Entrada em Estoque (CIC)</strong>
+                    <p className="text-muted-foreground mt-1">
+                      Materiais entram em estoque <strong>após conferência física</strong>. A entrada registra quantidade, lote e data de recebimento.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <strong className="text-cic">Requisição de Materiais (CIC)</strong>
+                    <p className="text-muted-foreground mt-1">
+                      Saída/baixa de materiais ocorre via <strong>requisição de materiais</strong> emitida pela produção (CIP).
+                    </p>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* KPIs */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
           <KPICard
             title="Materiais Críticos"
             value={executiveKPIs.cic.materiaisCriticos}
@@ -151,10 +317,10 @@ export function DashboardCIC() {
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 lg:gap-6">
           {/* Consumo por Período */}
           <ModuleCard title="Consumo por Período" variant="cic">
-            <div className="h-72">
+            <div className="h-64 lg:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={consumoPeriodo}>
                   <defs>
@@ -176,7 +342,7 @@ export function DashboardCIC() {
 
           {/* Materiais Críticos */}
           <ModuleCard title="Materiais Críticos" variant="cic">
-            <div className="h-72">
+            <div className="h-64 lg:h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData.materiaisCriticos}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
@@ -192,11 +358,11 @@ export function DashboardCIC() {
 
           {/* Compras por Status */}
           <ModuleCard title="Compras por Status" variant="cic">
-            <div className="h-72 flex items-center">
-              <div className="w-1/2">
-                <ResponsiveContainer width="100%" height={200}>
+            <div className="h-64 lg:h-72 flex flex-col lg:flex-row items-center">
+              <div className="w-full lg:w-1/2 h-48 lg:h-full">
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
-                    <Pie data={comprasStatus} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="valor">
+                    <Pie data={comprasStatus} cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={3} dataKey="valor">
                       {comprasStatus.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
@@ -205,34 +371,34 @@ export function DashboardCIC() {
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-              <div className="w-1/2 space-y-3">
+              <div className="w-full lg:w-1/2 space-y-2 lg:space-y-3 mt-2 lg:mt-0">
                 {comprasStatus.map((item, index) => (
                   <div key={index} className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                      <span className="text-sm text-muted-foreground">{item.status}</span>
+                      <span className="text-xs lg:text-sm text-muted-foreground">{item.status}</span>
                     </div>
-                    <span className="text-sm font-semibold text-foreground">R$ {(item.valor / 1000).toFixed(0)}k</span>
+                    <span className="text-xs lg:text-sm font-semibold text-foreground">R$ {(item.valor / 1000).toFixed(0)}k</span>
                   </div>
                 ))}
               </div>
             </div>
           </ModuleCard>
 
-          {/* Compras Planejadas vs Realizadas */}
+          {/* Top Fornecedores */}
           <ModuleCard title="Top Fornecedores" variant="cic">
-            <div className="space-y-4">
+            <div className="space-y-3 lg:space-y-4">
               {fornecedoresTop.map((fornecedor, index) => (
-                <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-                  <div>
-                    <p className="font-medium text-foreground">{fornecedor.nome}</p>
+                <div key={index} className="flex items-center justify-between p-2 lg:p-3 rounded-lg bg-secondary/30">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium text-foreground text-sm truncate">{fornecedor.nome}</p>
                     <p className="text-xs text-muted-foreground">Pontualidade: {fornecedor.entregas}%</p>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-cic">R$ {(fornecedor.valor / 1000).toFixed(0)}k</p>
-                    <div className="flex items-center gap-1 mt-1">
+                  <div className="text-right ml-2 flex-shrink-0">
+                    <p className="font-semibold text-cic text-sm">R$ {(fornecedor.valor / 1000).toFixed(0)}k</p>
+                    <div className="flex items-center gap-1 mt-1 justify-end">
                       <div className={`w-2 h-2 rounded-full ${fornecedor.entregas >= 95 ? 'bg-success' : fornecedor.entregas >= 90 ? 'bg-warning' : 'bg-destructive'}`} />
-                      <span className="text-xs text-muted-foreground">{fornecedor.entregas >= 95 ? 'Excelente' : fornecedor.entregas >= 90 ? 'Bom' : 'Regular'}</span>
+                      <span className="text-[10px] text-muted-foreground">{fornecedor.entregas >= 95 ? 'Excelente' : fornecedor.entregas >= 90 ? 'Bom' : 'Regular'}</span>
                     </div>
                   </div>
                 </div>
