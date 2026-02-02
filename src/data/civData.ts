@@ -24,6 +24,8 @@ export interface Loja {
   status: 'ativa' | 'inativa';
 }
 
+// Pedido na Carteira de Vendas (CIV)
+// Entrada/Saída via Nota Fiscal + Expedição
 export interface Pedido {
   id: string;
   cliente: string;
@@ -35,7 +37,11 @@ export interface Pedido {
   margem: number;
   prazoPrometido: string;
   prioridade: 'normal' | 'alta' | 'urgente';
-  status: 'a_programar' | 'em_producao' | 'produzido' | 'faturado';
+  status: 'a_programar' | 'em_producao' | 'produzido' | 'faturado' | 'expedido';
+  // Controle NF
+  notaFiscal?: string;
+  dataFaturamento?: string;
+  dataExpedicao?: string;
 }
 
 export interface Cliente {
@@ -50,15 +56,23 @@ export interface Cliente {
   classificacao: 'A' | 'B' | 'C';
 }
 
+// Produto cadastrado em Vendas (CIV)
+// Entrada: Produto novo | Saída: Produto descontinuado
 export interface ProdutoVenda {
   codigo: string;
   nome: string;
   categoria: string;
+  tipo: 'sofa' | 'cadeira' | 'mesa' | 'poltrona' | 'acessorio';
+  modelo: string;
   precoBase: number;
   vendasMes: number;
   margem: number;
   ranking: number;
   estoque: number;
+  tempoProducao: number; // horas
+  ativo: boolean; // Pode ser descontinuado
+  dataCadastro: string;
+  ultimaVenda?: string;
 }
 
 export interface ProjetoEspecial {
@@ -96,16 +110,17 @@ export const lojas: Loja[] = [
   { id: 'LJ008', nome: 'Marketplace', tipo: 'parceira', regiao: 'Nacional', vendedor: 'Equipe Digital', vendasMes: 34000, margemMedia: 12, ticketMedio: 1600, status: 'ativa' },
 ];
 
-// Carteira de Pedidos
+// Carteira de Pedidos (com controle NF)
 export const carteiraPedidos: Pedido[] = [
   { id: 'PD001', cliente: 'Móveis Luxo Ltda', loja: 'Representante', canal: 'B2B', produto: 'Sofá Flex 2L', quantidade: 20, valor: 29660, margem: 22, prazoPrometido: '2024-02-15', prioridade: 'alta', status: 'em_producao' },
   { id: 'PD002', cliente: 'Casa Nova Decorações', loja: 'Loja Centro', canal: 'Varejo', produto: 'Mesa Florença', quantidade: 50, valor: 4900, margem: 18, prazoPrometido: '2024-02-10', prioridade: 'normal', status: 'a_programar' },
   { id: 'PD003', cliente: 'Hotel Premium', loja: 'Projetos', canal: 'Projeto', produto: 'Cadeira Bergamo', quantidade: 200, valor: 5200, margem: 15, prazoPrometido: '2024-03-01', prioridade: 'urgente', status: 'em_producao' },
   { id: 'PD004', cliente: 'Construtora ABC', loja: 'Projetos', canal: 'Projeto', produto: 'Conjunto Sala', quantidade: 15, valor: 85000, margem: 20, prazoPrometido: '2024-02-28', prioridade: 'alta', status: 'a_programar' },
   { id: 'PD005', cliente: 'Loja Conforto', loja: 'Parceira', canal: 'B2B', produto: 'Sofá Royale', quantidade: 5, valor: 10500, margem: 16, prazoPrometido: '2024-02-20', prioridade: 'normal', status: 'produzido' },
-  { id: 'PD006', cliente: 'Decoração Express', loja: 'E-commerce', canal: 'Digital', produto: 'Mesa Trento', quantidade: 10, valor: 1200, margem: 24, prazoPrometido: '2024-02-08', prioridade: 'normal', status: 'faturado' },
+  { id: 'PD006', cliente: 'Decoração Express', loja: 'E-commerce', canal: 'Digital', produto: 'Mesa Trento', quantidade: 10, valor: 1200, margem: 24, prazoPrometido: '2024-02-08', prioridade: 'normal', status: 'faturado', notaFiscal: 'NF-001245', dataFaturamento: '2024-02-07' },
   { id: 'PD007', cliente: 'Arquiteto Silva', loja: 'Projetos', canal: 'Projeto', produto: 'Projeto Especial', quantidade: 1, valor: 45000, margem: 28, prazoPrometido: '2024-03-15', prioridade: 'alta', status: 'a_programar' },
   { id: 'PD008', cliente: 'Rede Móveis SP', loja: 'Representante', canal: 'B2B', produto: 'Cadeira Trieste', quantidade: 500, valor: 11000, margem: 14, prazoPrometido: '2024-02-25', prioridade: 'urgente', status: 'em_producao' },
+  { id: 'PD009', cliente: 'Casa & Lar', loja: 'E-commerce', canal: 'Digital', produto: 'Mesa Florença 6L', quantidade: 8, valor: 712, margem: 21, prazoPrometido: '2024-02-05', prioridade: 'normal', status: 'expedido', notaFiscal: 'NF-001240', dataFaturamento: '2024-02-04', dataExpedicao: '2024-02-05' },
 ];
 
 // Clientes
@@ -120,16 +135,20 @@ export const clientes: Cliente[] = [
   { id: 'C008', nome: 'Arquiteto Silva', tipo: 'projeto', cidade: 'Brasília', estado: 'DF', comprasTotal: 95000, ticketMedio: 9500, ultimaCompra: '2024-01-17', classificacao: 'B' },
 ];
 
-// Produtos
+// Produtos (com campos para cadastro em Vendas)
 export const produtosVenda: ProdutoVenda[] = [
-  { codigo: '4000', nome: 'Mesa Florença', categoria: 'Mesa', precoBase: 98.00, vendasMes: 411, margem: 22, ranking: 1, estoque: 45 },
-  { codigo: '6002', nome: 'Cadeira Bergamo Madeira', categoria: 'Cadeira', precoBase: 24.00, vendasMes: 1418, margem: 18, ranking: 2, estoque: 320 },
-  { codigo: '6009', nome: 'Cadeira Trieste Madeira', categoria: 'Cadeira', precoBase: 22.00, vendasMes: 840, margem: 16, ranking: 3, estoque: 180 },
-  { codigo: '6003', nome: 'Cadeira Bergamo Estofado', categoria: 'Cadeira', precoBase: 26.00, vendasMes: 669, margem: 20, ranking: 4, estoque: 95 },
-  { codigo: '6010', nome: 'Cadeira Trieste Estofado', categoria: 'Cadeira', precoBase: 24.00, vendasMes: 408, margem: 17, ranking: 5, estoque: 75 },
-  { codigo: '112401', nome: 'Sofá Flex 2L', categoria: 'Sofá', precoBase: 1483.00, vendasMes: 20, margem: 25, ranking: 6, estoque: 8 },
-  { codigo: '4006', nome: 'Mesa Florença 6L', categoria: 'Mesa', precoBase: 89.00, vendasMes: 138, margem: 21, ranking: 7, estoque: 28 },
-  { codigo: '6014', nome: 'Cadeira Belluno', categoria: 'Cadeira', precoBase: 28.00, vendasMes: 300, margem: 19, ranking: 8, estoque: 65 },
+  { codigo: '4000', nome: 'Mesa Florença', categoria: 'Mesa', tipo: 'mesa', modelo: 'Florença', precoBase: 98.00, vendasMes: 411, margem: 22, ranking: 1, estoque: 45, tempoProducao: 2.5, ativo: true, dataCadastro: '2023-01-15', ultimaVenda: '2024-01-27' },
+  { codigo: '6002', nome: 'Cadeira Bergamo Madeira', categoria: 'Cadeira', tipo: 'cadeira', modelo: 'Bergamo', precoBase: 24.00, vendasMes: 1418, margem: 18, ranking: 2, estoque: 320, tempoProducao: 1.2, ativo: true, dataCadastro: '2023-02-10', ultimaVenda: '2024-01-27' },
+  { codigo: '6009', nome: 'Cadeira Trieste Madeira', categoria: 'Cadeira', tipo: 'cadeira', modelo: 'Trieste', precoBase: 22.00, vendasMes: 840, margem: 16, ranking: 3, estoque: 180, tempoProducao: 1.0, ativo: true, dataCadastro: '2023-02-15', ultimaVenda: '2024-01-26' },
+  { codigo: '6003', nome: 'Cadeira Bergamo Estofado', categoria: 'Cadeira', tipo: 'cadeira', modelo: 'Bergamo', precoBase: 26.00, vendasMes: 669, margem: 20, ranking: 4, estoque: 95, tempoProducao: 1.8, ativo: true, dataCadastro: '2023-03-01', ultimaVenda: '2024-01-27' },
+  { codigo: '6010', nome: 'Cadeira Trieste Estofado', categoria: 'Cadeira', tipo: 'cadeira', modelo: 'Trieste', precoBase: 24.00, vendasMes: 408, margem: 17, ranking: 5, estoque: 75, tempoProducao: 1.5, ativo: true, dataCadastro: '2023-03-05', ultimaVenda: '2024-01-25' },
+  { codigo: '112401', nome: 'Sofá Flex 2L', categoria: 'Sofá', tipo: 'sofa', modelo: 'Flex', precoBase: 1483.00, vendasMes: 20, margem: 25, ranking: 6, estoque: 8, tempoProducao: 16.0, ativo: true, dataCadastro: '2023-04-10', ultimaVenda: '2024-01-24' },
+  { codigo: '4006', nome: 'Mesa Florença 6L', categoria: 'Mesa', tipo: 'mesa', modelo: 'Florença 6L', precoBase: 89.00, vendasMes: 138, margem: 21, ranking: 7, estoque: 28, tempoProducao: 3.0, ativo: true, dataCadastro: '2023-04-15', ultimaVenda: '2024-01-23' },
+  { codigo: '6014', nome: 'Cadeira Belluno', categoria: 'Cadeira', tipo: 'cadeira', modelo: 'Belluno', precoBase: 28.00, vendasMes: 300, margem: 19, ranking: 8, estoque: 65, tempoProducao: 1.6, ativo: true, dataCadastro: '2023-05-01', ultimaVenda: '2024-01-22' },
+  { codigo: '111482', nome: 'Sofá Ancora 2L', categoria: 'Sofá', tipo: 'sofa', modelo: 'Ancora', precoBase: 1250.00, vendasMes: 12, margem: 23, ranking: 9, estoque: 4, tempoProducao: 14.0, ativo: true, dataCadastro: '2023-05-15', ultimaVenda: '2024-01-20' },
+  { codigo: '111011', nome: 'Sofá Astor 3L', categoria: 'Sofá', tipo: 'sofa', modelo: 'Astor', precoBase: 1650.00, vendasMes: 8, margem: 26, ranking: 10, estoque: 3, tempoProducao: 18.0, ativo: true, dataCadastro: '2023-06-01', ultimaVenda: '2024-01-18' },
+  // Produto descontinuado
+  { codigo: '5001', nome: 'Mesa Antiga', categoria: 'Mesa', tipo: 'mesa', modelo: 'Antiga', precoBase: 75.00, vendasMes: 0, margem: 15, ranking: 99, estoque: 0, tempoProducao: 2.0, ativo: false, dataCadastro: '2022-01-01', ultimaVenda: '2023-06-15' },
 ];
 
 // Projetos Especiais

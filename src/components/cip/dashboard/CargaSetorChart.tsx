@@ -6,17 +6,18 @@ import {
 interface CargaSetorData {
   setor: string;
   carga: number;
-  status: 'verde' | 'amarelo' | 'vermelho';
+  status: 'verde' | 'amarelo' | 'vermelho' | 'azul';
 }
 
 interface CargaSetorChartProps {
   data: CargaSetorData[];
 }
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   verde: '#3b82f6',
   amarelo: '#f59e0b',
   vermelho: '#ef4444',
+  azul: '#60a5fa', // Ocioso
 };
 
 export function CargaSetorChart({ data }: CargaSetorChartProps) {

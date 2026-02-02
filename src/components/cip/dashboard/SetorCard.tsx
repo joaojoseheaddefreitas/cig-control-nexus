@@ -14,20 +14,22 @@ interface SetorCardProps {
   diasCarteira: number;
   eficiencia: number;
   folga: number;
-  status: 'verde' | 'amarelo' | 'vermelho';
+  status: 'verde' | 'amarelo' | 'vermelho' | 'azul';
   moExtra?: number;
 }
 
-const statusLabels = {
+const statusLabels: Record<string, { label: string; color: string; bg: string }> = {
   verde: { label: 'SOBRA', color: 'text-success', bg: 'bg-success/20' },
   amarelo: { label: 'LIMITE', color: 'text-warning', bg: 'bg-warning/20' },
   vermelho: { label: 'GARGALO', color: 'text-destructive', bg: 'bg-destructive/20' },
+  azul: { label: 'OCIOSO', color: 'text-primary', bg: 'bg-primary/20' },
 };
 
-const progressColors = {
+const progressColors: Record<string, string> = {
   verde: 'bg-primary',
   amarelo: 'bg-warning',
   vermelho: 'bg-destructive',
+  azul: 'bg-sky-400',
 };
 
 export function SetorCard({
@@ -56,6 +58,7 @@ export function SetorCard({
             'w-2.5 h-2.5 rounded-full',
             status === 'verde' ? 'bg-primary' :
             status === 'amarelo' ? 'bg-warning' :
+            status === 'azul' ? 'bg-sky-400' :
             'bg-destructive'
           )} />
           <h3 className="font-display font-bold text-foreground text-sm lg:text-base">
@@ -76,6 +79,7 @@ export function SetorCard({
             'font-bold',
             status === 'verde' ? 'text-primary' :
             status === 'amarelo' ? 'text-warning' :
+            status === 'azul' ? 'text-sky-400' :
             'text-destructive'
           )}>
             {carga}%
