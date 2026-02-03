@@ -1,37 +1,20 @@
 import { useState } from 'react';
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
-  ComposedChart,
-  Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Legend,
 } from 'recharts';
 import { executiveKPIs, chartData } from '@/data/cigData';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import {
-  Wallet,
-  TrendingUp,
-  DollarSign,
-  PiggyBank,
-  CreditCard,
-  BarChart2,
-  PieChart as PieChartIcon,
-  Brain,
-  ArrowUpRight,
-  ArrowDownRight,
+  Wallet, TrendingUp, DollarSign, PiggyBank, CreditCard, BarChart2,
+  PieChart as PieChartIcon, Brain, ArrowUpRight, ArrowDownRight,
+  Menu, X, ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { cn } from '@/lib/utils';
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
+import { Button } from '@/components/ui/button';
 
 type TabType = 'dashboard' | 'faturamento' | 'custos' | 'margens' | 'resultados' | 'fluxo' | 'projecoes' | 'analytics';
 
@@ -83,46 +66,117 @@ const projecoes = [
 
 export function DashboardCIF() {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile();
+
+  const handleTabChange = (tabId: TabType) => {
+    setActiveTab(tabId);
+    setSidebarOpen(false);
+  };
+
+  const SidebarContent = ({ isCollapsed = false }: { isCollapsed?: boolean }) => (
+    <>
+      <div className={cn("mb-6", isCollapsed && "text-center")}>
+        {!isCollapsed ? (
+          <>
+            <h3 className="text-cif font-display text-lg font-bold">CIF CONTROL</h3>
+            <p className="text-xs text-muted-foreground">Inteligência Financeira</p>
+          </>
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-cif/20 flex items-center justify-center mx-auto">
+            <Wallet className="h-4 w-4 text-cif" />
+          </div>
+        )}
+      </div>
+      
+      <nav className="space-y-1">
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => handleTabChange(item.id as TabType)}
+            title={isCollapsed ? item.label : undefined}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all',
+              activeTab === item.id
+                ? 'bg-cif/20 text-cif'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+              isCollapsed && 'justify-center px-2'
+            )}
+          >
+            <item.icon className="h-4 w-4 flex-shrink-0" />
+            {!isCollapsed && <span className="truncate">{item.label}</span>}
+          </button>
+        ))}
+      </nav>
+    </>
+  );
 
   return (
-    <div className="flex animate-fade-in">
-      {/* Sidebar */}
-      <aside className="w-56 min-h-[calc(100vh-8rem)] border-r border-border/50 bg-card/30 p-4">
-        <div className="mb-6">
-          <h3 className="text-cif font-display text-lg font-bold">CIF</h3>
-          <p className="text-xs text-muted-foreground">Inteligência Financeira</p>
-        </div>
-        <nav className="space-y-1">
-          {menuItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveTab(item.id as TabType)}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all ${
-                activeTab === item.id
-                  ? 'bg-cif/20 text-cif'
-                  : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
-              }`}
-            >
-              <item.icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          ))}
-        </nav>
-      </aside>
-
-      {/* Content */}
-      <main className="flex-1 p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div>
-            <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
-              Central de Inteligência Financeira
-            </h2>
-            <p className="text-muted-foreground mt-1">
-              Gestão financeira e análise de resultados
-            </p>
+    <div className="flex animate-fade-in min-h-screen">
+      {/* Mobile Header */}
+      {isMobile && (
+        <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3 safe-area-top">
+          <div className="flex items-center justify-between">
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <Menu className="h-6 w-6" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-4 overflow-y-auto">
+                <SheetClose className="absolute right-4 top-4">
+                  <X className="h-5 w-5" />
+                </SheetClose>
+                <SidebarContent />
+              </SheetContent>
+            </Sheet>
+            
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-cif animate-pulse" />
+              <span className="text-sm font-semibold text-cif">CIF CONTROL</span>
+            </div>
+            
+            <div className="w-10" />
           </div>
         </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <aside className={cn(
+          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative',
+          sidebarCollapsed ? 'w-16' : 'w-56'
+        )}>
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-6 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-secondary transition-colors z-10"
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+          </button>
+          
+          <SidebarContent isCollapsed={sidebarCollapsed} />
+        </aside>
+      )}
+
+      {/* Content */}
+      <main className={cn(
+        'flex-1 space-y-6 overflow-x-hidden',
+        isMobile ? 'pt-20 px-3 pb-4' : 'p-4 lg:p-6'
+      )}>
+        {/* Header */}
+        {!isMobile && (
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div>
+              <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
+                {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
+              </h2>
+              <p className="text-muted-foreground mt-1">
+                CIF CONTROL – Gestão Financeira e Análise de Resultados
+              </p>
+            </div>
+          </div>
+        )}
 
         {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">

@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { CIVDashboard } from '@/components/civ/CIVDashboard';
 import { CIVLeads } from '@/components/civ/CIVLeads';
 import { CIVLojas } from '@/components/civ/CIVLojas';
-import { CIVCarteira } from '@/components/civ/CIVCarteira';
+import { CIVCarteiraProducao } from '@/components/civ/CIVCarteiraProducao';
 import { CIVPipeline } from '@/components/civ/CIVPipeline';
 import { CIVSimulacao } from '@/components/civ/CIVSimulacao';
 import { CIVClientes } from '@/components/civ/CIVClientes';
@@ -23,14 +23,14 @@ import { CIVProjetos } from '@/components/civ/CIVProjetos';
 import { CIVIA } from '@/components/civ/CIVIA';
 import { CIVAnalytics } from '@/components/civ/CIVAnalytics';
 
-type TabType = 'dashboard' | 'leads' | 'lojas' | 'carteira' | 'pipeline' | 'simulacao' | 'clientes' | 'produtos' | 'mercado' | 'projetos' | 'ia' | 'analytics';
+type TabType = 'dashboard' | 'leads' | 'lojas' | 'carteira_producao' | 'pipeline' | 'simulacao' | 'clientes' | 'produtos' | 'mercado' | 'projetos' | 'ia' | 'analytics';
 
-// Menu items com tipos de operação
+// Menu items com tipos de operação - Carteira unida com Produção
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
   { id: 'leads', label: 'Leads & Oportunidades', icon: UserCheck, tipo: 'visualizacao' },
   { id: 'lojas', label: 'Lojas, Canais e Vendedores', icon: Store, tipo: 'visualizacao' },
-  { id: 'carteira', label: 'Carteira de Pedidos', icon: FileText, tipo: 'entrada_saida', badge: 'PEDIDOS' },
+  { id: 'carteira_producao', label: 'Carteira + Produção', icon: FileText, tipo: 'entrada_saida', badge: 'PEDIDOS + OPs' },
   { id: 'pipeline', label: 'Pipeline Comercial', icon: Target, tipo: 'visualizacao' },
   { id: 'simulacao', label: 'Simulação de Prazo', icon: Calculator, tipo: 'visualizacao' },
   { id: 'clientes', label: 'Clientes & Relacionamento', icon: Users, tipo: 'visualizacao' },
@@ -52,7 +52,7 @@ export function DashboardCIV() {
       case 'dashboard': return <CIVDashboard />;
       case 'leads': return <CIVLeads />;
       case 'lojas': return <CIVLojas />;
-      case 'carteira': return <CIVCarteira />;
+      case 'carteira_producao': return <CIVCarteiraProducao />;
       case 'pipeline': return <CIVPipeline />;
       case 'simulacao': return <CIVSimulacao />;
       case 'clientes': return <CIVClientes />;
@@ -231,16 +231,16 @@ export function DashboardCIV() {
         )}
         
         {/* Aviso sobre fluxo */}
-        {(activeTab === 'carteira' || activeTab === 'produtos') && (
+        {(activeTab === 'carteira_producao' || activeTab === 'produtos') && (
           <div className="mb-4 p-3 rounded-lg bg-civ/10 border border-civ/30">
             <div className="flex items-start gap-3">
               <Receipt className="h-5 w-5 text-civ flex-shrink-0 mt-0.5" />
               <div className="text-sm">
-                {activeTab === 'carteira' ? (
+                {activeTab === 'carteira_producao' ? (
                   <>
-                    <strong className="text-civ">Carteira de Pedidos (CIV)</strong>
+                    <strong className="text-civ">Carteira + Produção (CIV)</strong>
                     <p className="text-muted-foreground mt-1">
-                      Entrada via cadastro de pedidos. Baixa/saída ocorre pela <strong>Nota Fiscal</strong> gerada pelo Financeiro e entregue pela <strong>Expedição</strong> no momento do embarque.
+                      Gestão unificada de pedidos e OPs. Entrada via cadastro de pedidos. Baixa/saída ocorre pela <strong>Nota Fiscal</strong> gerada pelo Financeiro e entregue pela <strong>Expedição</strong>.
                     </p>
                   </>
                 ) : (

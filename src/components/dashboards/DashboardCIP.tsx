@@ -16,25 +16,22 @@ import { CIPCarteira } from '@/components/cip/CIPCarteira';
 import { CIPProgramacaoDiaria } from '@/components/cip/CIPProgramacaoDiaria';
 import { CIPSetores } from '@/components/cip/CIPSetores';
 import { CIPProducao } from '@/components/cip/CIPProducao';
-import { CIPCapacidade } from '@/components/cip/CIPCapacidade';
-import { CIPCadastroPedidos } from '@/components/cip/CIPCadastroPedidos';
-import { CIPCadastroProdutos } from '@/components/cip/CIPCadastroProdutos';
+import { CIPCadastroProdutosCompleto } from '@/components/cip/CIPCadastroProdutosCompleto';
 import { CIPRastreamento } from '@/components/cip/CIPRastreamento';
 import { CIPIA } from '@/components/cip/CIPIA';
 import { CIPAnalytics } from '@/components/cip/CIPAnalytics';
 import { CIPGlobalActions } from '@/components/cip/CIPGlobalActions';
 
-type TabType = 'dashboard' | 'carteira' | 'programacao' | 'producao' | 'setores' | 'cadastro_pedidos' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
+type TabType = 'dashboard' | 'carteira' | 'programacao' | 'producao' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
 
-// Menu items separados por função (Entrada vs Baixa)
+// Menu items - CIP focado em Produtos, OPs e Programação (Pedidos movidos para CIV)
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
-  { id: 'carteira', label: 'Carteira', icon: Package, tipo: 'visualizacao' },
+  { id: 'carteira', label: 'Carteira (Visualização)', icon: Package, tipo: 'visualizacao' },
   { id: 'programacao', label: 'Programação / Entrada', icon: Calendar, tipo: 'entrada', badge: '+ Entrada' },
   { id: 'producao', label: 'Programação / Baixas', icon: Factory, tipo: 'baixa', badge: '- Baixa' },
   { id: 'setores', label: 'Setores', icon: Layers, tipo: 'configuracao' },
-  { id: 'cadastro_pedidos', label: 'Cadastro Pedidos', icon: ClipboardList, tipo: 'entrada' },
-  { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package, tipo: 'configuracao' },
+  { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package, tipo: 'configuracao', badge: 'PRODUTOS' },
   { id: 'rastreamento', label: 'Rastreamento', icon: MapPin, tipo: 'visualizacao' },
   { id: 'ia', label: 'Inteligência IA', icon: Brain, tipo: 'visualizacao' },
   { id: 'analytics', label: 'Analytics', icon: LineChart, tipo: 'visualizacao' },
@@ -53,8 +50,7 @@ export function DashboardCIP() {
       case 'programacao': return <CIPProgramacaoDiaria />;
       case 'producao': return <CIPProducao />;
       case 'setores': return <CIPSetores />;
-      case 'cadastro_pedidos': return <CIPCadastroPedidos />;
-      case 'cadastro_produtos': return <CIPCadastroProdutos />;
+      case 'cadastro_produtos': return <CIPCadastroProdutosCompleto />;
       case 'rastreamento': return <CIPRastreamento />;
       case 'ia': return <CIPIA />;
       case 'analytics': return <CIPAnalytics />;
