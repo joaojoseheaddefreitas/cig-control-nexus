@@ -14,6 +14,7 @@ interface GlobalSidebarProps {
   onModuleChange: (module: ModuleType) => void;
 }
 
+// Módulos - Paleta atualizada (sem roxo)
 const modules = [
   { id: 'CIG' as ModuleType, label: 'CIG', fullName: 'Central de Inteligência Geral', icon: LayoutDashboard, color: 'cig' },
   { id: 'CIV' as ModuleType, label: 'CIV', fullName: 'Central de Inteligência de Vendas', icon: TrendingUp, color: 'civ' },

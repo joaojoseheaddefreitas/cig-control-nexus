@@ -69,7 +69,7 @@ export default {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
-        // CIG Module Colors
+        // CIG Module Colors - Paleta Obrigatória (Sem Roxo)
         cig: {
           DEFAULT: "hsl(var(--cig-blue))",
           glow: "hsl(var(--cig-blue-glow))",
@@ -83,12 +83,12 @@ export default {
           glow: "hsl(var(--cip-orange-glow))",
         },
         cic: {
-          DEFAULT: "hsl(var(--cic-purple))",
-          glow: "hsl(var(--cic-purple-glow))",
+          DEFAULT: "hsl(var(--cic-blue))",
+          glow: "hsl(var(--cic-blue-glow))",
         },
         cif: {
-          DEFAULT: "hsl(var(--cif-red))",
-          glow: "hsl(var(--cif-red-glow))",
+          DEFAULT: "hsl(var(--cif-green))",
+          glow: "hsl(var(--cif-green-glow))",
         },
         chart: {
           "1": "hsl(var(--chart-1))",
@@ -129,6 +129,10 @@ export default {
           "0%": { backgroundPosition: "-200% 0" },
           "100%": { backgroundPosition: "200% 0" },
         },
+        "pulse-critical": {
+          "0%, 100%": { boxShadow: "0 0 0 0 hsla(0, 72%, 51%, 0.7)" },
+          "50%": { boxShadow: "0 0 0 8px hsla(0, 72%, 51%, 0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -137,6 +141,7 @@ export default {
         "slide-up": "slide-up 0.5s ease-out",
         "pulse-glow": "pulse-glow 2s ease-in-out infinite",
         "shimmer": "shimmer 2s linear infinite",
+        "pulse-critical": "pulse-critical 2s ease-in-out infinite",
       },
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",

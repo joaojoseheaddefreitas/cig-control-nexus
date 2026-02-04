@@ -3,119 +3,126 @@
 @tailwind utilities;
 
 /* CIG CONTROL - Industrial SaaS Design System */
-/* Dark Industrial Theme with Modern Aesthetic */
+/* PALETA OBRIGATÓRIA: Azul marinho (base), Verde (positivo), Amarelo (atenção), Vermelho (negativo) */
+/* PROIBIDO: Preto sobre preto, Cinza sobre preto, Roxo */
 
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
 
 @layer base {
   :root {
-    /* Core Background - Industrial Dark */
-    --background: 220 15% 8%;
+    /* Core Background - Industrial Dark (Azul Marinho) */
+    --background: 220 20% 10%;
     --foreground: 210 20% 95%;
 
     /* Card Surfaces */
-    --card: 220 15% 12%;
+    --card: 220 20% 14%;
     --card-foreground: 210 20% 95%;
 
     /* Popover */
-    --popover: 220 15% 10%;
+    --popover: 220 20% 12%;
     --popover-foreground: 210 20% 95%;
 
-    /* Primary - Industrial Blue */
-    --primary: 210 90% 55%;
-    --primary-foreground: 220 15% 8%;
+    /* Primary - Azul Marinho Industrial */
+    --primary: 215 80% 50%;
+    --primary-foreground: 210 20% 98%;
 
-    /* Secondary - Steel Gray */
-    --secondary: 220 15% 18%;
+    /* Secondary - Steel Gray Azulado */
+    --secondary: 220 18% 20%;
     --secondary-foreground: 210 20% 90%;
 
     /* Muted Surfaces */
-    --muted: 220 12% 16%;
+    --muted: 220 15% 18%;
     --muted-foreground: 215 15% 55%;
 
-    /* Accent - Tech Cyan */
-    --accent: 185 85% 45%;
+    /* Accent - Azul Claro */
+    --accent: 210 85% 55%;
     --accent-foreground: 220 15% 8%;
 
-    /* Destructive - Industrial Red */
-    --destructive: 0 75% 50%;
+    /* Destructive - Vermelho Industrial */
+    --destructive: 0 72% 51%;
     --destructive-foreground: 210 20% 98%;
 
     /* Borders & Inputs */
-    --border: 220 15% 20%;
-    --input: 220 15% 15%;
-    --ring: 210 90% 55%;
+    --border: 220 18% 22%;
+    --input: 220 18% 16%;
+    --ring: 215 80% 50%;
 
     /* Radius */
     --radius: 0.625rem;
 
-    /* CIG Central Colors */
-    --cig-blue: 210 90% 55%;
-    --cig-blue-glow: 210 100% 65%;
+    /* === CORES DOS MÓDULOS (Paleta Obrigatória) === */
     
-    /* CIV Sales - Green */
-    --civ-green: 145 70% 45%;
-    --civ-green-glow: 145 80% 55%;
+    /* CIG Central - Azul Marinho (Base, estabilidade) */
+    --cig-blue: 215 75% 48%;
+    --cig-blue-glow: 215 85% 58%;
     
-    /* CIP Production - Orange */
-    --cip-orange: 25 90% 55%;
-    --cip-orange-glow: 25 100% 65%;
+    /* CIV Sales - Verde (Resultado positivo) */
+    --civ-green: 145 70% 42%;
+    --civ-green-glow: 145 80% 52%;
     
-    /* CIC Materials - Purple */
-    --cic-purple: 280 70% 55%;
-    --cic-purple-glow: 280 80% 65%;
+    /* CIP Production - Laranja (Produção/Atenção) */
+    --cip-orange: 30 90% 50%;
+    --cip-orange-glow: 30 95% 60%;
     
-    /* CIF Financial - Red */
-    --cif-red: 350 75% 55%;
-    --cif-red-glow: 350 85% 65%;
+    /* CIC Materials - Azul Secundário (Compras) */
+    --cic-blue: 200 75% 50%;
+    --cic-blue-glow: 200 85% 60%;
+    
+    /* CIF Financial - Verde Escuro (Financeiro) */
+    --cif-green: 160 65% 40%;
+    --cif-green-glow: 160 75% 50%;
 
-    /* Success & Warning */
-    --success: 145 70% 45%;
-    --success-foreground: 220 15% 8%;
-    --warning: 40 95% 55%;
-    --warning-foreground: 220 15% 8%;
+    /* Success - Verde */
+    --success: 145 70% 42%;
+    --success-foreground: 210 20% 98%;
+    
+    /* Warning - Amarelo (Atenção, NÃO positivo) */
+    --warning: 45 95% 50%;
+    --warning-foreground: 220 20% 10%;
 
-    /* Chart Colors */
-    --chart-1: 210 90% 55%;
-    --chart-2: 145 70% 45%;
-    --chart-3: 25 90% 55%;
-    --chart-4: 280 70% 55%;
-    --chart-5: 350 75% 55%;
-    --chart-6: 185 85% 45%;
+    /* Chart Colors - Sem Roxo */
+    --chart-1: 215 75% 48%;
+    --chart-2: 145 70% 42%;
+    --chart-3: 30 90% 50%;
+    --chart-4: 200 75% 50%;
+    --chart-5: 0 72% 51%;
+    --chart-6: 45 95% 50%;
 
     /* Sidebar */
-    --sidebar-background: 220 15% 6%;
+    --sidebar-background: 220 22% 8%;
     --sidebar-foreground: 210 20% 85%;
-    --sidebar-primary: 210 90% 55%;
-    --sidebar-primary-foreground: 220 15% 8%;
-    --sidebar-accent: 220 15% 14%;
+    --sidebar-primary: 215 80% 50%;
+    --sidebar-primary-foreground: 210 20% 98%;
+    --sidebar-accent: 220 18% 16%;
     --sidebar-accent-foreground: 210 20% 95%;
-    --sidebar-border: 220 15% 15%;
-    --sidebar-ring: 210 90% 55%;
+    --sidebar-border: 220 18% 18%;
+    --sidebar-ring: 215 80% 50%;
 
-    /* Industrial Gradients */
-    --gradient-cig: linear-gradient(135deg, hsl(210 90% 55%), hsl(185 85% 45%));
-    --gradient-civ: linear-gradient(135deg, hsl(145 70% 45%), hsl(160 75% 50%));
-    --gradient-cip: linear-gradient(135deg, hsl(25 90% 55%), hsl(35 95% 60%));
-    --gradient-cic: linear-gradient(135deg, hsl(280 70% 55%), hsl(260 75% 60%));
-    --gradient-cif: linear-gradient(135deg, hsl(350 75% 55%), hsl(10 80% 55%));
-    --gradient-dark: linear-gradient(180deg, hsl(220 15% 10%), hsl(220 15% 6%));
-    --gradient-card: linear-gradient(145deg, hsl(220 15% 14%), hsl(220 15% 10%));
-    --gradient-glass: linear-gradient(135deg, hsla(220, 15%, 20%, 0.3), hsla(220, 15%, 10%, 0.2));
+    /* Industrial Gradients - Sem Roxo */
+    --gradient-cig: linear-gradient(135deg, hsl(215 75% 48%), hsl(210 85% 55%));
+    --gradient-civ: linear-gradient(135deg, hsl(145 70% 42%), hsl(160 75% 48%));
+    --gradient-cip: linear-gradient(135deg, hsl(30 90% 50%), hsl(40 95% 55%));
+    --gradient-cic: linear-gradient(135deg, hsl(200 75% 50%), hsl(190 80% 55%));
+    --gradient-cif: linear-gradient(135deg, hsl(160 65% 40%), hsl(145 70% 45%));
+    --gradient-dark: linear-gradient(180deg, hsl(220 20% 12%), hsl(220 20% 8%));
+    --gradient-card: linear-gradient(145deg, hsl(220 20% 16%), hsl(220 20% 12%));
+    --gradient-glass: linear-gradient(135deg, hsla(220, 18%, 22%, 0.3), hsla(220, 18%, 12%, 0.2));
 
-    /* Shadows */
-    --shadow-sm: 0 2px 4px hsla(220, 15%, 0%, 0.3);
-    --shadow-md: 0 4px 12px hsla(220, 15%, 0%, 0.4);
-    --shadow-lg: 0 8px 24px hsla(220, 15%, 0%, 0.5);
-    --shadow-glow-blue: 0 0 20px hsla(210, 90%, 55%, 0.3);
-    --shadow-glow-green: 0 0 20px hsla(145, 70%, 45%, 0.3);
-    --shadow-glow-orange: 0 0 20px hsla(25, 90%, 55%, 0.3);
-    --shadow-glow-purple: 0 0 20px hsla(280, 70%, 55%, 0.3);
-    --shadow-glow-red: 0 0 20px hsla(350, 75%, 55%, 0.3);
+    /* Shadows - Glow colors atualizados */
+    --shadow-sm: 0 2px 4px hsla(220, 20%, 0%, 0.3);
+    --shadow-md: 0 4px 12px hsla(220, 20%, 0%, 0.4);
+    --shadow-lg: 0 8px 24px hsla(220, 20%, 0%, 0.5);
+    --shadow-glow-blue: 0 0 20px hsla(215, 75%, 48%, 0.3);
+    --shadow-glow-green: 0 0 20px hsla(145, 70%, 42%, 0.3);
+    --shadow-glow-orange: 0 0 20px hsla(30, 90%, 50%, 0.3);
+    --shadow-glow-cic: 0 0 20px hsla(200, 75%, 50%, 0.3);
+    --shadow-glow-cif: 0 0 20px hsla(160, 65%, 40%, 0.3);
+    --shadow-glow-warning: 0 0 20px hsla(45, 95%, 50%, 0.3);
+    --shadow-glow-red: 0 0 20px hsla(0, 72%, 51%, 0.3);
   }
 
   .dark {
-    --background: 220 15% 8%;
+    --background: 220 20% 10%;
     --foreground: 210 20% 95%;
   }
 }
@@ -151,7 +158,7 @@
     background: var(--gradient-glass);
   }
 
-  /* Module Cards */
+  /* Module Cards - Cores atualizadas */
   .card-cig {
     @apply card-industrial;
     border-left: 3px solid hsl(var(--cig-blue));
@@ -169,12 +176,12 @@
 
   .card-cic {
     @apply card-industrial;
-    border-left: 3px solid hsl(var(--cic-purple));
+    border-left: 3px solid hsl(var(--cic-blue));
   }
 
   .card-cif {
     @apply card-industrial;
-    border-left: 3px solid hsl(var(--cif-red));
+    border-left: 3px solid hsl(var(--cif-green));
   }
 
   /* KPI Cards with Glow */
@@ -206,13 +213,13 @@
   }
 
   .kpi-card-cic:hover {
-    border-color: hsl(var(--cic-purple) / 0.5);
-    box-shadow: var(--shadow-glow-purple);
+    border-color: hsl(var(--cic-blue) / 0.5);
+    box-shadow: var(--shadow-glow-cic);
   }
 
   .kpi-card-cif:hover {
-    border-color: hsl(var(--cif-red) / 0.5);
-    box-shadow: var(--shadow-glow-red);
+    border-color: hsl(var(--cif-green) / 0.5);
+    box-shadow: var(--shadow-glow-cif);
   }
 
   /* Navigation Tab Styles */
@@ -242,13 +249,13 @@
   }
 
   .nav-tab-cic.nav-tab-active {
-    color: hsl(var(--cic-purple));
-    border-color: hsl(var(--cic-purple));
+    color: hsl(var(--cic-blue));
+    border-color: hsl(var(--cic-blue));
   }
 
   .nav-tab-cif.nav-tab-active {
-    color: hsl(var(--cif-red));
-    border-color: hsl(var(--cif-red));
+    color: hsl(var(--cif-green));
+    border-color: hsl(var(--cif-green));
   }
 
   /* Sidebar Styles */
@@ -314,6 +321,20 @@
     z-index: -1;
   }
 
+  /* Pulsing Indicator for IA Alerts */
+  .pulse-critical {
+    animation: pulse-critical 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-critical {
+    0%, 100% { 
+      box-shadow: 0 0 0 0 hsla(0, 72%, 51%, 0.7);
+    }
+    50% { 
+      box-shadow: 0 0 0 8px hsla(0, 72%, 51%, 0);
+    }
+  }
+
   /* Data Grid */
   .data-grid {
     @apply grid gap-4;
@@ -341,7 +362,7 @@
 }
 
 @layer utilities {
-  /* Text Colors for Modules */
+  /* Text Colors for Modules - Atualizados */
   .text-cig {
     color: hsl(var(--cig-blue));
   }
@@ -352,10 +373,10 @@
     color: hsl(var(--cip-orange));
   }
   .text-cic {
-    color: hsl(var(--cic-purple));
+    color: hsl(var(--cic-blue));
   }
   .text-cif {
-    color: hsl(var(--cif-red));
+    color: hsl(var(--cif-green));
   }
 
   /* Background Colors for Modules */
@@ -369,10 +390,10 @@
     background-color: hsl(var(--cip-orange));
   }
   .bg-cic {
-    background-color: hsl(var(--cic-purple));
+    background-color: hsl(var(--cic-blue));
   }
   .bg-cif {
-    background-color: hsl(var(--cif-red));
+    background-color: hsl(var(--cif-green));
   }
 
   /* Gradient Backgrounds */
@@ -392,7 +413,7 @@
     background: var(--gradient-cif);
   }
 
-  /* Glow Effects */
+  /* Glow Effects - Atualizados */
   .glow-cig {
     box-shadow: var(--shadow-glow-blue);
   }
@@ -403,10 +424,10 @@
     box-shadow: var(--shadow-glow-orange);
   }
   .glow-cic {
-    box-shadow: var(--shadow-glow-purple);
+    box-shadow: var(--shadow-glow-cic);
   }
   .glow-cif {
-    box-shadow: var(--shadow-glow-red);
+    box-shadow: var(--shadow-glow-cif);
   }
 
   /* Animation Classes */
