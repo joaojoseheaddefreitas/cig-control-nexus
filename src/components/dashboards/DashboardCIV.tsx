@@ -25,16 +25,17 @@ import { CIVAnalytics } from '@/components/civ/CIVAnalytics';
 
 type TabType = 'dashboard' | 'leads' | 'lojas' | 'carteira_producao' | 'pipeline' | 'simulacao' | 'clientes' | 'produtos' | 'mercado' | 'projetos' | 'ia' | 'analytics';
 
-// Menu items com tipos de operação - Carteira unida com Produção
+// Menu items - CIV é a CARTEIRA ÚNICA de pedidos
+// REGRA: CIV recebe pedidos → CIP programa → Setores produzem → CIG consolida
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
   { id: 'leads', label: 'Leads & Oportunidades', icon: UserCheck, tipo: 'visualizacao' },
   { id: 'lojas', label: 'Lojas, Canais e Vendedores', icon: Store, tipo: 'visualizacao' },
-  { id: 'carteira_producao', label: 'Carteira + Produção', icon: FileText, tipo: 'entrada_saida', badge: 'PEDIDOS + OPs' },
+  { id: 'carteira_producao', label: 'Carteira de Pedidos', icon: FileText, tipo: 'entrada_saida', badge: 'PEDIDOS → CIP' },
   { id: 'pipeline', label: 'Pipeline Comercial', icon: Target, tipo: 'visualizacao' },
   { id: 'simulacao', label: 'Simulação de Prazo', icon: Calculator, tipo: 'visualizacao' },
   { id: 'clientes', label: 'Clientes & Relacionamento', icon: Users, tipo: 'visualizacao' },
-  { id: 'produtos', label: 'Produtos & Mix', icon: Package, tipo: 'cadastro', badge: 'CADASTRO' },
+  { id: 'produtos', label: 'Produtos & Mix', icon: Package, tipo: 'visualizacao' },
   { id: 'mercado', label: 'Pesquisa de Mercado', icon: TrendingUp, tipo: 'visualizacao' },
   { id: 'projetos', label: 'Projetos Especiais', icon: Briefcase, tipo: 'visualizacao' },
   { id: 'ia', label: 'Inteligência IA', icon: Brain, tipo: 'visualizacao' },
@@ -73,9 +74,7 @@ export function DashboardCIV() {
   const getTipoBadge = (tipo: string) => {
     switch (tipo) {
       case 'entrada_saida':
-        return <span className="ml-auto text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">PEDIDOS</span>;
-      case 'cadastro':
-        return <span className="ml-auto text-[10px] bg-blue-500/20 text-blue-400 px-1.5 py-0.5 rounded">CADASTRO</span>;
+        return <span className="ml-auto text-[10px] bg-civ/20 text-civ px-1.5 py-0.5 rounded">CARTEIRA</span>;
       default:
         return null;
     }
@@ -87,7 +86,10 @@ export function DashboardCIV() {
         {!isCollapsed ? (
           <>
             <h3 className="text-civ font-display text-lg font-bold">CIV CONTROL</h3>
-            <p className="text-xs text-muted-foreground">Central de Inteligência de Vendas</p>
+            <p className="text-xs text-muted-foreground">Carteira Única de Pedidos</p>
+            <div className="mt-2 p-2 rounded bg-civ/10 border border-civ/30">
+              <p className="text-[10px] text-civ">✓ Pedidos aprovados → Enviados ao CIP</p>
+            </div>
           </>
         ) : (
           <div className="w-8 h-8 rounded-lg bg-civ/20 flex items-center justify-center mx-auto">
@@ -126,16 +128,16 @@ export function DashboardCIV() {
         <div className="mt-6 pt-4 border-t border-border/30 space-y-2">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Fluxo CIV</p>
           <div className="flex items-center gap-2 text-xs">
-            <ArrowUpCircle className="h-3 w-3 text-green-400" />
-            <span className="text-muted-foreground">Pedido = Via Carteira</span>
+            <ArrowUpCircle className="h-3 w-3 text-civ" />
+            <span className="text-muted-foreground">Pedido → Entra na Carteira</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <ArrowDownCircle className="h-3 w-3 text-orange-400" />
-            <span className="text-muted-foreground">Baixa = Via NF + Expedição</span>
+            <ArrowDownCircle className="h-3 w-3 text-cip" />
+            <span className="text-muted-foreground">Aprovado → Enviado ao CIP</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <Package className="h-3 w-3 text-blue-400" />
-            <span className="text-muted-foreground">Produto = Cadastro Vendas</span>
+            <Receipt className="h-3 w-3 text-cif" />
+            <span className="text-muted-foreground">Baixa → Via NF + Expedição</span>
           </div>
         </div>
       )}
@@ -214,43 +216,28 @@ export function DashboardCIV() {
                 {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
               </h2>
               {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada_saida' && (
-                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-medium">
-                  CARTEIRA DE PEDIDOS
-                </span>
-              )}
-              {menuItems.find(m => m.id === activeTab)?.tipo === 'cadastro' && (
-                <span className="text-xs bg-blue-500/20 text-blue-400 px-2 py-1 rounded-full font-medium">
-                  CADASTRO VENDAS
+                <span className="text-xs bg-civ/20 text-civ px-2 py-1 rounded-full font-medium">
+                  CARTEIRA ÚNICA DE PEDIDOS
                 </span>
               )}
             </div>
             <p className="text-muted-foreground mt-1">
-              CIV CONTROL – Central de Inteligência de Vendas
+              CIV – Pedidos aprovados são enviados ao CIP para programação
             </p>
           </div>
         )}
         
         {/* Aviso sobre fluxo */}
-        {(activeTab === 'carteira_producao' || activeTab === 'produtos') && (
+        {activeTab === 'carteira_producao' && (
           <div className="mb-4 p-3 rounded-lg bg-civ/10 border border-civ/30">
             <div className="flex items-start gap-3">
               <Receipt className="h-5 w-5 text-civ flex-shrink-0 mt-0.5" />
               <div className="text-sm">
-                {activeTab === 'carteira_producao' ? (
-                  <>
-                    <strong className="text-civ">Carteira + Produção (CIV)</strong>
-                    <p className="text-muted-foreground mt-1">
-                      Gestão unificada de pedidos e OPs. Entrada via cadastro de pedidos. Baixa/saída ocorre pela <strong>Nota Fiscal</strong> gerada pelo Financeiro e entregue pela <strong>Expedição</strong>.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <strong className="text-civ">Cadastro de Produtos (CIV)</strong>
-                    <p className="text-muted-foreground mt-1">
-                      Produtos novos são cadastrados aqui. Produtos descontinuados são <strong>retirados da Carteira</strong> (não comercializados mais).
-                    </p>
-                  </>
-                )}
+                <strong className="text-civ">Carteira Única de Pedidos (CIV)</strong>
+                <p className="text-muted-foreground mt-1">
+                  Pedidos entram aqui (manuais ou automáticos). Apenas pedidos com <strong>produto cadastrado</strong> e <strong>aprovação para produção</strong> são enviados ao CIP.
+                  Baixa/saída ocorre via <strong>NF</strong> (Financeiro) + <strong>Expedição</strong>.
+                </p>
               </div>
             </div>
           </div>

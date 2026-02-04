@@ -10,9 +10,8 @@ import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/s
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
-// Import all CIP tabs
+// Import all CIP tabs - SEM CARTEIRA (Carteira está no CIV)
 import { CIPDashboardNew } from '@/components/cip/CIPDashboardNew';
-import { CIPCarteira } from '@/components/cip/CIPCarteira';
 import { CIPProgramacaoDiaria } from '@/components/cip/CIPProgramacaoDiaria';
 import { CIPSetores } from '@/components/cip/CIPSetores';
 import { CIPProducao } from '@/components/cip/CIPProducao';
@@ -22,17 +21,17 @@ import { CIPIA } from '@/components/cip/CIPIA';
 import { CIPAnalytics } from '@/components/cip/CIPAnalytics';
 import { CIPGlobalActions } from '@/components/cip/CIPGlobalActions';
 
-type TabType = 'dashboard' | 'carteira' | 'programacao' | 'producao' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
+type TabType = 'dashboard' | 'programacao' | 'producao' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
 
-// Menu items - CIP focado em Produtos, OPs e Programação (Pedidos movidos para CIV)
+// Menu items - CIP focado em Programação, OPs e Produtos
+// IMPORTANTE: CIP NÃO TEM CARTEIRA DE VENDAS - Carteira está no CIV
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
-  { id: 'carteira', label: 'Carteira (Visualização)', icon: Package, tipo: 'visualizacao' },
-  { id: 'programacao', label: 'Programação / Entrada', icon: Calendar, tipo: 'entrada', badge: '+ Entrada' },
-  { id: 'producao', label: 'Programação / Baixas', icon: Factory, tipo: 'baixa', badge: '- Baixa' },
-  { id: 'setores', label: 'Setores', icon: Layers, tipo: 'configuracao' },
-  { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package, tipo: 'configuracao', badge: 'PRODUTOS' },
-  { id: 'rastreamento', label: 'Rastreamento', icon: MapPin, tipo: 'visualizacao' },
+  { id: 'programacao', label: 'Programação / Entrada', icon: Calendar, tipo: 'entrada', badge: '+ OP' },
+  { id: 'producao', label: 'Baixas por Setor', icon: Factory, tipo: 'baixa', badge: '- Baixa' },
+  { id: 'setores', label: 'Setores Produtivos', icon: Layers, tipo: 'configuracao' },
+  { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package, tipo: 'configuracao', badge: 'RTC' },
+  { id: 'rastreamento', label: 'Rastreamento OPs', icon: MapPin, tipo: 'visualizacao' },
   { id: 'ia', label: 'Inteligência IA', icon: Brain, tipo: 'visualizacao' },
   { id: 'analytics', label: 'Analytics', icon: LineChart, tipo: 'visualizacao' },
 ];
@@ -46,7 +45,6 @@ export function DashboardCIP() {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <CIPDashboardNew />;
-      case 'carteira': return <CIPCarteira />;
       case 'programacao': return <CIPProgramacaoDiaria />;
       case 'producao': return <CIPProducao />;
       case 'setores': return <CIPSetores />;
@@ -66,9 +64,9 @@ export function DashboardCIP() {
   const getTipoBadge = (tipo: string) => {
     switch (tipo) {
       case 'entrada':
-        return <span className="ml-auto text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">ENTRADA</span>;
+        return <span className="ml-auto text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded">ENTRADA</span>;
       case 'baixa':
-        return <span className="ml-auto text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">BAIXA</span>;
+        return <span className="ml-auto text-[10px] bg-cip/20 text-cip px-1.5 py-0.5 rounded">BAIXA</span>;
       default:
         return null;
     }
@@ -79,8 +77,11 @@ export function DashboardCIP() {
       <div className={cn("mb-6", isCollapsed && "text-center")}>
         {!isCollapsed ? (
           <>
-            <h3 className="text-cip font-display text-lg font-bold">CIP CONTROL 360</h3>
-            <p className="text-xs text-muted-foreground">Central de Inteligência da Produção</p>
+            <h3 className="text-cip font-display text-lg font-bold">CIP CONTROL</h3>
+            <p className="text-xs text-muted-foreground">Programação & Produtos</p>
+            <div className="mt-2 p-2 rounded bg-warning/10 border border-warning/30">
+              <p className="text-[10px] text-warning">⚠ Carteira de Vendas está no CIV</p>
+            </div>
           </>
         ) : (
           <div className="w-8 h-8 rounded-lg bg-cip/20 flex items-center justify-center mx-auto">
@@ -117,17 +118,17 @@ export function DashboardCIP() {
       {/* Legenda de cores */}
       {!isCollapsed && (
         <div className="mt-6 pt-4 border-t border-border/30 space-y-2">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Legenda</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Fluxo CIP</p>
           <div className="flex items-center gap-2 text-xs">
-            <ArrowUpCircle className="h-3 w-3 text-green-400" />
-            <span className="text-muted-foreground">Entrada = Libera OP</span>
+            <ArrowUpCircle className="h-3 w-3 text-success" />
+            <span className="text-muted-foreground">Entrada = Recebe OP do CIV</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <ArrowDownCircle className="h-3 w-3 text-orange-400" />
+            <ArrowDownCircle className="h-3 w-3 text-cip" />
             <span className="text-muted-foreground">Baixa = Registra produção</span>
           </div>
           <div className="flex items-center gap-2 text-xs">
-            <Truck className="h-3 w-3 text-blue-400" />
+            <Truck className="h-3 w-3 text-primary" />
             <span className="text-muted-foreground">Expedição = Encerra OP</span>
           </div>
         </div>
@@ -170,10 +171,10 @@ export function DashboardCIP() {
               {menuItems.find(m => m.id === activeTab)?.label}
             </span>
             {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada' && (
-              <span className="text-[10px] bg-green-500/20 text-green-400 px-1.5 py-0.5 rounded">ENTRADA</span>
+              <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded">ENTRADA</span>
             )}
             {menuItems.find(m => m.id === activeTab)?.tipo === 'baixa' && (
-              <span className="text-[10px] bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded">BAIXA</span>
+              <span className="text-[10px] bg-cip/20 text-cip px-1.5 py-0.5 rounded">BAIXA</span>
             )}
           </div>
         </div>
@@ -214,18 +215,18 @@ export function DashboardCIP() {
                 {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
               </h2>
               {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada' && (
-                <span className="text-xs bg-green-500/20 text-green-400 px-2 py-1 rounded-full font-medium">
-                  ↑ ABA DE ENTRADA
+                <span className="text-xs bg-success/20 text-success px-2 py-1 rounded-full font-medium">
+                  ↑ RECEBE OP DO CIV
                 </span>
               )}
               {menuItems.find(m => m.id === activeTab)?.tipo === 'baixa' && (
-                <span className="text-xs bg-orange-500/20 text-orange-400 px-2 py-1 rounded-full font-medium">
-                  ↓ ABA DE BAIXA
+                <span className="text-xs bg-cip/20 text-cip px-2 py-1 rounded-full font-medium">
+                  ↓ BAIXA POR SETOR
                 </span>
               )}
             </div>
             <p className="text-muted-foreground mt-1">
-              CIP CONTROL 360 – Central de Inteligência da Produção
+              CIP – Recebe volume aprovado do CIV e programa produção
             </p>
           </div>
         )}
