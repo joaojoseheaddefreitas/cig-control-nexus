@@ -11,6 +11,8 @@ import { cn } from '@/lib/utils';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 
 // Tipos
 interface Produto {
@@ -176,8 +178,8 @@ export function CIPCadastroProdutosCompleto() {
 
         {/* Tab Lista */}
         <TabsContent value="lista" className="space-y-4">
-          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[500px]">
+            <ScrollArea className="h-full max-h-[500px]">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/50 bg-secondary/30">
@@ -295,7 +297,7 @@ export function CIPCadastroProdutosCompleto() {
                   ))}
                 </tbody>
               </table>
-            </div>
+            </ScrollArea>
           </div>
         </TabsContent>
 
@@ -366,6 +368,15 @@ export function CIPCadastroProdutosCompleto() {
                   <span className="text-sm text-muted-foreground">RTC Calculado: </span>
                   <span className="font-bold text-cip">0.0h</span>
                 </div>
+              </div>
+
+              {/* Observações para produtos especiais */}
+              <div>
+                <h4 className="text-sm font-semibold text-muted-foreground mb-3">OBSERVAÇÕES (Produtos Especiais)</h4>
+                <Textarea 
+                  placeholder="Observações para cadastro de produtos especiais, personalizações, restrições, etc."
+                  className="min-h-[100px]"
+                />
               </div>
 
               {/* Ações */}

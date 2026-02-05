@@ -8,6 +8,9 @@ import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { Badge } from '@/components/ui/badge';
 import { UserCheck, Target, TrendingUp, Users } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
+import { Plus, Edit } from 'lucide-react';
 
 const statusColors: Record<string, string> = {
   novo: '#3b82f6',
@@ -132,10 +135,17 @@ export function CIVLeads() {
 
       {/* Tabela de Leads */}
       <ModuleCard title="Leads Ativos" variant="civ">
-        <div className="overflow-x-auto">
+        <div className="flex justify-end mb-4 gap-2">
+          <Button size="sm" className="bg-civ hover:bg-civ/90 gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Lead
+          </Button>
+        </div>
+        <div className="rounded-xl border border-border/30 max-h-[400px]">
+          <ScrollArea className="h-full max-h-[400px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50">
+              <tr className="border-b border-border/50 bg-secondary/30 sticky top-0">
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">ID</th>
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Origem</th>
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Canal</th>
@@ -143,6 +153,7 @@ export function CIVLeads() {
                 <th className="text-right py-3 px-4 text-muted-foreground font-medium">Valor Est.</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Responsável</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -159,10 +170,16 @@ export function CIVLeads() {
                     </Badge>
                   </td>
                   <td className="py-3 px-4 text-muted-foreground">{lead.responsavel}</td>
+                  <td className="py-3 px-4 text-center">
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </ScrollArea>
         </div>
       </ModuleCard>
     </div>

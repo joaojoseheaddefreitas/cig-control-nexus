@@ -348,41 +348,6 @@ export function DashboardCIGMelhorado() {
           </div>
         </ModuleCard>
       </div>
-
-      {/* Navegação Rápida para Módulos */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {modules.slice(1).map((module) => (
-          <div
-            key={module.id}
-            className={cn(
-              "p-4 rounded-xl border cursor-pointer transition-all hover:scale-[1.02]",
-              module.id === 'CIV' && "border-civ/30 hover:border-civ/60 bg-civ/5",
-              module.id === 'CIP' && "border-cip/30 hover:border-cip/60 bg-cip/5",
-              module.id === 'CIC' && "border-cic/30 hover:border-cic/60 bg-cic/5",
-              module.id === 'CIF' && "border-cif/30 hover:border-cif/60 bg-cif/5"
-            )}
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <div className={cn(
-                "w-10 h-10 rounded-lg flex items-center justify-center",
-                module.id === 'CIV' && "bg-civ/20",
-                module.id === 'CIP' && "bg-cip/20",
-                module.id === 'CIC' && "bg-cic/20",
-                module.id === 'CIF' && "bg-cif/20"
-              )}>
-                {module.id === 'CIV' && <TrendingUp className="h-5 w-5 text-civ" />}
-                {module.id === 'CIP' && <Factory className="h-5 w-5 text-cip" />}
-                {module.id === 'CIC' && <Package className="h-5 w-5 text-cic" />}
-                {module.id === 'CIF' && <Wallet className="h-5 w-5 text-cif" />}
-              </div>
-              <div>
-                <h3 className="font-bold text-foreground">{module.id}</h3>
-                <p className="text-xs text-muted-foreground">{module.descricao}</p>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }

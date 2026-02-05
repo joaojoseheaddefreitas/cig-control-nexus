@@ -7,6 +7,9 @@ import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { Badge } from '@/components/ui/badge';
 import { Store, Users, TrendingUp, DollarSign } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Button } from '@/components/ui/button';
+import { Plus, Edit } from 'lucide-react';
 
 const tipoColors: Record<string, string> = {
   propria: '#22c55e',
@@ -129,10 +132,17 @@ export function CIVLojas() {
 
       {/* Tabela de Lojas */}
       <ModuleCard title="Lojas, Canais e Vendedores" variant="civ">
-        <div className="overflow-x-auto">
+        <div className="flex justify-end mb-4 gap-2">
+          <Button size="sm" className="bg-civ hover:bg-civ/90 gap-2">
+            <Plus className="h-4 w-4" />
+            Nova Loja
+          </Button>
+        </div>
+        <div className="rounded-xl border border-border/30 max-h-[400px]">
+          <ScrollArea className="h-full max-h-[400px]">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50">
+              <tr className="border-b border-border/50 bg-secondary/30 sticky top-0">
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Loja/Canal</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Tipo</th>
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Região</th>
@@ -140,6 +150,7 @@ export function CIVLojas() {
                 <th className="text-right py-3 px-4 text-muted-foreground font-medium">Vendas/Mês</th>
                 <th className="text-right py-3 px-4 text-muted-foreground font-medium">Margem</th>
                 <th className="text-right py-3 px-4 text-muted-foreground font-medium">Ticket</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ações</th>
               </tr>
             </thead>
             <tbody>
@@ -156,10 +167,16 @@ export function CIVLojas() {
                   <td className="py-3 px-4 text-right text-foreground">R$ {loja.vendasMes.toLocaleString('pt-BR')}</td>
                   <td className="py-3 px-4 text-right text-civ font-semibold">{loja.margemMedia}%</td>
                   <td className="py-3 px-4 text-right text-muted-foreground">R$ {loja.ticketMedio.toLocaleString('pt-BR')}</td>
+                  <td className="py-3 px-4 text-center">
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                      <Edit className="h-4 w-4" />
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </ScrollArea>
         </div>
       </ModuleCard>
     </div>
