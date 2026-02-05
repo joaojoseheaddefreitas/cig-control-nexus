@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { GlobalSidebar } from '@/components/layout/GlobalSidebar';
+import { TopModuleTabs } from '@/components/layout/TopModuleTabs';
 import { DashboardCIGMelhorado } from '@/components/dashboards/DashboardCIGMelhorado';
 import { DashboardCIV } from '@/components/dashboards/DashboardCIV';
 import { DashboardCIP } from '@/components/dashboards/DashboardCIP';
@@ -32,13 +32,13 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Sidebar Global */}
-      <GlobalSidebar activeModule={activeModule} onModuleChange={setActiveModule} />
+      {/* Abas de Módulos no Topo */}
+      <TopModuleTabs activeModule={activeModule} onModuleChange={setActiveModule} />
 
       {/* Main Content */}
       <main className={cn(
         "min-h-screen transition-all duration-300",
-        isMobile ? "pt-16" : "ml-64"
+        "pt-14"
       )}>
         <div className="animate-fade-in">
           {renderDashboard()}

@@ -11,6 +11,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Textarea } from '@/components/ui/textarea';
 
 // Tipos
 interface Pedido {
@@ -171,8 +173,9 @@ export function CIVCarteiraProducao() {
           </div>
 
           {/* Tabela de Pedidos */}
-          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-            <div className="overflow-x-auto">
+          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[500px]">
+            <ScrollArea className="h-full">
+              <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border/50 bg-secondary/30">
@@ -187,7 +190,7 @@ export function CIVCarteiraProducao() {
                     <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ações</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="max-h-[400px]">
                   {filteredPedidos.map((pedido) => {
                     const StatusIcon = statusConfig[pedido.status].icon;
                     return (
@@ -232,7 +235,8 @@ export function CIVCarteiraProducao() {
                   })}
                 </tbody>
               </table>
-            </div>
+              </div>
+            </ScrollArea>
           </div>
         </TabsContent>
 
