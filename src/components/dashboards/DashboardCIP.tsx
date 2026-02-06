@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import {
   BarChart2, Calendar, Layers, Factory, Package, ClipboardList, 
   Brain, LineChart, MapPin, Menu, X, ChevronLeft, ChevronRight,
-  ArrowDownCircle, ArrowUpCircle, Truck
+  ArrowDownCircle, ArrowUpCircle, Truck, Home
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -35,7 +35,11 @@ const menuItems = [
   { id: 'analytics', label: 'Analytics', icon: LineChart, tipo: 'visualizacao' },
 ];
 
-export function DashboardCIP() {
+interface DashboardCIPProps {
+  onGoHome?: () => void;
+}
+
+export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -132,6 +136,20 @@ export function DashboardCIP() {
           </div>
         </div>
       )}
+
+      {/* HOME */}
+      <div className={cn("mt-4 pt-4 border-t border-border/30", isCollapsed && "pt-2 mt-2")}>
+        <button
+          onClick={() => { onGoHome?.(); }}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all font-medium',
+            isCollapsed && 'justify-center px-2'
+          )}
+        >
+          <Home className="h-4 w-4 flex-shrink-0" />
+          {!isCollapsed && <span>HOME</span>}
+        </button>
+      </div>
     </>
   );
 

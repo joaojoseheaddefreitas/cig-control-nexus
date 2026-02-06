@@ -254,6 +254,16 @@ export function CIVCarteiraProducao() {
             </div>
           </div>
 
+      {/* Alerta de Prazo */}
+          <div className="p-3 rounded-lg bg-warning/10 border border-warning/30">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+              <p className="text-sm text-warning font-medium">
+                Consultar Simulação de Prazo antes de confirmar a venda.
+              </p>
+            </div>
+          </div>
+
           <ModuleCard title="Novo Pedido" variant="civ">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>

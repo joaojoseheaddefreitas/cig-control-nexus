@@ -72,7 +72,11 @@ const verificarProblemaCritico = () => {
   return null;
 };
 
-export function DashboardCIGMelhorado() {
+interface DashboardCIGMelhoradoProps {
+  onGoHome?: () => void;
+}
+
+export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) {
   const gargaloPrincipal = identificarGargaloPrincipal();
   const tendenciaFinanceira = calcularTendenciaFinanceira();
   const problemaCritico = verificarProblemaCritico();
