@@ -9,7 +9,7 @@ import { ModuleCard } from '@/components/ui/ModuleCard';
 import {
   Wallet, TrendingUp, DollarSign, PiggyBank, CreditCard, BarChart2,
   PieChart as PieChartIcon, Brain, ArrowUpRight, ArrowDownRight,
-  Menu, X, ChevronLeft, ChevronRight
+  Menu, X, ChevronLeft, ChevronRight, Home
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -64,7 +64,11 @@ const projecoes = [
   { mes: 'Dez', projetado: 280000, otimista: 320000, pessimista: 240000 },
 ];
 
-export function DashboardCIF() {
+interface DashboardCIFProps {
+  onGoHome?: () => void;
+}
+
+export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
@@ -109,6 +113,20 @@ export function DashboardCIF() {
           </button>
         ))}
       </nav>
+
+      {/* HOME */}
+      <div className={cn("mt-4 pt-4 border-t border-border/30", isCollapsed && "pt-2 mt-2")}>
+        <button
+          onClick={() => { onGoHome?.(); }}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all font-medium',
+            isCollapsed && 'justify-center px-2'
+          )}
+        >
+          <Home className="h-4 w-4 flex-shrink-0" />
+          {!isCollapsed && <span>HOME</span>}
+        </button>
+      </div>
     </>
   );
 
