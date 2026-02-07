@@ -55,10 +55,13 @@ const subPages: Record<ModuleType, { id: string; label: string }[]> = {
     { id: 'analytics', label: 'Analytics' },
   ],
   CIF: [
-    { id: 'dashboard', label: 'Dashboard' },
-    { id: 'contas', label: 'Contas a Pagar/Receber' },
+    { id: 'dashboard', label: 'Dashboard Executivo' },
     { id: 'fluxo', label: 'Fluxo de Caixa' },
-    { id: 'dre', label: 'DRE' },
+    { id: 'custos', label: 'Custos & Orçamento' },
+    { id: 'equilibrio', label: 'Ponto de Equilíbrio' },
+    { id: 'rentabilidade', label: 'Rentabilidade & Pricing' },
+    { id: 'auditoria', label: 'Auditoria & Compliance' },
+    { id: 'analytics', label: 'Analytics' },
   ],
 };
 
@@ -89,19 +92,19 @@ export function TopModuleTabs({ activeModule, onModuleChange, onSubPageChange }:
   return (
     <>
       {/* Barra de Abas no Topo - Fixa */}
-      <header className="fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur border-b border-border/50 h-12">
+      <header className="fixed top-0 left-0 right-0 z-50 bg-card/95 backdrop-blur border-b border-border/50 h-13">
         <div className="h-full flex items-center justify-between px-2 sm:px-4">
           {/* HOME */}
           <button
             onClick={handleGoHome}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-lg hover:bg-secondary/50 transition-colors text-primary"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-lg hover:bg-secondary/50 transition-colors text-primary"
           >
             <Home className="h-4 w-4" />
-            <span className="text-xs font-bold">HOME</span>
+            <span className="text-xs font-bold tracking-wide">HOME</span>
           </button>
 
-          {/* Abas dos Módulos com ÍCONE + TEXTO */}
-          <nav className="flex items-center gap-0.5 sm:gap-1">
+          {/* Abas dos Módulos com ÍCONE + TEXTO — Visual com relevo sutil 3D */}
+          <nav className="flex items-center gap-1 sm:gap-1.5">
             {modules.map((module) => {
               const isActive = activeModule === module.id;
               return (
@@ -109,18 +112,22 @@ export function TopModuleTabs({ activeModule, onModuleChange, onSubPageChange }:
                   key={module.id}
                   onClick={() => handleModuleClick(module.id)}
                   className={cn(
-                    'flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-md text-xs font-medium transition-all',
+                    'flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-md text-xs transition-all duration-200',
+                    'border',
                     isActive 
-                      ? 'text-foreground font-bold' 
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
+                      ? 'font-bold shadow-md border-b-2' 
+                      : 'font-semibold text-muted-foreground hover:text-foreground border-transparent hover:border-border/50 hover:bg-secondary/40 hover:shadow-sm'
                   )}
                   style={isActive ? { 
-                    backgroundColor: `hsl(var(--${module.color}) / 0.15)`,
+                    backgroundColor: `hsl(var(--${module.color}) / 0.12)`,
                     color: `hsl(var(--${module.color}))`,
+                    borderColor: `hsl(var(--${module.color}) / 0.3)`,
+                    borderBottomColor: `hsl(var(--${module.color}))`,
+                    boxShadow: `0 2px 6px hsl(var(--${module.color}) / 0.15), inset 0 1px 0 hsl(var(--${module.color}) / 0.1)`,
                   } : undefined}
                 >
                   <module.icon className="h-3.5 w-3.5" />
-                  <span>{module.label}</span>
+                  <span className="tracking-wide">{module.label}</span>
                 </button>
               );
             })}

@@ -3,22 +3,23 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Legend,
 } from 'recharts';
-import { executiveKPIs, chartData } from '@/data/cigData';
+import { executiveKPIs } from '@/data/cigData';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
-  Package, Truck, AlertTriangle, ShoppingCart, BarChart2,
+  Package, AlertTriangle, ShoppingCart, BarChart2,
   Warehouse, Users, Brain, Activity, Home, Zap,
-  ArrowUpCircle, ArrowDownCircle, ClipboardList, DollarSign,
-  Search, Filter, Plus, Edit, Eye, Clock, TrendingUp,
-  CheckCircle2, FileText
+  ArrowUpCircle, ClipboardList, DollarSign,
+  Search, Filter, Plus, Edit, Clock, TrendingUp,
+  CheckCircle2, FileText, ChevronLeft, ChevronRight, Menu, X
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 
 // Cores da paleta obrigatória
 const CHART_COLORS = {
@@ -117,17 +118,33 @@ const ccc = pme - pmp;
 const totalSavings = 45000;
 const otifMedio = Math.round(fornecedoresTop.reduce((a, f) => a + f.otif, 0) / fornecedoresTop.length);
 
+type CICTab = 'dashboard' | 'consumo' | 'estoques' | 'compras' | 'fornecedores' | 'mrp' | 'requisicao' | 'ia' | 'analytics';
+
+const menuItems: { id: CICTab; label: string; icon: typeof BarChart2 }[] = [
+  { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
+  { id: 'consumo', label: 'Consumo de Materiais', icon: Activity },
+  { id: 'estoques', label: 'Estoques – Entrada', icon: Warehouse },
+  { id: 'compras', label: 'Compras', icon: ShoppingCart },
+  { id: 'fornecedores', label: 'Fornecedores', icon: Users },
+  { id: 'mrp', label: 'Necessidades (MRP)', icon: ClipboardList },
+  { id: 'requisicao', label: 'Requisição', icon: FileText },
+  { id: 'ia', label: 'Inteligência IA', icon: Brain },
+  { id: 'analytics', label: 'Analytics', icon: BarChart2 },
+];
+
 interface DashboardCICProps {
   activeSubPage?: string;
   onGoHome?: () => void;
 }
 
 export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: DashboardCICProps) {
-  const [activeTab, setActiveTab] = useState(activeSubPage);
+  const [activeTab, setActiveTab] = useState<CICTab>(activeSubPage as CICTab);
   const [searchMat, setSearchMat] = useState('');
   const [searchForn, setSearchForn] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const isMobile = useIsMobile();
 
-  // Verificar problemas críticos para IA
   const materiaisCriticos = materiais.filter(m => m.estoque < m.minimo);
   const hasCriticalIssue = materiaisCriticos.length > 3 || ccc > 5;
 
@@ -135,6 +152,11 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
     m.nome.toLowerCase().includes(searchMat.toLowerCase()) ||
     m.codigo.toLowerCase().includes(searchMat.toLowerCase())
   );
+
+  const handleTabChange = (tabId: CICTab) => {
+    setActiveTab(tabId);
+    setSidebarOpen(false);
+  };
 
   const renderContent = () => {
     switch (activeTab) {
@@ -154,7 +176,6 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   // === DASHBOARD ===
   const renderDashboard = () => (
     <div className="space-y-6">
-      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <KPICard title="Total Compras" value={`R$ ${(comprasPorPeriodo[5].valor / 1000).toFixed(0)}k`} subtitle="Este mês" icon={<ShoppingCart className="h-5 w-5" />} variant="cic" trend="up" trendValue="+12%" />
         <KPICard title="Valor Estoque" value={`R$ ${(executiveKPIs.cic.estoqueTotal / 1000).toFixed(0)}k`} subtitle="Total valorizado" icon={<Warehouse className="h-5 w-5" />} variant="cic" />
@@ -183,7 +204,6 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
         </div>
       </div>
 
-      {/* Gráficos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ModuleCard title="Evolução CCC (PME x PMP)" variant="cic">
           <div className="h-64">
@@ -708,46 +728,124 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
     </div>
   );
 
-  return (
-    <div className="p-4 md:p-6 space-y-6 animate-fade-in">
-      {/* Header + HOME */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-cic/20 flex items-center justify-center">
-              <Warehouse className="h-5 w-5 text-cic" />
-            </div>
-            CIC CONTROL
-          </h2>
-          <p className="text-muted-foreground mt-1 ml-13">Central de Inteligência de Compras, Materiais e Estoque</p>
-        </div>
-        {onGoHome && (
-          <Button variant="outline" size="sm" onClick={onGoHome} className="gap-2">
-            <Home className="h-4 w-4" />
-            HOME
-          </Button>
+  // === SIDEBAR CONTENT ===
+  const SidebarContent = ({ isCollapsed = false }: { isCollapsed?: boolean }) => (
+    <>
+      <div className={cn("mb-6", isCollapsed && "text-center")}>
+        {!isCollapsed ? (
+          <>
+            <h3 className="text-cic font-display text-lg font-bold">CIC CONTROL</h3>
+            <p className="text-xs text-muted-foreground">Inteligência de Compras</p>
+          </>
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-cic/20 flex items-center justify-center mx-auto">
+            <Package className="h-4 w-4 text-cic" />
+          </div>
         )}
       </div>
 
-      {/* Tabs de navegação interna */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <ScrollArea className="w-full">
-          <TabsList className="inline-flex w-auto">
-            <TabsTrigger value="dashboard" className="gap-1 text-xs"><BarChart2 className="h-3 w-3" />Dashboard</TabsTrigger>
-            <TabsTrigger value="consumo" className="gap-1 text-xs"><Activity className="h-3 w-3" />Consumo</TabsTrigger>
-            <TabsTrigger value="estoques" className="gap-1 text-xs"><Warehouse className="h-3 w-3" />Estoques</TabsTrigger>
-            <TabsTrigger value="compras" className="gap-1 text-xs"><ShoppingCart className="h-3 w-3" />Compras</TabsTrigger>
-            <TabsTrigger value="fornecedores" className="gap-1 text-xs"><Users className="h-3 w-3" />Fornecedores</TabsTrigger>
-            <TabsTrigger value="mrp" className="gap-1 text-xs"><ClipboardList className="h-3 w-3" />MRP</TabsTrigger>
-            <TabsTrigger value="requisicao" className="gap-1 text-xs"><FileText className="h-3 w-3" />Requisição</TabsTrigger>
-            <TabsTrigger value="ia" className="gap-1 text-xs"><Brain className="h-3 w-3" />IA</TabsTrigger>
-            <TabsTrigger value="analytics" className="gap-1 text-xs"><BarChart2 className="h-3 w-3" />Analytics</TabsTrigger>
-          </TabsList>
-        </ScrollArea>
-        <TabsContent value={activeTab}>
-          {renderContent()}
-        </TabsContent>
-      </Tabs>
+      {/* HOME */}
+      <div className={cn("mb-2 pb-2 border-b border-border/30", isCollapsed && "pb-1 mb-1")}>
+        <button
+          onClick={() => { onGoHome?.(); }}
+          className={cn(
+            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all font-medium',
+            isCollapsed && 'justify-center px-2'
+          )}
+        >
+          <Home className="h-4 w-4 flex-shrink-0" />
+          {!isCollapsed && <span>HOME</span>}
+        </button>
+      </div>
+
+      <nav className="space-y-1">
+        {menuItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => handleTabChange(item.id)}
+            title={isCollapsed ? item.label : undefined}
+            className={cn(
+              'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all',
+              activeTab === item.id
+                ? 'bg-cic/20 text-cic font-medium'
+                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+              isCollapsed && 'justify-center px-2'
+            )}
+          >
+            <item.icon className="h-4 w-4 flex-shrink-0" />
+            {!isCollapsed && <span className="truncate">{item.label}</span>}
+          </button>
+        ))}
+      </nav>
+    </>
+  );
+
+  return (
+    <div className="flex animate-fade-in min-h-screen">
+      {/* Mobile Header */}
+      {isMobile && (
+        <div className="fixed top-12 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
+          <div className="flex items-center justify-between">
+            <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+              <SheetTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-10 w-10">
+                  <Menu className="h-6 w-6" />
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="left" className="w-72 p-4 overflow-y-auto">
+                <SheetClose className="absolute right-4 top-4">
+                  <X className="h-5 w-5" />
+                </SheetClose>
+                <SidebarContent />
+              </SheetContent>
+            </Sheet>
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-cic animate-pulse" />
+              <span className="text-sm font-semibold text-cic">CIC CONTROL</span>
+            </div>
+            <div className="w-10" />
+          </div>
+        </div>
+      )}
+
+      {/* Desktop Sidebar */}
+      {!isMobile && (
+        <aside className={cn(
+          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative',
+          sidebarCollapsed ? 'w-16' : 'w-56'
+        )}>
+          <button
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-3 top-6 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-secondary transition-colors z-10"
+          >
+            {sidebarCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+          </button>
+          <SidebarContent isCollapsed={sidebarCollapsed} />
+        </aside>
+      )}
+
+      {/* Content */}
+      <main className={cn(
+        'flex-1 space-y-6 overflow-x-hidden',
+        isMobile ? 'pt-28 px-3 pb-4' : 'p-4 lg:p-6'
+      )}>
+        {/* Header */}
+        {!isMobile && (
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-cic/20 flex items-center justify-center">
+                  <Warehouse className="h-5 w-5 text-cic" />
+                </div>
+                {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
+              </h2>
+              <p className="text-muted-foreground mt-1 ml-13">CIC CONTROL – Central de Inteligência de Compras</p>
+            </div>
+          </div>
+        )}
+
+        {renderContent()}
+      </main>
     </div>
   );
 }
