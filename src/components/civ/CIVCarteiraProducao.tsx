@@ -13,6 +13,9 @@ import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+} from '@/components/ui/dialog';
 
 // Tipos
 interface Pedido {
@@ -79,6 +82,7 @@ export function CIVCarteiraProducao() {
   const [pedidos] = useState<Pedido[]>(pedidosMock);
   const [ops] = useState<OP[]>(opsMock);
   const [activeTab, setActiveTab] = useState('carteira');
+  const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
 
   const filteredPedidos = pedidos.filter(p => 
     p.codigo.toLowerCase().includes(search.toLowerCase()) ||
@@ -225,7 +229,7 @@ export function CIVCarteiraProducao() {
                             <Button variant="ghost" size="icon" className="h-8 w-8">
                               <Eye className="h-4 w-4" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedPedido(pedido)}>
                               <Edit className="h-4 w-4" />
                             </Button>
                           </div>
@@ -406,6 +410,71 @@ export function CIVCarteiraProducao() {
           </ModuleCard>
         </TabsContent>
       </Tabs>
+
+      {/* Modal Detalhe do Pedido */}
+      <Dialog open={!!selectedPedido} onOpenChange={(open) => !open && setSelectedPedido(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-civ" />
+              Detalhe do Pedido — {selectedPedido?.codigo}
+            </DialogTitle>
+            <DialogDescription>Informações do pedido selecionado</DialogDescription>
+          </DialogHeader>
+          {selectedPedido && (
+            <div className="grid grid-cols-2 gap-4 pt-2 text-sm">
+              <div>
+                <span className="text-muted-foreground block text-xs">Código</span>
+                <span className="font-mono font-semibold">{selectedPedido.codigo}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-xs">Cliente</span>
+                <span className="font-medium">{selectedPedido.cliente}</span>
+              </div>
+              <div className="col-span-2">
+                <span className="text-muted-foreground block text-xs">Produto / Descrição</span>
+                <span>{selectedPedido.produto}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-xs">Quantidade</span>
+                <span className="font-semibold">{selectedPedido.quantidade}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-xs">Status</span>
+                <Badge className={cn('text-xs', statusConfig[selectedPedido.status].color)}>
+                  {statusConfig[selectedPedido.status].label}
+                </Badge>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-xs">Data do Pedido</span>
+                <span>{new Date(selectedPedido.dataEntrada).toLocaleDateString('pt-BR')}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-xs">Data de Entrega</span>
+                <span>{new Date(selectedPedido.prazoEntrega).toLocaleDateString('pt-BR')}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-xs">Valor Total</span>
+                <span className="font-semibold">R$ {selectedPedido.valorTotal.toLocaleString('pt-BR')}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-xs">Canal</span>
+                <span>{selectedPedido.canal}</span>
+              </div>
+              {selectedPedido.op && (
+                <div>
+                  <span className="text-muted-foreground block text-xs">OP Vinculada</span>
+                  <span className="font-mono text-xs bg-cip/20 text-cip px-2 py-1 rounded">{selectedPedido.op}</span>
+                </div>
+              )}
+              <div>
+                <span className="text-muted-foreground block text-xs">Margem</span>
+                <span className="font-semibold">{selectedPedido.margem}%</span>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
