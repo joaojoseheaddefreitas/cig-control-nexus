@@ -1,21 +1,17 @@
 import { useState } from 'react';
 import { 
-  Search, Filter, Plus, Edit, Trash2, Eye, Package, FileText, 
-  ArrowUpCircle, ArrowDownCircle, Truck, QrCode, BarChart3,
-  CheckCircle2, Clock, AlertTriangle, Calendar
+  Search, Filter, Plus, Edit, Eye, Package, FileText, 
+  Truck, QrCode, BarChart3,
+  CheckCircle2, Clock, AlertTriangle, Calendar, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { cn } from '@/lib/utils';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
-} from '@/components/ui/dialog';
+import { CIVCadastroPedidoStepper, type PedidoStepper } from './CIVCadastroPedidoStepper';
 
 // Tipos
 interface Pedido {
@@ -79,10 +75,11 @@ const opStatusConfig = {
 
 export function CIVCarteiraProducao() {
   const [search, setSearch] = useState('');
-  const [pedidos] = useState<Pedido[]>(pedidosMock);
+  const [pedidos, setPedidos] = useState<Pedido[]>(pedidosMock);
   const [ops] = useState<OP[]>(opsMock);
-  const [activeTab, setActiveTab] = useState('carteira');
-  const [selectedPedido, setSelectedPedido] = useState<Pedido | null>(null);
+  const [stepperOpen, setStepperOpen] = useState(false);
+  const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
+  const [showBaixaOPs, setShowBaixaOPs] = useState(false);
 
   const filteredPedidos = pedidos.filter(p => 
     p.codigo.toLowerCase().includes(search.toLowerCase()) ||
@@ -95,6 +92,44 @@ export function CIVCarteiraProducao() {
   const valorTotal = pedidos.reduce((acc, p) => acc + p.valorTotal, 0);
   const emProducao = pedidos.filter(p => p.status === 'em_producao').length;
   const aguardando = pedidos.filter(p => p.status === 'aguardando').length;
+
+  // Handlers do stepper
+  const handleNewPedido = () => {
+    setEditingPedido(null);
+    setStepperOpen(true);
+  };
+
+  const handleEditPedido = (pedido: Pedido) => {
+    setEditingPedido(pedido);
+    setStepperOpen(true);
+  };
+
+  const handleSavePedido = (data: Partial<PedidoStepper>) => {
+    if (editingPedido) {
+      // Atualizar pedido existente
+      setPedidos(prev => prev.map(p => 
+        p.id === editingPedido.id 
+          ? { ...p, ...data } as Pedido
+          : p
+      ));
+    } else {
+      // Criar novo pedido
+      const newPedido: Pedido = {
+        id: String(pedidos.length + 1),
+        codigo: `PED-${2007 + pedidos.length}`,
+        cliente: data.cliente || '',
+        produto: data.produto || '',
+        quantidade: data.quantidade || 1,
+        canal: data.canal || '',
+        margem: data.margem || 0,
+        valorTotal: data.valorTotal || 0,
+        prazoEntrega: data.prazoEntrega || '',
+        dataEntrada: data.dataEntrada || new Date().toISOString().split('T')[0],
+        status: 'aguardando',
+      };
+      setPedidos(prev => [...prev, newPedido]);
+    }
+  };
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -134,193 +169,120 @@ export function CIVCarteiraProducao() {
         />
       </div>
 
-      {/* Tabs principais */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid grid-cols-3 w-full max-w-lg">
-          <TabsTrigger value="carteira" className="gap-2">
-            <FileText className="h-4 w-4" />
-            <span className="hidden sm:inline">Carteira</span>
-          </TabsTrigger>
-          <TabsTrigger value="entrada" className="gap-2">
-            <ArrowUpCircle className="h-4 w-4 text-green-400" />
-            <span className="hidden sm:inline">Entrada</span>
-          </TabsTrigger>
-          <TabsTrigger value="baixa" className="gap-2">
-            <ArrowDownCircle className="h-4 w-4 text-orange-400" />
-            <span className="hidden sm:inline">Baixa</span>
-          </TabsTrigger>
-        </TabsList>
+      {/* Header: busca + ações */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar pedido, cliente ou produto..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10"
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm">
+            <Filter className="h-4 w-4 mr-2" />
+            Filtros
+          </Button>
+          <Button size="sm" className="bg-civ hover:bg-civ/90" onClick={handleNewPedido}>
+            <Plus className="h-4 w-4 mr-2" />
+            Novo Pedido
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowBaixaOPs(!showBaixaOPs)}
+            className="gap-2"
+          >
+            {showBaixaOPs ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            <span className="hidden sm:inline">Baixas & OPs</span>
+          </Button>
+        </div>
+      </div>
 
-        {/* Tab Carteira */}
-        <TabsContent value="carteira" className="space-y-4">
-          {/* Header */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-between">
-            <div className="relative flex-1 max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar pedido, cliente ou produto..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                Filtros
-              </Button>
-              <Button size="sm" className="bg-civ hover:bg-civ/90">
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Pedido
-              </Button>
-            </div>
+      {/* Alerta de prazo */}
+      <div className="p-3 rounded-lg bg-warning/10 border border-warning/30">
+        <div className="flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-warning font-medium">
+            Consultar Simulação de Prazo antes de confirmar a venda. O prazo é calculado automaticamente no cadastro.
+          </p>
+        </div>
+      </div>
+
+      {/* Tabela de Pedidos */}
+      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
+        <ScrollArea className="max-h-[500px]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
+                  <th className="text-left py-3 px-4 text-muted-foreground font-medium">Código</th>
+                  <th className="text-left py-3 px-4 text-muted-foreground font-medium">Cliente</th>
+                  <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Produto</th>
+                  <th className="text-center py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Qtd</th>
+                  <th className="text-center py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Prazo</th>
+                  <th className="text-center py-3 px-4 text-muted-foreground font-medium">OP</th>
+                  <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
+                  <th className="text-right py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Valor</th>
+                  <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPedidos.map((pedido) => {
+                  const StatusIcon = statusConfig[pedido.status].icon;
+                  return (
+                    <tr key={pedido.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
+                      <td className="py-3 px-4 font-mono font-medium text-foreground">{pedido.codigo}</td>
+                      <td className="py-3 px-4 text-foreground">{pedido.cliente}</td>
+                      <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{pedido.produto}</td>
+                      <td className="py-3 px-4 text-center text-foreground hidden lg:table-cell">{pedido.quantidade}</td>
+                      <td className="py-3 px-4 text-center text-muted-foreground hidden lg:table-cell">
+                        {new Date(pedido.prazoEntrega).toLocaleDateString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        {pedido.op ? (
+                          <span className="font-mono text-xs bg-cip/20 text-cip px-2 py-1 rounded">
+                            {pedido.op}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <Badge className={cn('text-xs gap-1', statusConfig[pedido.status].color)}>
+                          <StatusIcon className="h-3 w-3" />
+                          <span className="hidden sm:inline">{statusConfig[pedido.status].label}</span>
+                        </Badge>
+                      </td>
+                      <td className="py-3 px-4 text-right text-foreground hidden md:table-cell">
+                        R$ {pedido.valorTotal.toLocaleString('pt-BR')}
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditPedido(pedido)} title="Visualizar">
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEditPedido(pedido)} title="Editar pedido">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
+        </ScrollArea>
+      </div>
 
-          {/* Tabela de Pedidos */}
-          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[500px]">
-            <ScrollArea className="h-full">
-              <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/50 bg-secondary/30">
-                    <th className="text-left py-3 px-4 text-muted-foreground font-medium">Código</th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-medium">Cliente</th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Produto</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Qtd</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Prazo</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium">OP</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
-                    <th className="text-right py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Valor</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ações</th>
-                  </tr>
-                </thead>
-                <tbody className="max-h-[400px]">
-                  {filteredPedidos.map((pedido) => {
-                    const StatusIcon = statusConfig[pedido.status].icon;
-                    return (
-                      <tr key={pedido.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
-                        <td className="py-3 px-4 font-mono font-medium text-foreground">{pedido.codigo}</td>
-                        <td className="py-3 px-4 text-foreground">{pedido.cliente}</td>
-                        <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{pedido.produto}</td>
-                        <td className="py-3 px-4 text-center text-foreground hidden lg:table-cell">{pedido.quantidade}</td>
-                        <td className="py-3 px-4 text-center text-muted-foreground hidden lg:table-cell">
-                          {new Date(pedido.prazoEntrega).toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          {pedido.op ? (
-                            <span className="font-mono text-xs bg-cip/20 text-cip px-2 py-1 rounded">
-                              {pedido.op}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <Badge className={cn('text-xs gap-1', statusConfig[pedido.status].color)}>
-                            <StatusIcon className="h-3 w-3" />
-                            <span className="hidden sm:inline">{statusConfig[pedido.status].label}</span>
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-right text-foreground hidden md:table-cell">
-                          R$ {pedido.valorTotal.toLocaleString('pt-BR')}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="flex items-center justify-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <Eye className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setSelectedPedido(pedido)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-              </div>
-            </ScrollArea>
-          </div>
-        </TabsContent>
-
-        {/* Tab Entrada */}
-        <TabsContent value="entrada" className="space-y-4">
-          <div className="p-4 rounded-lg bg-green-500/10 border border-green-500/30">
-            <div className="flex items-start gap-3">
-              <ArrowUpCircle className="h-6 w-6 text-green-400 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-green-400">Entrada de Pedidos</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Cadastre novos pedidos na carteira. A entrada gera automaticamente a programação e pode vincular uma OP para produção.
-                </p>
-              </div>
-            </div>
-          </div>
-
-      {/* Alerta de Prazo */}
-          <div className="p-3 rounded-lg bg-warning/10 border border-warning/30">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
-              <p className="text-sm text-warning font-medium">
-                Consultar Simulação de Prazo antes de confirmar a venda.
-              </p>
-            </div>
-          </div>
-
-          <ModuleCard title="Novo Pedido" variant="civ">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div>
-                <label className="text-sm text-muted-foreground">Cliente</label>
-                <Input placeholder="Selecione o cliente" className="mt-1" />
-              </div>
-              <div>
-                <label className="text-sm text-muted-foreground">Produto</label>
-                <Input placeholder="Selecione o produto" className="mt-1" />
-              </div>
-              <div>
-                <label className="text-sm text-muted-foreground">Quantidade</label>
-                <Input type="number" placeholder="0" className="mt-1" />
-              </div>
-              <div>
-                <label className="text-sm text-muted-foreground">Prazo de Entrega</label>
-                <Input type="date" className="mt-1" />
-              </div>
-              <div>
-                <label className="text-sm text-muted-foreground">Canal</label>
-                <Input placeholder="B2B, Varejo, Digital..." className="mt-1" />
-              </div>
-              <div>
-                <label className="text-sm text-muted-foreground">Margem (%)</label>
-                <Input type="number" placeholder="0" className="mt-1" />
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-6">
-              <Button variant="outline">Cancelar</Button>
-              <Button className="bg-civ hover:bg-civ/90 gap-2">
-                <Plus className="h-4 w-4" />
-                Cadastrar Pedido
-              </Button>
-            </div>
-          </ModuleCard>
-        </TabsContent>
-
-        {/* Tab Baixa */}
-        <TabsContent value="baixa" className="space-y-4">
-          <div className="p-4 rounded-lg bg-orange-500/10 border border-orange-500/30">
-            <div className="flex items-start gap-3">
-              <ArrowDownCircle className="h-6 w-6 text-orange-400 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-orange-400">Baixa de Pedidos</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  A baixa ocorre via <strong>Nota Fiscal</strong> gerada pelo Financeiro e entregue pela <strong>Expedição</strong> no momento do embarque.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          {/* Pedidos prontos para baixa */}
-          <ModuleCard title="Pedidos Produzidos - Prontos para Expedição" variant="civ">
+      {/* Seção colapsável: Baixas & OPs */}
+      {showBaixaOPs && (
+        <div className="space-y-4 animate-fade-in">
+          {/* Pedidos Prontos para Expedição */}
+          <ModuleCard title="Pedidos Produzidos — Prontos para Expedição" variant="civ">
             <div className="space-y-3">
               {pedidos.filter(p => p.status === 'produzido').map((pedido) => (
                 <div key={pedido.id} className="flex items-center justify-between p-4 rounded-lg bg-secondary/30 border border-border/30">
@@ -408,73 +370,16 @@ export function CIVCarteiraProducao() {
               </table>
             </div>
           </ModuleCard>
-        </TabsContent>
-      </Tabs>
+        </div>
+      )}
 
-      {/* Modal Detalhe do Pedido */}
-      <Dialog open={!!selectedPedido} onOpenChange={(open) => !open && setSelectedPedido(null)}>
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-civ" />
-              Detalhe do Pedido — {selectedPedido?.codigo}
-            </DialogTitle>
-            <DialogDescription>Informações do pedido selecionado</DialogDescription>
-          </DialogHeader>
-          {selectedPedido && (
-            <div className="grid grid-cols-2 gap-4 pt-2 text-sm">
-              <div>
-                <span className="text-muted-foreground block text-xs">Código</span>
-                <span className="font-mono font-semibold">{selectedPedido.codigo}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-xs">Cliente</span>
-                <span className="font-medium">{selectedPedido.cliente}</span>
-              </div>
-              <div className="col-span-2">
-                <span className="text-muted-foreground block text-xs">Produto / Descrição</span>
-                <span>{selectedPedido.produto}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-xs">Quantidade</span>
-                <span className="font-semibold">{selectedPedido.quantidade}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-xs">Status</span>
-                <Badge className={cn('text-xs', statusConfig[selectedPedido.status].color)}>
-                  {statusConfig[selectedPedido.status].label}
-                </Badge>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-xs">Data do Pedido</span>
-                <span>{new Date(selectedPedido.dataEntrada).toLocaleDateString('pt-BR')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-xs">Data de Entrega</span>
-                <span>{new Date(selectedPedido.prazoEntrega).toLocaleDateString('pt-BR')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-xs">Valor Total</span>
-                <span className="font-semibold">R$ {selectedPedido.valorTotal.toLocaleString('pt-BR')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-xs">Canal</span>
-                <span>{selectedPedido.canal}</span>
-              </div>
-              {selectedPedido.op && (
-                <div>
-                  <span className="text-muted-foreground block text-xs">OP Vinculada</span>
-                  <span className="font-mono text-xs bg-cip/20 text-cip px-2 py-1 rounded">{selectedPedido.op}</span>
-                </div>
-              )}
-              <div>
-                <span className="text-muted-foreground block text-xs">Margem</span>
-                <span className="font-semibold">{selectedPedido.margem}%</span>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Stepper de Cadastro de Pedido */}
+      <CIVCadastroPedidoStepper
+        open={stepperOpen}
+        onOpenChange={setStepperOpen}
+        pedido={editingPedido}
+        onSave={handleSavePedido}
+      />
     </div>
   );
 }
