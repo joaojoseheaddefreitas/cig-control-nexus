@@ -14,7 +14,99 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      action_logs: {
+        Row: {
+          action: string
+          created_at: string
+          details: Json | null
+          entity: string
+          entity_id: string | null
+          id: string
+          status: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          details?: Json | null
+          entity: string
+          entity_id?: string | null
+          id?: string
+          status?: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          details?: Json | null
+          entity?: string
+          entity_id?: string | null
+          id?: string
+          status?: string
+        }
+        Relationships: []
+      }
+      pedidos: {
+        Row: {
+          canal: string
+          cliente: string
+          codigo: string
+          created_at: string
+          data_entrada: string
+          data_expedicao: string | null
+          data_faturamento: string | null
+          id: string
+          margem: number
+          nota_fiscal: string | null
+          op: string | null
+          origem_dado: string
+          prazo_entrega: string | null
+          produto: string
+          quantidade: number
+          status: string
+          updated_at: string
+          valor_total: number
+        }
+        Insert: {
+          canal?: string
+          cliente: string
+          codigo: string
+          created_at?: string
+          data_entrada?: string
+          data_expedicao?: string | null
+          data_faturamento?: string | null
+          id?: string
+          margem?: number
+          nota_fiscal?: string | null
+          op?: string | null
+          origem_dado?: string
+          prazo_entrega?: string | null
+          produto: string
+          quantidade?: number
+          status?: string
+          updated_at?: string
+          valor_total?: number
+        }
+        Update: {
+          canal?: string
+          cliente?: string
+          codigo?: string
+          created_at?: string
+          data_entrada?: string
+          data_expedicao?: string | null
+          data_faturamento?: string | null
+          id?: string
+          margem?: number
+          nota_fiscal?: string | null
+          op?: string | null
+          origem_dado?: string
+          prazo_entrega?: string | null
+          produto?: string
+          quantidade?: number
+          status?: string
+          updated_at?: string
+          valor_total?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

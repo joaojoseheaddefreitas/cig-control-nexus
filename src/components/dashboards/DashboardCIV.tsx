@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   BarChart2, UserCheck, Store, FileText, Target, Calculator,
   Users, Package, TrendingUp, Briefcase, Brain, LineChart,
-  Menu, X, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Receipt, Home
+  Menu, X, ChevronLeft, ChevronRight, ArrowUpCircle, ArrowDownCircle, Receipt, Home, Activity
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -22,8 +22,9 @@ import { CIVMercado } from '@/components/civ/CIVMercado';
 import { CIVProjetos } from '@/components/civ/CIVProjetos';
 import { CIVIA } from '@/components/civ/CIVIA';
 import { CIVAnalytics } from '@/components/civ/CIVAnalytics';
+import { DiagnosticoSistema } from '@/components/diagnostico/DiagnosticoSistema';
 
-type TabType = 'dashboard' | 'leads' | 'lojas' | 'carteira_producao' | 'pipeline' | 'simulacao' | 'clientes' | 'produtos' | 'mercado' | 'projetos' | 'ia' | 'analytics';
+type TabType = 'dashboard' | 'leads' | 'lojas' | 'carteira_producao' | 'pipeline' | 'simulacao' | 'clientes' | 'produtos' | 'mercado' | 'projetos' | 'ia' | 'analytics' | 'diagnostico';
 
 // Menu items - CIV é a CARTEIRA ÚNICA de pedidos
 // REGRA: CIV recebe pedidos → CIP programa → Setores produzem → CIG consolida
@@ -40,6 +41,7 @@ const menuItems = [
   { id: 'projetos', label: 'Projetos Especiais', icon: Briefcase, tipo: 'visualizacao' },
   { id: 'ia', label: 'Inteligência IA', icon: Brain, tipo: 'visualizacao' },
   { id: 'analytics', label: 'Analytics Avançado', icon: LineChart, tipo: 'visualizacao' },
+  { id: 'diagnostico', label: 'Diagnóstico', icon: Activity, tipo: 'sistema' },
 ];
 
 interface DashboardCIVProps {
@@ -66,6 +68,7 @@ export function DashboardCIV({ onGoHome }: DashboardCIVProps) {
       case 'projetos': return <CIVProjetos />;
       case 'ia': return <CIVIA />;
       case 'analytics': return <CIVAnalytics />;
+      case 'diagnostico': return <DiagnosticoSistema />;
       default: return <CIVDashboard />;
     }
   };

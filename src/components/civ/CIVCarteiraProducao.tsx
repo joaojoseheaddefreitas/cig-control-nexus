@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Search, Filter, Plus, Edit, Eye, Package, FileText, 
   Truck, QrCode, BarChart3,
@@ -12,6 +12,8 @@ import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { CIVCadastroPedidoStepper, type PedidoStepper } from './CIVCadastroPedidoStepper';
+import { toast } from 'sonner';
+import { fetchPedidos, insertPedido, updatePedido, type PedidoDB } from '@/services/pedidoService';
 
 // Tipos
 interface Pedido {
@@ -80,6 +82,43 @@ export function CIVCarteiraProducao() {
   const [stepperOpen, setStepperOpen] = useState(false);
   const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
   const [showBaixaOPs, setShowBaixaOPs] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  // Carregar pedidos do banco ao montar
+  useEffect(() => {
+    loadPedidos();
+  }, []);
+
+  const loadPedidos = async () => {
+    setLoading(true);
+    const { data, error } = await fetchPedidos();
+    if (error) {
+      console.error('[CIV] Erro ao carregar pedidos:', error);
+      toast.error('Erro ao carregar pedidos do banco', { description: error });
+      // Manter mock como fallback
+      setLoading(false);
+      return;
+    }
+    if (data && data.length > 0) {
+      const mapped: Pedido[] = data.map(d => ({
+        id: d.id,
+        codigo: d.codigo,
+        cliente: d.cliente,
+        produto: d.produto,
+        quantidade: d.quantidade,
+        dataEntrada: d.data_entrada,
+        prazoEntrega: d.prazo_entrega || '',
+        status: d.status as Pedido['status'],
+        valorTotal: Number(d.valor_total),
+        op: d.op || undefined,
+        margem: Number(d.margem),
+        canal: d.canal,
+      }));
+      setPedidos(mapped);
+    }
+    // Se não há dados no banco, manter mock
+    setLoading(false);
+  };
 
   const filteredPedidos = pedidos.filter(p => 
     p.codigo.toLowerCase().includes(search.toLowerCase()) ||
@@ -104,30 +143,51 @@ export function CIVCarteiraProducao() {
     setStepperOpen(true);
   };
 
-  const handleSavePedido = (data: Partial<PedidoStepper>) => {
+  const handleSavePedido = async (data: Partial<PedidoStepper>) => {
     if (editingPedido) {
-      // Atualizar pedido existente
-      setPedidos(prev => prev.map(p => 
-        p.id === editingPedido.id 
-          ? { ...p, ...data } as Pedido
-          : p
-      ));
+      // Atualizar no banco
+      const { data: updated, error } = await updatePedido(editingPedido.id, {
+        cliente: data.cliente,
+        produto: data.produto,
+        quantidade: data.quantidade,
+        canal: data.canal,
+        margem: data.margem,
+        valor_total: data.valorTotal,
+        prazo_entrega: data.prazoEntrega || null,
+        status: data.status || editingPedido.status,
+      });
+      if (error) {
+        toast.error('❌ Falha ao atualizar pedido', { description: error });
+        return;
+      }
+      toast.success('✅ Pedido atualizado com sucesso', { description: `${updated?.codigo} persistido no banco` });
+      await loadPedidos();
     } else {
-      // Criar novo pedido
-      const newPedido: Pedido = {
-        id: String(pedidos.length + 1),
-        codigo: `PED-${2007 + pedidos.length}`,
+      // Inserir no banco
+      const newCodigo = `PED-${String(Date.now()).slice(-4)}`;
+      const { data: inserted, error } = await insertPedido({
+        codigo: newCodigo,
         cliente: data.cliente || '',
         produto: data.produto || '',
         quantidade: data.quantidade || 1,
         canal: data.canal || '',
         margem: data.margem || 0,
-        valorTotal: data.valorTotal || 0,
-        prazoEntrega: data.prazoEntrega || '',
-        dataEntrada: data.dataEntrada || new Date().toISOString().split('T')[0],
+        valor_total: data.valorTotal || 0,
+        prazo_entrega: data.prazoEntrega || null,
+        data_entrada: data.dataEntrada || new Date().toISOString().split('T')[0],
         status: 'aguardando',
-      };
-      setPedidos(prev => [...prev, newPedido]);
+        op: null,
+        nota_fiscal: null,
+        data_faturamento: null,
+        data_expedicao: null,
+        origem_dado: 'manual',
+      });
+      if (error) {
+        toast.error('❌ Falha ao criar pedido', { description: error });
+        return;
+      }
+      toast.success('✅ Pedido criado com sucesso', { description: `${inserted?.codigo} salvo no banco` });
+      await loadPedidos();
     }
   };
 
