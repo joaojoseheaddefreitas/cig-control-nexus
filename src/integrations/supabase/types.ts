@@ -44,6 +44,100 @@ export type Database = {
         }
         Relationships: []
       }
+      op_fracoes: {
+        Row: {
+          created_at: string
+          dimensoes: string | null
+          id: string
+          medidas: string | null
+          modelo: string
+          numero_fracao: number
+          observacoes: string | null
+          op_mae_id: string
+          quantidade_tecnica: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          dimensoes?: string | null
+          id?: string
+          medidas?: string | null
+          modelo?: string
+          numero_fracao: number
+          observacoes?: string | null
+          op_mae_id: string
+          quantidade_tecnica?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          dimensoes?: string | null
+          id?: string
+          medidas?: string | null
+          modelo?: string
+          numero_fracao?: number
+          observacoes?: string | null
+          op_mae_id?: string
+          quantidade_tecnica?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "op_fracoes_op_mae_id_fkey"
+            columns: ["op_mae_id"]
+            isOneToOne: false
+            referencedRelation: "op_maes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      op_maes: {
+        Row: {
+          created_at: string
+          desenho_url: string | null
+          id: string
+          numero_op: string
+          observacoes_especiais: string | null
+          pedido_id: string
+          status: string
+          total_fracoes: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          desenho_url?: string | null
+          id?: string
+          numero_op: string
+          observacoes_especiais?: string | null
+          pedido_id: string
+          status?: string
+          total_fracoes?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          desenho_url?: string | null
+          id?: string
+          numero_op?: string
+          observacoes_especiais?: string | null
+          pedido_id?: string
+          status?: string
+          total_fracoes?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "op_maes_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pedidos: {
         Row: {
           canal: string
@@ -104,6 +198,84 @@ export type Database = {
           status?: string
           updated_at?: string
           valor_total?: number
+        }
+        Relationships: []
+      }
+      setor_rastreamento: {
+        Row: {
+          created_at: string
+          data_baixa: string | null
+          data_entrada: string | null
+          id: string
+          observacoes: string | null
+          op_fracao_id: string
+          operador: string | null
+          setor_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_baixa?: string | null
+          data_entrada?: string | null
+          id?: string
+          observacoes?: string | null
+          op_fracao_id: string
+          operador?: string | null
+          setor_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_baixa?: string | null
+          data_entrada?: string | null
+          id?: string
+          observacoes?: string | null
+          op_fracao_id?: string
+          operador?: string | null
+          setor_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "setor_rastreamento_op_fracao_id_fkey"
+            columns: ["op_fracao_id"]
+            isOneToOne: false
+            referencedRelation: "op_fracoes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "setor_rastreamento_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores_produtivos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      setores_produtivos: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          id: string
+          nome: string
+          ordem: number
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome: string
+          ordem?: number
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          id?: string
+          nome?: string
+          ordem?: number
         }
         Relationships: []
       }
