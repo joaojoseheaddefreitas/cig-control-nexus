@@ -10,7 +10,7 @@ import {
 } from '@/components/ui/select';
 import {
   AlertTriangle, Check, ChevronLeft, ChevronRight,
-  ShieldAlert, ShieldCheck, Package, Calendar, User
+  ShieldAlert, ShieldCheck, Package, Calendar, User, Wrench, Plus, Trash2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { produtosVenda } from '@/data/civData';
@@ -18,8 +18,17 @@ import {
   getMateriaisPorProduto, verificarAlertasMateriais,
   clientesFinanceiro, type Material
 } from '@/data/cicData';
+import { Textarea } from '@/components/ui/textarea';
 
 // Tipo do pedido aceito pelo stepper
+export interface FracaoForm {
+  modelo: string;
+  dimensoes: string;
+  medidas: string;
+  quantidade_tecnica: number;
+  observacoes: string;
+}
+
 export interface PedidoStepper {
   id?: string;
   codigo?: string;
@@ -33,6 +42,8 @@ export interface PedidoStepper {
   prazoEntrega: string;
   status: string;
   op?: string;
+  fracoes?: FracaoForm[];
+  observacoesEspeciais?: string;
 }
 
 interface StepperProps {
@@ -48,13 +59,20 @@ interface FormData {
   produtoCodigo: string;
   quantidade: number;
   margem: number;
+  fracoes: FracaoForm[];
+  observacoesEspeciais: string;
 }
 
 const steps = [
   { number: 1, title: 'Cliente / Canal', icon: User },
   { number: 2, title: 'Produtos / Qtd', icon: Package },
   { number: 3, title: 'Prazo e Estoque', icon: Calendar },
+  { number: 4, title: 'OP / Frações', icon: Wrench },
 ];
+
+const emptyFracao = (): FracaoForm => ({
+  modelo: '', dimensoes: '', medidas: '', quantidade_tecnica: 1, observacoes: '',
+});
 
 const HORAS_POR_DIA = 8;
 const DIAS_EXTRA_FALTA_MATERIAL = 5;
@@ -67,6 +85,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     produtoCodigo: '',
     quantidade: 1,
     margem: 0,
+    fracoes: [emptyFracao()],
+    observacoesEspeciais: '',
   });
 
   // Reset ou pre-fill ao abrir
@@ -80,9 +100,11 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           produtoCodigo: prod?.codigo || '',
           quantidade: pedido.quantidade,
           margem: pedido.margem,
+          fracoes: pedido.fracoes || [emptyFracao()],
+          observacoesEspeciais: pedido.observacoesEspeciais || '',
         });
       } else {
-        setFormData({ clienteNome: '', canal: '', produtoCodigo: '', quantidade: 1, margem: 0 });
+        setFormData({ clienteNome: '', canal: '', produtoCodigo: '', quantidade: 1, margem: 0, fracoes: [emptyFracao()], observacoesEspeciais: '' });
       }
       setCurrentStep(1);
     }
@@ -128,6 +150,19 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   // Validações por step
   const canProceedStep1 = formData.clienteNome && formData.canal;
   const canProceedStep2 = formData.produtoCodigo && formData.quantidade > 0;
+  const canProceedStep3 = selectedCliente?.statusFinanceiro !== 'bloqueado';
+
+  // Helpers para frações
+  const addFracao = () => setFormData(prev => ({ ...prev, fracoes: [...prev.fracoes, emptyFracao()] }));
+  const removeFracao = (idx: number) => setFormData(prev => ({
+    ...prev, fracoes: prev.fracoes.filter((_, i) => i !== idx),
+  }));
+  const updateFracao = (idx: number, field: keyof FracaoForm, value: string | number) => {
+    setFormData(prev => ({
+      ...prev,
+      fracoes: prev.fracoes.map((f, i) => i === idx ? { ...f, [field]: value } : f),
+    }));
+  };
 
   const handleSave = () => {
     if (!selectedProduto || !formData.clienteNome) return;
@@ -141,6 +176,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       prazoEntrega: deliveryDate ? deliveryDate.toISOString().split('T')[0] : '',
       dataEntrada: new Date().toISOString().split('T')[0],
       status: 'aguardando',
+      fracoes: formData.fracoes.filter(f => f.modelo.trim() !== ''),
+      observacoesEspeciais: formData.observacoesEspeciais,
     });
     onOpenChange(false);
   };
@@ -489,6 +526,96 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
               </div>
             </div>
           )}
+
+          {/* ─── STEP 4: OP / Frações Técnicas ─── */}
+          {currentStep === 4 && (
+            <div className="space-y-4 animate-fade-in">
+              <div>
+                <label className="text-sm font-medium text-foreground">Observações Especiais da OP</label>
+                <Textarea
+                  value={formData.observacoesEspeciais}
+                  onChange={(e) => setFormData(prev => ({ ...prev, observacoesEspeciais: e.target.value }))}
+                  placeholder="Ex: Acabamento especial, cor diferenciada, medida fora do padrão..."
+                  className="mt-1"
+                  rows={2}
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground">
+                  Frações Técnicas ({formData.fracoes.length}/{formData.fracoes.length})
+                </p>
+                <Button type="button" variant="outline" size="sm" onClick={addFracao} className="gap-1">
+                  <Plus className="h-3 w-3" /> Fração
+                </Button>
+              </div>
+
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                {formData.fracoes.map((fracao, idx) => (
+                  <div key={idx} className="p-3 rounded-lg border border-border/40 bg-secondary/20 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground">
+                        Fração {idx + 1}/{formData.fracoes.length}
+                      </span>
+                      {formData.fracoes.length > 1 && (
+                        <Button type="button" variant="ghost" size="icon" className="h-6 w-6" onClick={() => removeFracao(idx)}>
+                          <Trash2 className="h-3 w-3 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-xs text-muted-foreground">Modelo *</label>
+                        <Input
+                          value={fracao.modelo}
+                          onChange={(e) => updateFracao(idx, 'modelo', e.target.value)}
+                          placeholder="Ex: Sofá 3L Retrátil"
+                          className="h-8 text-xs mt-0.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Qtd Técnica</label>
+                        <Input
+                          type="number"
+                          min={1}
+                          value={fracao.quantidade_tecnica}
+                          onChange={(e) => updateFracao(idx, 'quantidade_tecnica', Math.max(1, parseInt(e.target.value) || 1))}
+                          className="h-8 text-xs mt-0.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Dimensões</label>
+                        <Input
+                          value={fracao.dimensoes}
+                          onChange={(e) => updateFracao(idx, 'dimensoes', e.target.value)}
+                          placeholder="Ex: 2.20 x 0.90 x 0.85"
+                          className="h-8 text-xs mt-0.5"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-muted-foreground">Medidas</label>
+                        <Input
+                          value={fracao.medidas}
+                          onChange={(e) => updateFracao(idx, 'medidas', e.target.value)}
+                          placeholder="Ex: Braço 45cm, Assento 55cm"
+                          className="h-8 text-xs mt-0.5"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground">Observações</label>
+                      <Input
+                        value={fracao.observacoes}
+                        onChange={(e) => updateFracao(idx, 'observacoes', e.target.value)}
+                        placeholder="Obs. específica desta fração"
+                        className="h-8 text-xs mt-0.5"
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Navegação do Stepper */}
@@ -503,12 +630,13 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
             Voltar
           </Button>
 
-          {currentStep < 3 ? (
+          {currentStep < 4 ? (
             <Button
               onClick={() => setCurrentStep(prev => prev + 1)}
               disabled={
                 (currentStep === 1 && !canProceedStep1) ||
-                (currentStep === 2 && !canProceedStep2)
+                (currentStep === 2 && !canProceedStep2) ||
+                (currentStep === 3 && !canProceedStep3)
               }
               className="bg-civ hover:bg-civ/90 gap-2"
             >
@@ -518,11 +646,11 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           ) : (
             <Button
               onClick={handleSave}
-              disabled={selectedCliente?.statusFinanceiro === 'bloqueado'}
+              disabled={formData.fracoes.every(f => !f.modelo.trim())}
               className="bg-success hover:bg-success/90 gap-2"
             >
               <Check className="h-4 w-4" />
-              {pedido ? 'Salvar Alterações' : 'Confirmar Pedido'}
+              {pedido ? 'Salvar Alterações' : 'Confirmar Pedido + OP'}
             </Button>
           )}
         </div>
