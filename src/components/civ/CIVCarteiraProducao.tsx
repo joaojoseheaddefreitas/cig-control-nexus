@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { CIVCadastroPedidoStepper, type PedidoStepper } from './CIVCadastroPedidoStepper';
 import { toast } from 'sonner';
 import { fetchPedidos, insertPedido, updatePedido, type PedidoDB } from '@/services/pedidoService';
+import { criarOPComFracoes } from '@/services/opService';
 
 // Tipos
 interface Pedido {
@@ -145,7 +146,6 @@ export function CIVCarteiraProducao() {
 
   const handleSavePedido = async (data: Partial<PedidoStepper>) => {
     if (editingPedido) {
-      // Atualizar no banco
       const { data: updated, error } = await updatePedido(editingPedido.id, {
         cliente: data.cliente,
         produto: data.produto,
@@ -163,7 +163,7 @@ export function CIVCarteiraProducao() {
       toast.success('✅ Pedido atualizado com sucesso', { description: `${updated?.codigo} persistido no banco` });
       await loadPedidos();
     } else {
-      // Inserir no banco
+      // 1. Inserir pedido
       const newCodigo = `PED-${String(Date.now()).slice(-4)}`;
       const { data: inserted, error } = await insertPedido({
         codigo: newCodigo,
@@ -182,11 +182,36 @@ export function CIVCarteiraProducao() {
         data_expedicao: null,
         origem_dado: 'manual',
       });
-      if (error) {
+      if (error || !inserted) {
         toast.error('❌ Falha ao criar pedido', { description: error });
         return;
       }
-      toast.success('✅ Pedido criado com sucesso', { description: `${inserted?.codigo} salvo no banco` });
+
+      // 2. Criar OP Mãe + Frações automaticamente
+      const fracoes = (data.fracoes && data.fracoes.length > 0)
+        ? data.fracoes.filter(f => f.modelo.trim() !== '').map(f => ({
+            modelo: f.modelo,
+            dimensoes: f.dimensoes || undefined,
+            medidas: f.medidas || undefined,
+            quantidade_tecnica: f.quantidade_tecnica || 1,
+            observacoes: f.observacoes || undefined,
+          }))
+        : [{ modelo: data.produto || 'Padrão', quantidade_tecnica: data.quantidade || 1 }];
+
+      const { opMae, error: opError } = await criarOPComFracoes(
+        inserted.id,
+        fracoes,
+        data.observacoesEspeciais
+      );
+
+      if (opError) {
+        toast.warning('⚠ Pedido criado, mas falha ao gerar OP', { description: opError });
+      } else {
+        toast.success('✅ Pedido + OP criados', {
+          description: `${inserted.codigo} → ${opMae?.numero_op} com ${fracoes.length} fração(ões)`,
+        });
+      }
+
       await loadPedidos();
     }
   };
