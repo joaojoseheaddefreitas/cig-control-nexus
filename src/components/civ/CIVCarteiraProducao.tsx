@@ -14,7 +14,6 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { CIVCadastroPedidoStepper, type PedidoStepper } from './CIVCadastroPedidoStepper';
 import { toast } from 'sonner';
 import { fetchPedidos, insertPedido, updatePedido, type PedidoDB } from '@/services/pedidoService';
-import { criarOPComFracoes } from '@/services/opService';
 
 // Tipos
 interface Pedido {
@@ -187,30 +186,9 @@ export function CIVCarteiraProducao() {
         return;
       }
 
-      // 2. Criar OP Mãe + Frações automaticamente
-      const fracoes = (data.fracoes && data.fracoes.length > 0)
-        ? data.fracoes.filter(f => f.modelo.trim() !== '').map(f => ({
-            modelo: f.modelo,
-            dimensoes: f.dimensoes || undefined,
-            medidas: f.medidas || undefined,
-            quantidade_tecnica: f.quantidade_tecnica || 1,
-            observacoes: f.observacoes || undefined,
-          }))
-        : [{ modelo: data.produto || 'Padrão', quantidade_tecnica: data.quantidade || 1 }];
-
-      const { opMae, error: opError } = await criarOPComFracoes(
-        inserted.id,
-        fracoes,
-        data.observacoesEspeciais
-      );
-
-      if (opError) {
-        toast.warning('⚠ Pedido criado, mas falha ao gerar OP', { description: opError });
-      } else {
-        toast.success('✅ Pedido + OP criados', {
-          description: `${inserted.codigo} → ${opMae?.numero_op} com ${fracoes.length} fração(ões)`,
-        });
-      }
+      toast.success('✅ Pedido criado com sucesso', {
+        description: `${inserted.codigo} — OP será gerada na aprovação`,
+      });
 
       await loadPedidos();
     }
