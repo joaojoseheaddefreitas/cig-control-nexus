@@ -44,96 +44,279 @@ export type Database = {
         }
         Relationships: []
       }
-      op_fracoes: {
+      configuracoes_capacidade: {
+        Row: {
+          capacidade_produtiva_diaria: number
+          considerar_sabado: boolean
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          capacidade_produtiva_diaria?: number
+          considerar_sabado?: boolean
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          capacidade_produtiva_diaria?: number
+          considerar_sabado?: boolean
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      familia_op: {
         Row: {
           created_at: string
-          dimensoes: string | null
           id: string
-          medidas: string | null
-          modelo: string
-          numero_fracao: number
-          observacoes: string | null
-          op_mae_id: string
-          quantidade_tecnica: number
+          numero_familia: string
+          pedido_id: string
           status: string
+          tempo_total_familia: number
+          total_ops: number
           updated_at: string
         }
         Insert: {
           created_at?: string
-          dimensoes?: string | null
           id?: string
-          medidas?: string | null
-          modelo?: string
-          numero_fracao: number
-          observacoes?: string | null
-          op_mae_id: string
-          quantidade_tecnica?: number
+          numero_familia: string
+          pedido_id: string
           status?: string
+          tempo_total_familia?: number
+          total_ops?: number
           updated_at?: string
         }
         Update: {
           created_at?: string
-          dimensoes?: string | null
           id?: string
-          medidas?: string | null
-          modelo?: string
-          numero_fracao?: number
-          observacoes?: string | null
-          op_mae_id?: string
-          quantidade_tecnica?: number
+          numero_familia?: string
+          pedido_id?: string
           status?: string
+          tempo_total_familia?: number
+          total_ops?: number
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "op_fracoes_op_mae_id_fkey"
-            columns: ["op_mae_id"]
-            isOneToOne: false
-            referencedRelation: "op_maes"
+            foreignKeyName: "familia_op_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: true
+            referencedRelation: "pedidos"
             referencedColumns: ["id"]
           },
         ]
       }
-      op_maes: {
+      fornecedores: {
+        Row: {
+          ativo: boolean
+          cnpj: string | null
+          contato: string | null
+          created_at: string
+          email: string | null
+          id: string
+          nome: string
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cnpj?: string | null
+          contato?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cnpj?: string | null
+          contato?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          nome?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      itens_pedido: {
         Row: {
           created_at: string
-          desenho_url: string | null
           id: string
-          numero_op: string
-          observacoes_especiais: string | null
+          observacoes: string | null
           pedido_id: string
-          status: string
-          total_fracoes: number
+          produto_id: string | null
+          produto_nome: string
+          quantidade: number
+          tempo_total: number | null
+          tempo_unitario: number
+          updated_at: string
+          valor_total: number | null
+          valor_unitario: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          observacoes?: string | null
+          pedido_id: string
+          produto_id?: string | null
+          produto_nome: string
+          quantidade?: number
+          tempo_total?: number | null
+          tempo_unitario?: number
+          updated_at?: string
+          valor_total?: number | null
+          valor_unitario?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          observacoes?: string | null
+          pedido_id?: string
+          produto_id?: string | null
+          produto_nome?: string
+          quantidade?: number
+          tempo_total?: number | null
+          tempo_unitario?: number
+          updated_at?: string
+          valor_total?: number | null
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "itens_pedido_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "itens_pedido_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      movimentacoes_estoque: {
+        Row: {
+          created_at: string
+          id: string
+          motivo: string | null
+          origem: string
+          produto_id: string
+          quantidade: number
+          tipo: string
+          usuario: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          motivo?: string | null
+          origem?: string
+          produto_id: string
+          quantidade: number
+          tipo: string
+          usuario?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          motivo?: string | null
+          origem?: string
+          produto_id?: string
+          quantidade?: number
+          tipo?: string
+          usuario?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movimentacoes_estoque_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ops: {
+        Row: {
+          created_at: string
+          data_nf: string | null
+          desenho_url: string | null
+          familia_op_id: string
+          id: string
+          item_pedido_id: string
+          nota_fiscal: string | null
+          numero_op: string
+          observacoes: string | null
+          prazo_entrega: string | null
+          produto_nome: string
+          quantidade: number
+          status_faturamento: string
+          status_producao: string
+          tempo_total: number
+          tempo_unitario: number
           updated_at: string
         }
         Insert: {
           created_at?: string
+          data_nf?: string | null
           desenho_url?: string | null
+          familia_op_id: string
           id?: string
+          item_pedido_id: string
+          nota_fiscal?: string | null
           numero_op: string
-          observacoes_especiais?: string | null
-          pedido_id: string
-          status?: string
-          total_fracoes?: number
+          observacoes?: string | null
+          prazo_entrega?: string | null
+          produto_nome: string
+          quantidade?: number
+          status_faturamento?: string
+          status_producao?: string
+          tempo_total?: number
+          tempo_unitario?: number
           updated_at?: string
         }
         Update: {
           created_at?: string
+          data_nf?: string | null
           desenho_url?: string | null
+          familia_op_id?: string
           id?: string
+          item_pedido_id?: string
+          nota_fiscal?: string | null
           numero_op?: string
-          observacoes_especiais?: string | null
-          pedido_id?: string
-          status?: string
-          total_fracoes?: number
+          observacoes?: string | null
+          prazo_entrega?: string | null
+          produto_nome?: string
+          quantidade?: number
+          status_faturamento?: string
+          status_producao?: string
+          tempo_total?: number
+          tempo_unitario?: number
           updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "op_maes_pedido_id_fkey"
-            columns: ["pedido_id"]
+            foreignKeyName: "ops_familia_op_id_fkey"
+            columns: ["familia_op_id"]
             isOneToOne: false
-            referencedRelation: "pedidos"
+            referencedRelation: "familia_op"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ops_item_pedido_id_fkey"
+            columns: ["item_pedido_id"]
+            isOneToOne: false
+            referencedRelation: "itens_pedido"
             referencedColumns: ["id"]
           },
         ]
@@ -147,15 +330,19 @@ export type Database = {
           data_entrada: string
           data_expedicao: string | null
           data_faturamento: string | null
+          data_nf: string | null
           id: string
           margem: number
           nota_fiscal: string | null
           op: string | null
           origem_dado: string
+          prazo_calculado_dias: number | null
           prazo_entrega: string | null
           produto: string
           quantidade: number
           status: string
+          status_faturamento: string
+          status_producao: string
           updated_at: string
           valor_total: number
         }
@@ -167,15 +354,19 @@ export type Database = {
           data_entrada?: string
           data_expedicao?: string | null
           data_faturamento?: string | null
+          data_nf?: string | null
           id?: string
           margem?: number
           nota_fiscal?: string | null
           op?: string | null
           origem_dado?: string
+          prazo_calculado_dias?: number | null
           prazo_entrega?: string | null
           produto: string
           quantidade?: number
           status?: string
+          status_faturamento?: string
+          status_producao?: string
           updated_at?: string
           valor_total?: number
         }
@@ -187,17 +378,54 @@ export type Database = {
           data_entrada?: string
           data_expedicao?: string | null
           data_faturamento?: string | null
+          data_nf?: string | null
           id?: string
           margem?: number
           nota_fiscal?: string | null
           op?: string | null
           origem_dado?: string
+          prazo_calculado_dias?: number | null
           prazo_entrega?: string | null
           produto?: string
           quantidade?: number
           status?: string
+          status_faturamento?: string
+          status_producao?: string
           updated_at?: string
           valor_total?: number
+        }
+        Relationships: []
+      }
+      produtos: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          descricao: string | null
+          id: string
+          nome: string
+          tempo_unitario: number
+          unidade: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome: string
+          tempo_unitario?: number
+          unidade?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          descricao?: string | null
+          id?: string
+          nome?: string
+          tempo_unitario?: number
+          unidade?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -208,7 +436,7 @@ export type Database = {
           data_entrada: string | null
           id: string
           observacoes: string | null
-          op_fracao_id: string
+          op_id: string
           operador: string | null
           setor_id: string
           status: string
@@ -220,7 +448,7 @@ export type Database = {
           data_entrada?: string | null
           id?: string
           observacoes?: string | null
-          op_fracao_id: string
+          op_id: string
           operador?: string | null
           setor_id: string
           status?: string
@@ -232,7 +460,7 @@ export type Database = {
           data_entrada?: string | null
           id?: string
           observacoes?: string | null
-          op_fracao_id?: string
+          op_id?: string
           operador?: string | null
           setor_id?: string
           status?: string
@@ -240,10 +468,10 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "setor_rastreamento_op_fracao_id_fkey"
-            columns: ["op_fracao_id"]
+            foreignKeyName: "setor_rastreamento_op_id_fkey"
+            columns: ["op_id"]
             isOneToOne: false
-            referencedRelation: "op_fracoes"
+            referencedRelation: "ops"
             referencedColumns: ["id"]
           },
           {
@@ -284,7 +512,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      gerar_numero_familia: { Args: never; Returns: string }
     }
     Enums: {
       [_ in never]: never
