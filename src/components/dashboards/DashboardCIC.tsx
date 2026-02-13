@@ -3,6 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Legend,
 } from 'recharts';
+import { CICEstoqueOperacional } from '@/components/cic/CICEstoqueOperacional';
 import { executiveKPIs } from '@/data/cigData';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
@@ -161,6 +162,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return renderDashboard();
+      case 'estoques': return <CICEstoqueOperacional />;
       case 'consumo': return renderConsumo();
       case 'estoques': return renderEstoques();
       case 'compras': return renderCompras();
