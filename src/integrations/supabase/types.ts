@@ -148,6 +148,7 @@ export type Database = {
       itens_pedido: {
         Row: {
           created_at: string
+          fraction_count: number
           id: string
           observacoes: string | null
           pedido_id: string
@@ -162,6 +163,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          fraction_count?: number
           id?: string
           observacoes?: string | null
           pedido_id: string
@@ -176,6 +178,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          fraction_count?: number
           id?: string
           observacoes?: string | null
           pedido_id?: string
@@ -246,9 +249,52 @@ export type Database = {
           },
         ]
       }
+      op_route_steps: {
+        Row: {
+          created_at: string
+          id: string
+          op_id: string
+          ordem: number
+          setor_id: string
+          tempo_estimado: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          op_id: string
+          ordem?: number
+          setor_id: string
+          tempo_estimado?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          op_id?: string
+          ordem?: number
+          setor_id?: string
+          tempo_estimado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "op_route_steps_op_id_fkey"
+            columns: ["op_id"]
+            isOneToOne: false
+            referencedRelation: "ops"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "op_route_steps_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores_produtivos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ops: {
         Row: {
           created_at: string
+          current_sector: string | null
           data_nf: string | null
           desenho_url: string | null
           familia_op_id: string
@@ -257,17 +303,21 @@ export type Database = {
           nota_fiscal: string | null
           numero_op: string
           observacoes: string | null
+          pedido_id: string | null
           prazo_entrega: string | null
           produto_nome: string
           quantidade: number
+          sequence_number: number | null
           status_faturamento: string
           status_producao: string
           tempo_total: number
           tempo_unitario: number
+          total_ops_at_generation: number | null
           updated_at: string
         }
         Insert: {
           created_at?: string
+          current_sector?: string | null
           data_nf?: string | null
           desenho_url?: string | null
           familia_op_id: string
@@ -276,17 +326,21 @@ export type Database = {
           nota_fiscal?: string | null
           numero_op: string
           observacoes?: string | null
+          pedido_id?: string | null
           prazo_entrega?: string | null
           produto_nome: string
           quantidade?: number
+          sequence_number?: number | null
           status_faturamento?: string
           status_producao?: string
           tempo_total?: number
           tempo_unitario?: number
+          total_ops_at_generation?: number | null
           updated_at?: string
         }
         Update: {
           created_at?: string
+          current_sector?: string | null
           data_nf?: string | null
           desenho_url?: string | null
           familia_op_id?: string
@@ -295,13 +349,16 @@ export type Database = {
           nota_fiscal?: string | null
           numero_op?: string
           observacoes?: string | null
+          pedido_id?: string | null
           prazo_entrega?: string | null
           produto_nome?: string
           quantidade?: number
+          sequence_number?: number | null
           status_faturamento?: string
           status_producao?: string
           tempo_total?: number
           tempo_unitario?: number
+          total_ops_at_generation?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -317,6 +374,13 @@ export type Database = {
             columns: ["item_pedido_id"]
             isOneToOne: false
             referencedRelation: "itens_pedido"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ops_pedido_id_fkey"
+            columns: ["pedido_id"]
+            isOneToOne: false
+            referencedRelation: "pedidos"
             referencedColumns: ["id"]
           },
         ]

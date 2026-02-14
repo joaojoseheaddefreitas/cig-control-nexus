@@ -27,6 +27,7 @@ export interface PedidoStepperItem {
   tempo_unitario: number;
   valor_unitario: number;
   observacoes?: string;
+  fraction_count?: number;
 }
 
 export interface PedidoStepperResult {
@@ -38,7 +39,6 @@ export interface PedidoStepperResult {
   itens: PedidoStepperItem[];
 }
 
-// Keep backward-compat export
 export interface PedidoStepper {
   id?: string;
   codigo?: string;
@@ -65,6 +65,7 @@ interface ItemForm {
   produtoCodigo: string;
   quantidade: number;
   observacoes: string;
+  fractionCount: number;
 }
 
 const steps = [
@@ -82,7 +83,10 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   const [canal, setCanal] = useState('');
   const [margem, setMargem] = useState(0);
   const [codigoManual, setCodigoManual] = useState('');
-  const [itens, setItens] = useState<ItemForm[]>([{ produtoCodigo: '', quantidade: 1, observacoes: '' }]);
+  const [itens, setItens] = useState<ItemForm[]>([{ produtoCodigo: '', quantidade: 1, observacoes: '', fractionCount: 1 }]);
+
+  // If editing an already-approved pedido, lock fields
+  const isLocked = !!(pedido?.op);
 
   useEffect(() => {
     if (open) {
@@ -91,15 +95,14 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
         setCanal(pedido.canal);
         setMargem(pedido.margem);
         setCodigoManual(pedido.codigo || '');
-        // For editing, pre-fill single item (legacy)
         const prod = produtosVenda.find(p => p.nome === pedido.produto);
-        setItens([{ produtoCodigo: prod?.codigo || '', quantidade: pedido.quantidade, observacoes: '' }]);
+        setItens([{ produtoCodigo: prod?.codigo || '', quantidade: pedido.quantidade, observacoes: '', fractionCount: 1 }]);
       } else {
         setClienteNome('');
         setCanal('');
         setMargem(0);
         setCodigoManual('');
-        setItens([{ produtoCodigo: '', quantidade: 1, observacoes: '' }]);
+        setItens([{ produtoCodigo: '', quantidade: 1, observacoes: '', fractionCount: 1 }]);
         generateNextCodigo();
       }
       setCurrentStep(1);
@@ -153,6 +156,11 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     }, 0);
   }, [resolvedItens]);
 
+  // Total OPs = sum of all fraction_counts
+  const totalOPs = useMemo(() => {
+    return itens.reduce((sum, item) => sum + Math.max(1, item.fractionCount), 0);
+  }, [itens]);
+
   const leadTimeDays = Math.ceil(cargaTotalHoras / HORAS_POR_DIA);
 
   const deliveryDate = useMemo(() => {
@@ -170,18 +178,26 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   const canProceedStep3 = selectedCliente?.statusFinanceiro !== 'bloqueado';
 
   const addItem = () => {
-    setItens([...itens, { produtoCodigo: '', quantidade: 1, observacoes: '' }]);
+    if (isLocked) return;
+    setItens([...itens, { produtoCodigo: '', quantidade: 1, observacoes: '', fractionCount: 1 }]);
   };
 
   const removeItem = (idx: number) => {
-    if (itens.length <= 1) return;
+    if (isLocked || itens.length <= 1) return;
     setItens(itens.filter((_, i) => i !== idx));
   };
 
   const updateItem = (idx: number, field: keyof ItemForm, value: any) => {
+    if (isLocked) return;
     const updated = [...itens];
     (updated[idx] as any)[field] = value;
     setItens(updated);
+  };
+
+  // Generate display mask for preview
+  const getPreviewOPMask = (globalSeq: number) => {
+    if (totalOPs === 1) return codigoManual;
+    return `${codigoManual}-${globalSeq}/${totalOPs}`;
   };
 
   const handleSave = () => {
@@ -195,9 +211,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
         tempo_unitario: i.produto!.tempoProducao,
         valor_unitario: i.produto!.precoBase,
         observacoes: i.observacoes || undefined,
+        fraction_count: Math.max(1, i.fractionCount),
       }));
-
-    const firstProd = resolvedItens.find(i => i.produto);
 
     onSave({
       codigo: codigoManual,
@@ -221,9 +236,13 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {pedido ? `Editar Pedido — ${pedido.codigo}` : 'Novo Pedido — Cadastro'}
+            {isLocked && <Badge variant="outline" className="text-warning border-warning/30">🔒 BLOQUEADO</Badge>}
           </DialogTitle>
           <DialogDescription>
-            {pedido ? 'Edite os dados do pedido selecionado' : 'Preencha os dados do pedido em 3 etapas. Cada produto gerará 1 OP independente.'}
+            {isLocked
+              ? 'Pedido já possui OPs geradas. Edição de itens bloqueada.'
+              : pedido ? 'Edite os dados do pedido selecionado' : 'Preencha os dados do pedido em 3 etapas. Cada produto gerará OPs independentes.'
+            }
           </DialogDescription>
         </DialogHeader>
 
@@ -276,13 +295,14 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   onChange={(e) => setCodigoManual(e.target.value)}
                   placeholder="Ex: 1025"
                   className="mt-1 font-mono"
+                  disabled={isLocked}
                 />
-                <p className="text-xs text-muted-foreground mt-1">Gerado automaticamente, mas pode ser editado.</p>
+                <p className="text-xs text-muted-foreground mt-1">Gerado automaticamente, mas pode ser editado. Deve ser único.</p>
               </div>
 
               <div>
                 <label className="text-sm font-medium text-foreground">Cliente *</label>
-                <Select value={clienteNome} onValueChange={setClienteNome}>
+                <Select value={clienteNome} onValueChange={setClienteNome} disabled={isLocked}>
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Selecione o cliente" />
                   </SelectTrigger>
@@ -333,7 +353,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
 
               <div>
                 <label className="text-sm font-medium text-foreground">Canal de Venda *</label>
-                <Select value={canal} onValueChange={setCanal}>
+                <Select value={canal} onValueChange={setCanal} disabled={isLocked}>
                   <SelectTrigger className="mt-1">
                     <SelectValue placeholder="Selecione o canal" />
                   </SelectTrigger>
@@ -348,68 +368,100 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
             </div>
           )}
 
-          {/* ─── STEP 2: Múltiplos Produtos ─── */}
+          {/* ─── STEP 2: Múltiplos Produtos com Fraction Count ─── */}
           {currentStep === 2 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-bold text-foreground">Itens do Pedido</label>
-                <Button variant="outline" size="sm" onClick={addItem}>
-                  <Plus className="h-3 w-3 mr-1" /> Adicionar Produto
-                </Button>
+                {!isLocked && (
+                  <Button variant="outline" size="sm" onClick={addItem}>
+                    <Plus className="h-3 w-3 mr-1" /> Adicionar Produto
+                  </Button>
+                )}
               </div>
 
-              {itens.map((item, idx) => {
-                const prod = produtosVenda.find(p => p.codigo === item.produtoCodigo);
-                return (
-                  <div key={idx} className="p-3 rounded-lg bg-secondary/20 border border-border/30 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-muted-foreground">Item {idx + 1}</span>
-                      {itens.length > 1 && (
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeItem(idx)}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+              {(() => {
+                let globalSeq = 0;
+                return itens.map((item, idx) => {
+                  const prod = produtosVenda.find(p => p.codigo === item.produtoCodigo);
+                  const fractions = Math.max(1, item.fractionCount);
+                  const opsForItem: string[] = [];
+                  for (let f = 0; f < fractions; f++) {
+                    globalSeq++;
+                    opsForItem.push(getPreviewOPMask(globalSeq));
+                  }
+
+                  return (
+                    <div key={idx} className="p-3 rounded-lg bg-secondary/20 border border-border/30 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-muted-foreground">Item {idx + 1}</span>
+                        {!isLocked && itens.length > 1 && (
+                          <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => removeItem(idx)}>
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                        <div className="sm:col-span-2">
+                          <label className="text-[10px] text-muted-foreground">Produto *</label>
+                          <Select
+                            value={item.produtoCodigo}
+                            onValueChange={(val) => updateItem(idx, 'produtoCodigo', val)}
+                            disabled={isLocked}
+                          >
+                            <SelectTrigger className="h-8 text-xs">
+                              <SelectValue placeholder="Selecione" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {produtosVenda.filter(p => p.ativo).map((p) => (
+                                <SelectItem key={p.codigo} value={p.codigo}>
+                                  {p.codigo} — {p.nome}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Quantidade *</label>
+                          <Input
+                            type="number"
+                            min={1}
+                            value={item.quantidade}
+                            onChange={(e) => updateItem(idx, 'quantidade', Math.max(1, parseInt(e.target.value) || 1))}
+                            className="h-8 text-xs"
+                            disabled={isLocked}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Frações (OPs)</label>
+                          <Input
+                            type="number"
+                            min={1}
+                            max={item.quantidade}
+                            value={item.fractionCount}
+                            onChange={(e) => updateItem(idx, 'fractionCount', Math.max(1, parseInt(e.target.value) || 1))}
+                            className="h-8 text-xs"
+                            disabled={isLocked}
+                          />
+                        </div>
+                      </div>
+                      {prod && (
+                        <div className="space-y-1">
+                          <div className="flex gap-4 text-xs text-muted-foreground">
+                            <span>Preço: R$ {(prod.precoBase * item.quantidade).toLocaleString('pt-BR')}</span>
+                            <span>Tempo: {(prod.tempoProducao * item.quantidade).toFixed(1)}h</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {opsForItem.map((mask, fi) => (
+                              <Badge key={fi} variant="outline" className="font-mono text-[10px]">{mask}</Badge>
+                            ))}
+                          </div>
+                        </div>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                      <div className="sm:col-span-2">
-                        <label className="text-[10px] text-muted-foreground">Produto *</label>
-                        <Select
-                          value={item.produtoCodigo}
-                          onValueChange={(val) => updateItem(idx, 'produtoCodigo', val)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Selecione" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {produtosVenda.filter(p => p.ativo).map((p) => (
-                              <SelectItem key={p.codigo} value={p.codigo}>
-                                {p.codigo} — {p.nome}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <label className="text-[10px] text-muted-foreground">Quantidade *</label>
-                        <Input
-                          type="number"
-                          min={1}
-                          value={item.quantidade}
-                          onChange={(e) => updateItem(idx, 'quantidade', Math.max(1, parseInt(e.target.value) || 1))}
-                          className="h-8 text-xs"
-                        />
-                      </div>
-                    </div>
-                    {prod && (
-                      <div className="flex gap-4 text-xs text-muted-foreground">
-                        <span>Preço: R$ {(prod.precoBase * item.quantidade).toLocaleString('pt-BR')}</span>
-                        <span>Tempo: {(prod.tempoProducao * item.quantidade).toFixed(1)}h</span>
-                        <span className="text-foreground font-medium">→ OP {codigoManual}-{String(idx + 1).padStart(2, '0')}</span>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
 
               <div className="p-3 rounded-lg bg-civ/10 border border-civ/30 flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Valor Total:</span>
@@ -417,7 +469,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
               </div>
 
               <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 text-xs text-muted-foreground">
-                <strong>{itens.filter(i => i.produtoCodigo).length}</strong> produto(s) → <strong>{itens.filter(i => i.produtoCodigo).length}</strong> OP(s) independentes | Carga total: <strong>{cargaTotalHoras.toFixed(1)}h</strong>
+                <strong>{itens.filter(i => i.produtoCodigo).length}</strong> produto(s) → <strong>{totalOPs}</strong> OP(s) independentes | Carga total: <strong>{cargaTotalHoras.toFixed(1)}h</strong>
               </div>
             </div>
           )}
@@ -465,15 +517,31 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                     <span className="font-medium">{canal}</span>
                   </div>
                   <div className="col-span-2">
-                    <span className="text-muted-foreground text-xs block">Itens ({resolvedItens.filter(i => i.produto).length} produtos)</span>
+                    <span className="text-muted-foreground text-xs block">
+                      Itens ({resolvedItens.filter(i => i.produto).length} produtos → {totalOPs} OPs)
+                    </span>
                     <div className="mt-1 space-y-1">
-                      {resolvedItens.filter(i => i.produto).map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs">
-                          <Badge variant="outline" className="font-mono text-[10px]">{codigoManual}-{String(idx + 1).padStart(2, '0')}</Badge>
-                          <span>{item.produto!.nome}</span>
-                          <span className="text-muted-foreground">× {item.quantidade}</span>
-                        </div>
-                      ))}
+                      {(() => {
+                        let seq = 0;
+                        return resolvedItens.filter(i => i.produto).map((item, idx) => {
+                          const fractions = Math.max(1, item.fractionCount);
+                          const masks: string[] = [];
+                          for (let f = 0; f < fractions; f++) {
+                            seq++;
+                            masks.push(getPreviewOPMask(seq));
+                          }
+                          return (
+                            <div key={idx} className="flex items-center gap-2 text-xs flex-wrap">
+                              {masks.map((m, mi) => (
+                                <Badge key={mi} variant="outline" className="font-mono text-[10px]">{m}</Badge>
+                              ))}
+                              <span>{item.produto!.nome}</span>
+                              <span className="text-muted-foreground">× {item.quantidade}</span>
+                              {fractions > 1 && <span className="text-muted-foreground">({fractions} frações)</span>}
+                            </div>
+                          );
+                        });
+                      })()}
                     </div>
                   </div>
                   <div>
@@ -517,7 +585,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           ) : (
             <Button
               onClick={handleSave}
-              disabled={!canProceedStep3}
+              disabled={!canProceedStep3 || isLocked}
               className="bg-success hover:bg-success/90 gap-2"
             >
               <Check className="h-4 w-4" />

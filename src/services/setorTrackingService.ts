@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { verificarFechamentoPedido } from "./aprovacaoService";
 
 export interface SetorProdutivo {
   id: string;
@@ -11,16 +12,13 @@ export interface RastreamentoSetor {
   id: string;
   op_id: string;
   setor_id: string;
-  status: string; // 'pendente' | 'entrada' | 'baixa'
+  status: string;
   data_entrada: string | null;
   data_baixa: string | null;
   operador: string | null;
   observacoes: string | null;
 }
 
-/**
- * Fetch all active setores ordered by `ordem`.
- */
 export async function fetchSetores(): Promise<SetorProdutivo[]> {
   const { data, error } = await supabase
     .from("setores_produtivos")
@@ -32,9 +30,6 @@ export async function fetchSetores(): Promise<SetorProdutivo[]> {
   return data as SetorProdutivo[];
 }
 
-/**
- * Fetch tracking records for a specific OP.
- */
 export async function fetchRastreamentoOP(opId: string): Promise<RastreamentoSetor[]> {
   const { data, error } = await supabase
     .from("setor_rastreamento")
@@ -55,6 +50,7 @@ export async function fetchRastreamentoOP(opId: string): Promise<RastreamentoSet
  * - Cannot skip sectors (previous sector must be "baixa")
  * - Cannot double-baixa
  * - When last sector is baixa'd, mark OP as "Producao Finalizada"
+ * - Then check auto-close on the parent pedido
  */
 export async function handleSetorClick(
   opId: string,
@@ -62,17 +58,12 @@ export async function handleSetorClick(
   setores: SetorProdutivo[]
 ): Promise<{ error: string | null; newStatus?: string }> {
   try {
-    // Fetch current tracking for this OP
     const tracking = await fetchRastreamentoOP(opId);
-
-    // Find existing record for this sector
     const existing = tracking.find((t) => t.setor_id === setorId);
-
-    // Find sector order
     const setorAtual = setores.find((s) => s.id === setorId);
     if (!setorAtual) return { error: "Setor não encontrado" };
 
-    // Check sequential order: previous sector must be "baixa"
+    // Check sequential order
     const setorIndex = setores.findIndex((s) => s.id === setorId);
     if (setorIndex > 0) {
       const setorAnterior = setores[setorIndex - 1];
@@ -93,7 +84,9 @@ export async function handleSetorClick(
 
       if (error) return { error: error.message };
 
-      // Log action
+      // Update current_sector on OP
+      await supabase.from("ops").update({ current_sector: setorAtual.nome }).eq("id", opId);
+
       await supabase.from("action_logs").insert({
         action: "setor_entrada",
         entity: "setor_rastreamento",
@@ -117,7 +110,6 @@ export async function handleSetorClick(
 
       if (error) return { error: error.message };
 
-      // Log action
       await supabase.from("action_logs").insert({
         action: "setor_baixa",
         entity: "setor_rastreamento",
@@ -126,13 +118,12 @@ export async function handleSetorClick(
         details: { setor_id: setorId, setor_nome: setorAtual.nome } as any,
       });
 
-      // Check if this was the last sector
+      // Check if last sector
       const isLastSetor = setorIndex === setores.length - 1;
       if (isLastSetor) {
-        // Mark OP as "Producao Finalizada"
         await supabase
           .from("ops")
-          .update({ status_producao: "Producao Finalizada" })
+          .update({ status_producao: "Producao Finalizada", current_sector: "Finalizado" })
           .eq("id", opId);
 
         await supabase.from("action_logs").insert({
@@ -141,6 +132,9 @@ export async function handleSetorClick(
           entity_id: opId,
           status: "success",
         });
+
+        // AUTO-CLOSE: Check if all OPs for the pedido are finalized
+        await verificarFechamentoPedido(opId);
       }
 
       return { error: null, newStatus: "baixa" };
@@ -162,13 +156,12 @@ export async function handleSetorClick(
 export async function fetchOPsComRastreamento() {
   const { data: ops, error: opsError } = await supabase
     .from("ops")
-    .select("*, familia_op!inner(numero_familia, pedido_id)")
+    .select("*")
     .neq("status_producao", "Producao Finalizada")
     .order("created_at", { ascending: false });
 
   if (opsError || !ops) return [];
 
-  // Fetch all tracking records
   const opIds = ops.map((op) => op.id);
   if (opIds.length === 0) return [];
 
