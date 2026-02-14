@@ -1,26 +1,25 @@
 import { useState, useEffect } from 'react';
 import { 
-  Search, Filter, Plus, Edit, Eye, Package, FileText, 
+  Search, Plus, Edit, Eye, Package, FileText, 
   Truck, BarChart3, CheckCircle2, Clock, AlertTriangle, 
-  Calendar, ChevronDown, ChevronUp, Check
+  Calendar, Check
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { KPICard } from '@/components/ui/KPICard';
-import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { CIVCadastroPedidoStepper, type PedidoStepper } from './CIVCadastroPedidoStepper';
+import { CIVCadastroPedidoStepper, type PedidoStepper, type PedidoStepperItem } from './CIVCadastroPedidoStepper';
 import { toast } from 'sonner';
 import { fetchPedidos, insertPedido, updatePedido, type PedidoDB } from '@/services/pedidoService';
 import { aprovarPedido } from '@/services/aprovacaoService';
+import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 
-// Tipos
 interface Pedido {
   id: string;
   codigo: string;
@@ -57,7 +56,7 @@ export function CIVCarteiraProducao() {
   // Aprovação
   const [aprovacaoOpen, setAprovacaoOpen] = useState(false);
   const [pedidoParaAprovar, setPedidoParaAprovar] = useState<Pedido | null>(null);
-  const [itensAprovacao, setItensAprovacao] = useState<{ produto_nome: string; quantidade: number; tempo_unitario: number; valor_unitario: number }[]>([]);
+  const [itensAprovacao, setItensAprovacao] = useState<PedidoStepperItem[]>([]);
   const [aprovando, setAprovando] = useState(false);
 
   useEffect(() => {
@@ -68,7 +67,7 @@ export function CIVCarteiraProducao() {
     setLoading(true);
     const { data, error } = await fetchPedidos();
     if (error) {
-      toast.error('Erro ao carregar pedidos do banco', { description: error });
+      toast.error('Erro ao carregar pedidos', { description: error });
       setLoading(false);
       return;
     }
@@ -112,7 +111,7 @@ export function CIVCarteiraProducao() {
     setStepperOpen(true);
   };
 
-  const handleSavePedido = async (data: Partial<PedidoStepper>) => {
+  const handleSavePedido = async (data: Partial<PedidoStepper>, itens?: PedidoStepperItem[]) => {
     if (editingPedido) {
       const { error } = await updatePedido(editingPedido.id, {
         cliente: data.cliente,
@@ -123,6 +122,7 @@ export function CIVCarteiraProducao() {
         valor_total: data.valorTotal,
         prazo_entrega: data.prazoEntrega || null,
         status: data.status || editingPedido.status,
+        codigo: data.codigo || editingPedido.codigo,
       });
       if (error) {
         toast.error('❌ Falha ao atualizar pedido', { description: error });
@@ -130,9 +130,9 @@ export function CIVCarteiraProducao() {
       }
       toast.success('✅ Pedido atualizado');
     } else {
-      const newCodigo = `PED-${String(Date.now()).slice(-4)}`;
-      const { error } = await insertPedido({
-        codigo: newCodigo,
+      // Insert pedido
+      const { data: newPedido, error } = await insertPedido({
+        codigo: data.codigo || `PED-${String(Date.now()).slice(-4)}`,
         cliente: data.cliente || '',
         produto: data.produto || '',
         quantidade: data.quantidade || 1,
@@ -148,24 +148,65 @@ export function CIVCarteiraProducao() {
         data_expedicao: null,
         origem_dado: 'manual',
       });
-      if (error) {
-        toast.error('❌ Falha ao criar pedido', { description: error });
+      if (error || !newPedido) {
+        toast.error('❌ Falha ao criar pedido', { description: error || 'Erro desconhecido' });
         return;
       }
+
+      // Insert itens_pedido for each product
+      if (itens && itens.length > 0) {
+        const itensToInsert = itens.map(item => ({
+          pedido_id: newPedido.id,
+          produto_nome: item.produto_nome,
+          quantidade: item.quantidade,
+          tempo_unitario: item.tempo_unitario,
+          valor_unitario: item.valor_unitario,
+          tempo_total: item.quantidade * item.tempo_unitario,
+          valor_total: item.quantidade * item.valor_unitario,
+          observacoes: item.observacoes || null,
+        }));
+
+        const { error: itensError } = await supabase
+          .from('itens_pedido')
+          .insert(itensToInsert);
+
+        if (itensError) {
+          toast.error('⚠ Pedido criado mas erro ao salvar itens', { description: itensError.message });
+        }
+      }
+
       toast.success('✅ Pedido criado — Aguardando aprovação');
     }
     await loadPedidos();
   };
 
-  // Aprovação
-  const handleIniciarAprovacao = (pedido: Pedido) => {
+  // Aprovação — carrega itens existentes do pedido
+  const handleIniciarAprovacao = async (pedido: Pedido) => {
     setPedidoParaAprovar(pedido);
-    setItensAprovacao([{
-      produto_nome: pedido.produto,
-      quantidade: pedido.quantidade,
-      tempo_unitario: 1,
-      valor_unitario: pedido.valorTotal / Math.max(1, pedido.quantidade),
-    }]);
+    
+    // Load existing itens_pedido
+    const { data: existingItens } = await supabase
+      .from('itens_pedido')
+      .select('*')
+      .eq('pedido_id', pedido.id);
+
+    if (existingItens && existingItens.length > 0) {
+      setItensAprovacao(existingItens.map(i => ({
+        produto_nome: i.produto_nome,
+        produto_id: i.produto_id || undefined,
+        quantidade: i.quantidade,
+        tempo_unitario: Number(i.tempo_unitario),
+        valor_unitario: Number(i.valor_unitario),
+      })));
+    } else {
+      // Fallback: use pedido's single product
+      setItensAprovacao([{
+        produto_nome: pedido.produto,
+        quantidade: pedido.quantidade,
+        tempo_unitario: 1,
+        valor_unitario: pedido.valorTotal / Math.max(1, pedido.quantidade),
+      }]);
+    }
     setAprovacaoOpen(true);
   };
 
@@ -179,17 +220,13 @@ export function CIVCarteiraProducao() {
       toast.error(`❌ Erro na aprovação: ${result.error}`);
     } else {
       toast.success(
-        `✅ Pedido aprovado! Família OP: ${result.familiaNumero}`,
+        `✅ Pedido aprovado! OPs: ${result.familiaNumero}`,
         { description: `Prazo calculado: ${result.prazoEntrega ? new Date(result.prazoEntrega).toLocaleDateString('pt-BR') : '—'}` }
       );
       setAprovacaoOpen(false);
       await loadPedidos();
     }
     setAprovando(false);
-  };
-
-  const addItemAprovacao = () => {
-    setItensAprovacao([...itensAprovacao, { produto_nome: '', quantidade: 1, tempo_unitario: 1, valor_unitario: 0 }]);
   };
 
   return (
@@ -208,7 +245,7 @@ export function CIVCarteiraProducao() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Buscar pedido, cliente ou produto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
-        <Button size="sm" className="bg-civ hover:bg-civ/90" onClick={handleNewPedido}>
+        <Button size="sm" className="bg-success hover:bg-success/90" onClick={handleNewPedido}>
           <Plus className="h-4 w-4 mr-2" />
           Novo Pedido
         </Button>
@@ -221,9 +258,9 @@ export function CIVCarteiraProducao() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-                  <th className="text-left py-3 px-4 text-muted-foreground font-medium">Código</th>
+                  <th className="text-left py-3 px-4 text-muted-foreground font-medium">Nº Pedido</th>
                   <th className="text-left py-3 px-4 text-muted-foreground font-medium">Cliente</th>
-                  <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Produto</th>
+                  <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Produto(s)</th>
                   <th className="text-center py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Qtd</th>
                   <th className="text-center py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Prazo</th>
                   <th className="text-center py-3 px-4 text-muted-foreground font-medium">OP</th>
@@ -319,94 +356,35 @@ export function CIVCarteiraProducao() {
               Aprovar Pedido — {pedidoParaAprovar?.codigo}
             </DialogTitle>
             <DialogDescription>
-              Defina os itens e tempos. A aprovação gera automaticamente Família OP + 1 OP por item.
+              Confirme os itens abaixo. A aprovação gera 1 OP por item automaticamente.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-2">
             <div className="p-3 rounded-lg bg-civ/10 border border-civ/30 text-sm">
               <p><strong>Cliente:</strong> {pedidoParaAprovar?.cliente}</p>
-              <p><strong>Produto:</strong> {pedidoParaAprovar?.produto}</p>
               <p><strong>Valor:</strong> R$ {pedidoParaAprovar?.valorTotal.toLocaleString('pt-BR')}</p>
             </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-bold">Itens do Pedido</Label>
-                <Button variant="outline" size="sm" onClick={addItemAprovacao}>
-                  <Plus className="h-3 w-3 mr-1" /> Item
-                </Button>
-              </div>
+            <div className="space-y-2">
+              <Label className="text-sm font-bold">Itens do Pedido ({itensAprovacao.length})</Label>
               {itensAprovacao.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-4 gap-2 p-3 rounded-lg bg-secondary/20 border border-border/30">
-                  <div className="col-span-4 sm:col-span-1">
-                    <Label className="text-[10px]">Produto</Label>
-                    <Input
-                      value={item.produto_nome}
-                      onChange={(e) => {
-                        const updated = [...itensAprovacao];
-                        updated[idx].produto_nome = e.target.value;
-                        setItensAprovacao(updated);
-                      }}
-                      placeholder="Nome do produto"
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px]">Qtd</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      value={item.quantidade}
-                      onChange={(e) => {
-                        const updated = [...itensAprovacao];
-                        updated[idx].quantidade = parseInt(e.target.value) || 1;
-                        setItensAprovacao(updated);
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px]">Tempo/un (h)</Label>
-                    <Input
-                      type="number"
-                      min={0.1}
-                      step={0.1}
-                      value={item.tempo_unitario}
-                      onChange={(e) => {
-                        const updated = [...itensAprovacao];
-                        updated[idx].tempo_unitario = parseFloat(e.target.value) || 1;
-                        setItensAprovacao(updated);
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[10px]">Valor/un (R$)</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={item.valor_unitario}
-                      onChange={(e) => {
-                        const updated = [...itensAprovacao];
-                        updated[idx].valor_unitario = parseFloat(e.target.value) || 0;
-                        setItensAprovacao(updated);
-                      }}
-                      className="h-8 text-xs"
-                    />
-                  </div>
+                <div key={idx} className="p-3 rounded-lg bg-secondary/20 border border-border/30 text-sm flex items-center gap-3">
+                  <Badge variant="outline" className="font-mono text-[10px]">
+                    {pedidoParaAprovar?.codigo}-{String(idx + 1).padStart(2, '0')}
+                  </Badge>
+                  <span className="flex-1">{item.produto_nome}</span>
+                  <span className="text-muted-foreground">× {item.quantidade}</span>
+                  <span className="text-muted-foreground">{(item.quantidade * item.tempo_unitario).toFixed(1)}h</span>
                 </div>
               ))}
             </div>
 
-            {/* Summary */}
             <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-sm">
-              <p className="font-bold text-success">Resumo da aprovação:</p>
-              <p>Itens: {itensAprovacao.length} | OPs a gerar: {itensAprovacao.length}</p>
-              <p>Carga total: {itensAprovacao.reduce((s, i) => s + i.quantidade * i.tempo_unitario, 0).toFixed(1)}h</p>
+              <p className="font-bold text-success">Resumo:</p>
+              <p>OPs a gerar: {itensAprovacao.length} | Carga: {itensAprovacao.reduce((s, i) => s + i.quantidade * i.tempo_unitario, 0).toFixed(1)}h</p>
               <p className="text-xs text-muted-foreground mt-1">
-                O prazo será calculado automaticamente com base na capacidade finita configurada.
+                O prazo será calculado com base na capacidade finita configurada.
               </p>
             </div>
           </div>

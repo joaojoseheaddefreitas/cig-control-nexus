@@ -66,7 +66,20 @@ export async function aprovarPedido(
       return { error: `Erro ao inserir itens: ${itensError?.message}` };
     }
 
-    // 5. Generate familia_op number
+    // 5. Get pedido codigo for OP numbering
+    const { data: pedidoData, error: pedidoFetchError } = await supabase
+      .from("pedidos")
+      .select("codigo")
+      .eq("id", pedidoId)
+      .single();
+
+    if (pedidoFetchError || !pedidoData) {
+      return { error: `Erro ao buscar pedido: ${pedidoFetchError?.message}` };
+    }
+
+    const codigoPedido = pedidoData.codigo;
+
+    // 6. Generate familia_op number (sequential)
     const { data: familiaNumData, error: familiaNumError } = await supabase
       .rpc("gerar_numero_familia");
 
@@ -76,11 +89,11 @@ export async function aprovarPedido(
 
     const numeroFamilia = familiaNumData as string;
 
-    // 6. Create familia_op
+    // 7. Create familia_op
     const { data: familia, error: familiaError } = await supabase
       .from("familia_op")
       .insert({
-        numero_familia: numeroFamilia,
+        numero_familia: codigoPedido,
         pedido_id: pedidoId,
         total_ops: insertedItens.length,
         tempo_total_familia: cargaNovoPedido,
@@ -93,11 +106,11 @@ export async function aprovarPedido(
       return { error: `Erro ao criar família OP: ${familiaError?.message}` };
     }
 
-    // 7. Create 1 OP per item
+    // 8. Create 1 OP per item — numbering: {codigo}-01, {codigo}-02
     const opsToInsert = insertedItens.map((item, idx) => ({
       familia_op_id: familia.id,
       item_pedido_id: item.id,
-      numero_op: `${numeroFamilia}-${idx + 1}/${insertedItens.length}`,
+      numero_op: `${codigoPedido}-${String(idx + 1).padStart(2, '0')}`,
       produto_nome: item.produto_nome,
       quantidade: item.quantidade,
       tempo_unitario: Number(item.tempo_unitario),
@@ -113,7 +126,7 @@ export async function aprovarPedido(
       return { error: `Erro ao criar OPs: ${opsError.message}` };
     }
 
-    // 8. Update pedido
+    // 9. Update pedido
     const { error: pedidoError } = await supabase
       .from("pedidos")
       .update({
@@ -121,7 +134,7 @@ export async function aprovarPedido(
         status_producao: "programado",
         prazo_entrega: prazoEntregaStr,
         prazo_calculado_dias: diasProducao,
-        op: numeroFamilia,
+        op: codigoPedido,
       })
       .eq("id", pedidoId);
 
@@ -129,14 +142,14 @@ export async function aprovarPedido(
       return { error: `Erro ao atualizar pedido: ${pedidoError.message}` };
     }
 
-    // 9. Log action
+    // 10. Log action
     await supabase.from("action_logs").insert({
       action: "aprovar_pedido",
       entity: "pedidos",
       entity_id: pedidoId,
       status: "success",
       details: {
-        familia: numeroFamilia,
+        familia: codigoPedido,
         total_ops: insertedItens.length,
         carga_horas: cargaNovoPedido,
         prazo_dias: diasProducao,
@@ -144,7 +157,7 @@ export async function aprovarPedido(
       } as any,
     });
 
-    return { error: null, familiaNumero: numeroFamilia, prazoEntrega: prazoEntregaStr };
+    return { error: null, familiaNumero: codigoPedido, prazoEntrega: prazoEntregaStr };
   } catch (e: any) {
     return { error: e.message || "Erro desconhecido na aprovação" };
   }
