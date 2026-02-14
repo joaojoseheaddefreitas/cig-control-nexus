@@ -114,10 +114,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
             <span className="text-sm text-success font-medium">Sistema Online</span>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>{new Date().toLocaleString('pt-BR')}</span>
-          </div>
+          
         </div>
       </div>
 

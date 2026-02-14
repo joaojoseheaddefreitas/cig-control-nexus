@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Factory, AlertTriangle } from 'lucide-react';
+import { RefreshCw, Factory } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   fetchSetores,
@@ -10,6 +10,7 @@ import {
   handleSetorClick,
   type SetorProdutivo,
 } from '@/services/setorTrackingService';
+import { getOPDisplayMask } from '@/services/aprovacaoService';
 
 interface OPComRastreamento {
   id: string;
@@ -18,6 +19,8 @@ interface OPComRastreamento {
   quantidade: number;
   tempo_total: number;
   status_producao: string;
+  sequence_number: number | null;
+  total_ops_at_generation: number | null;
   rastreamento: {
     setor_id: string;
     status: string;
@@ -84,7 +87,6 @@ export function CIPGradeIndustrial() {
     }
   };
 
-  // Calculate total load per sector
   const cargaPorSetor = setores.map((s) => {
     const opsNoSetor = ops.filter((op) => {
       const track = op.rastreamento?.find((t) => t.setor_id === s.id);
@@ -162,7 +164,7 @@ export function CIPGradeIndustrial() {
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border/50 bg-secondary/30">
-              <th className="text-left py-2.5 px-3 font-medium text-muted-foreground sticky left-0 bg-secondary/30 z-10 min-w-[140px]">
+              <th className="text-left py-2.5 px-3 font-medium text-muted-foreground sticky left-0 bg-secondary/30 z-10 min-w-[160px]">
                 OP / Produto
               </th>
               <th className="text-center py-2.5 px-1 font-medium text-muted-foreground min-w-[40px]">Qtd</th>
@@ -177,36 +179,43 @@ export function CIPGradeIndustrial() {
             </tr>
           </thead>
           <tbody>
-            {ops.map((op) => (
-              <tr key={op.id} className="border-b border-border/30 hover:bg-secondary/20">
-                <td className="py-2 px-3 sticky left-0 bg-card/80 z-10">
-                  <div className="font-mono font-bold text-foreground">{op.numero_op}</div>
-                  <div className="text-muted-foreground truncate max-w-[130px]">{op.produto_nome}</div>
-                </td>
-                <td className="text-center py-2 px-1 text-foreground font-bold">{op.quantidade}</td>
-                <td className="text-center py-2 px-1 text-cip font-bold">{Number(op.tempo_total).toFixed(1)}</td>
-                {setores.map((s) => {
-                  const status = getCellStatus(op, s.id);
-                  const isProcessing = processing === `${op.id}-${s.id}`;
-                  return (
-                    <td key={s.id} className="text-center py-1 px-0.5">
-                      <button
-                        onClick={() => status !== 'baixa' && handleCellClick(op.id, s.id)}
-                        disabled={isProcessing || status === 'baixa'}
-                        className={cn(
-                          'w-10 h-8 rounded border text-xs font-bold transition-all',
-                          getCellClass(status),
-                          isProcessing && 'animate-pulse'
-                        )}
-                        title={`${op.numero_op} → ${s.nome}: ${status}`}
-                      >
-                        {isProcessing ? '...' : getCellLabel(status)}
-                      </button>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
+            {ops.map((op) => {
+              const displayMask = getOPDisplayMask(
+                op.numero_op,
+                op.sequence_number,
+                op.total_ops_at_generation
+              );
+              return (
+                <tr key={op.id} className="border-b border-border/30 hover:bg-secondary/20">
+                  <td className="py-2 px-3 sticky left-0 bg-card/80 z-10">
+                    <div className="font-mono font-bold text-foreground">{displayMask}</div>
+                    <div className="text-muted-foreground truncate max-w-[150px]">{op.produto_nome}</div>
+                  </td>
+                  <td className="text-center py-2 px-1 text-foreground font-bold">{op.quantidade}</td>
+                  <td className="text-center py-2 px-1 text-cip font-bold">{Number(op.tempo_total).toFixed(1)}</td>
+                  {setores.map((s) => {
+                    const status = getCellStatus(op, s.id);
+                    const isProcessing = processing === `${op.id}-${s.id}`;
+                    return (
+                      <td key={s.id} className="text-center py-1 px-0.5">
+                        <button
+                          onClick={() => status !== 'baixa' && handleCellClick(op.id, s.id)}
+                          disabled={isProcessing || status === 'baixa'}
+                          className={cn(
+                            'w-10 h-8 rounded border text-xs font-bold transition-all',
+                            getCellClass(status),
+                            isProcessing && 'animate-pulse'
+                          )}
+                          title={`${displayMask} → ${s.nome}: ${status}`}
+                        >
+                          {isProcessing ? '...' : getCellLabel(status)}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

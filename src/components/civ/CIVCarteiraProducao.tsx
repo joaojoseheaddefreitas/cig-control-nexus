@@ -164,6 +164,7 @@ export function CIVCarteiraProducao() {
           tempo_total: item.quantidade * item.tempo_unitario,
           valor_total: item.quantidade * item.valor_unitario,
           observacoes: item.observacoes || null,
+          fraction_count: Math.max(1, item.fraction_count || 1),
         }));
 
         const { error: itensError } = await supabase
