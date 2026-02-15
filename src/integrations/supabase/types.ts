@@ -310,7 +310,7 @@ export type Database = {
           sequence_number: number | null
           status_faturamento: string
           status_producao: string
-          tempo_total: number
+          tempo_total: number | null
           tempo_unitario: number
           total_ops_at_generation: number | null
           updated_at: string
@@ -333,7 +333,7 @@ export type Database = {
           sequence_number?: number | null
           status_faturamento?: string
           status_producao?: string
-          tempo_total?: number
+          tempo_total?: number | null
           tempo_unitario?: number
           total_ops_at_generation?: number | null
           updated_at?: string
@@ -356,7 +356,7 @@ export type Database = {
           sequence_number?: number | null
           status_faturamento?: string
           status_producao?: string
-          tempo_total?: number
+          tempo_total?: number | null
           tempo_unitario?: number
           total_ops_at_generation?: number | null
           updated_at?: string
