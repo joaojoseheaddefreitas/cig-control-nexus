@@ -64,7 +64,7 @@ export function CIPGradeIndustrial() {
 
   const getCellStatus = (op: OPComRastreamento, setorId: string): 'pendente' | 'entrada' | 'baixa' => {
     const track = op.rastreamento?.find((t) => t.setor_id === setorId);
-    if (!track) return 'pendente';
+    if (!track || track.status === 'pendente') return 'pendente';
     return track.status as 'entrada' | 'baixa';
   };
 

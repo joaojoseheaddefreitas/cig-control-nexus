@@ -63,29 +63,44 @@ export async function handleSetorClick(
     const setorAtual = setores.find((s) => s.id === setorId);
     if (!setorAtual) return { error: "Setor não encontrado" };
 
-    // Check sequential order
+    // Check sequential order — previous sector must have "baixa"
     const setorIndex = setores.findIndex((s) => s.id === setorId);
     if (setorIndex > 0) {
       const setorAnterior = setores[setorIndex - 1];
       const trackAnterior = tracking.find((t) => t.setor_id === setorAnterior.id);
-      if (!trackAnterior || trackAnterior.status !== "baixa") {
+      if (!trackAnterior || (trackAnterior.status !== "baixa")) {
         return { error: `Setor anterior "${setorAnterior.nome}" precisa estar com Baixa primeiro` };
       }
     }
 
-    if (!existing) {
-      // First click: register Entrada
-      const { error } = await supabase.from("setor_rastreamento").insert({
-        op_id: opId,
-        setor_id: setorId,
-        status: "entrada",
-        data_entrada: new Date().toISOString(),
-      });
+    if (!existing || existing.status === "pendente") {
+      // First click: register Entrada (or upgrade from pre-created "pendente")
+      if (existing) {
+        // Update pre-created entry from approval
+        const { error } = await supabase
+          .from("setor_rastreamento")
+          .update({
+            status: "entrada",
+            data_entrada: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+        if (error) return { error: error.message };
+      } else {
+        // Create new entry (shouldn't happen normally, but safe fallback)
+        const { error } = await supabase.from("setor_rastreamento").insert({
+          op_id: opId,
+          setor_id: setorId,
+          status: "entrada",
+          data_entrada: new Date().toISOString(),
+        });
+        if (error) return { error: error.message };
+      }
 
-      if (error) return { error: error.message };
-
-      // Update current_sector on OP
-      await supabase.from("ops").update({ current_sector: setorAtual.nome }).eq("id", opId);
+      // Update current_sector on OP + status to em_producao
+      await supabase.from("ops").update({
+        current_sector: setorAtual.nome,
+        status_producao: "em_producao",
+      }).eq("id", opId);
 
       await supabase.from("action_logs").insert({
         action: "setor_entrada",
