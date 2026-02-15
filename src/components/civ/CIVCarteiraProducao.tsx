@@ -161,7 +161,6 @@ export function CIVCarteiraProducao() {
           quantidade: item.quantidade,
           tempo_unitario: item.tempo_unitario,
           valor_unitario: item.valor_unitario,
-          tempo_total: item.quantidade * item.tempo_unitario,
           valor_total: item.quantidade * item.valor_unitario,
           observacoes: item.observacoes || null,
           fraction_count: Math.max(1, item.fraction_count || 1),
