@@ -67,7 +67,6 @@ export async function aprovarPedido(
       quantidade: number;
       tempo_unitario: number;
       valor_unitario: number;
-      tempo_total: number | null;
       fraction_count: number;
     }>;
 
@@ -85,7 +84,6 @@ export async function aprovarPedido(
         quantidade: i.quantidade,
         tempo_unitario: Number(i.tempo_unitario),
         valor_unitario: Number(i.valor_unitario),
-        tempo_total: Number(i.tempo_total) || i.quantidade * Number(i.tempo_unitario),
         fraction_count: (i as any).fraction_count || 1,
       }));
     } else {
@@ -97,7 +95,6 @@ export async function aprovarPedido(
         quantidade: item.quantidade,
         tempo_unitario: item.tempo_unitario,
         valor_unitario: item.valor_unitario,
-        tempo_total: item.quantidade * item.tempo_unitario,
         valor_total: item.quantidade * item.valor_unitario,
         observacoes: item.observacoes || null,
         fraction_count: Math.max(1, item.fraction_count || 1),
@@ -119,7 +116,6 @@ export async function aprovarPedido(
         quantidade: i.quantidade,
         tempo_unitario: Number(i.tempo_unitario),
         valor_unitario: Number(i.valor_unitario),
-        tempo_total: Number(i.tempo_total) || i.quantidade * Number(i.tempo_unitario),
         fraction_count: (i as any).fraction_count || 1,
       }));
     }
