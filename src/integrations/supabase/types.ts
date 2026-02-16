@@ -44,6 +44,24 @@ export type Database = {
         }
         Relationships: []
       }
+      carteira_producao: {
+        Row: {
+          id: string
+          total_horas_acumuladas: number
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          total_horas_acumuladas?: number
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          total_horas_acumuladas?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       configuracoes_capacidade: {
         Row: {
           capacidade_produtiva_diaria: number
@@ -308,6 +326,7 @@ export type Database = {
           produto_nome: string
           quantidade: number
           sequence_number: number | null
+          sequencia_fila: number | null
           status_faturamento: string
           status_producao: string
           tempo_total: number | null
@@ -331,6 +350,7 @@ export type Database = {
           produto_nome: string
           quantidade?: number
           sequence_number?: number | null
+          sequencia_fila?: number | null
           status_faturamento?: string
           status_producao?: string
           tempo_total?: number | null
@@ -354,6 +374,7 @@ export type Database = {
           produto_nome?: string
           quantidade?: number
           sequence_number?: number | null
+          sequencia_fila?: number | null
           status_faturamento?: string
           status_producao?: string
           tempo_total?: number | null
@@ -391,6 +412,7 @@ export type Database = {
           cliente: string
           codigo: string
           created_at: string
+          data_aprovacao: string | null
           data_entrada: string
           data_expedicao: string | null
           data_faturamento: string | null
@@ -415,6 +437,7 @@ export type Database = {
           cliente: string
           codigo: string
           created_at?: string
+          data_aprovacao?: string | null
           data_entrada?: string
           data_expedicao?: string | null
           data_faturamento?: string | null
@@ -439,6 +462,7 @@ export type Database = {
           cliente?: string
           codigo?: string
           created_at?: string
+          data_aprovacao?: string | null
           data_entrada?: string
           data_expedicao?: string | null
           data_faturamento?: string | null
