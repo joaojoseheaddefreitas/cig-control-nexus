@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Search, Plus, Edit, Eye, Package, FileText, 
   Truck, BarChart3, CheckCircle2, Clock, AlertTriangle, 
-  Calendar, Check
+  Calendar, Check, Ban
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -13,7 +13,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { CIVCadastroPedidoStepper, type PedidoStepper, type PedidoStepperItem } from './CIVCadastroPedidoStepper';
 import { toast } from 'sonner';
 import { fetchPedidos, insertPedido, updatePedido, type PedidoDB } from '@/services/pedidoService';
-import { aprovarPedido } from '@/services/aprovacaoService';
+import { aprovarPedido, anularPedido, verificarEdicaoPedido } from '@/services/aprovacaoService';
 import { supabase } from '@/integrations/supabase/client';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
@@ -42,8 +42,10 @@ const statusConfig: Record<string, { label: string; color: string; icon: typeof 
   programado: { label: 'Programado', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: Calendar },
   em_producao: { label: 'Em Produção', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: Package },
   produzido: { label: 'Produzido', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle2 },
+  finalizado: { label: 'Finalizado', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle2 },
   expedido: { label: 'Expedido', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: Truck },
   faturado: { label: 'Faturado', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: FileText },
+  cancelado: { label: 'Cancelado', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: Ban },
 };
 
 export function CIVCarteiraProducao() {
@@ -311,7 +313,31 @@ export function CIVCarteiraProducao() {
                                 Aprovar
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => { setEditingPedido(pedido); setStepperOpen(true); }}>
+                            {pedido.status !== 'cancelado' && pedido.status !== 'finalizado' && (
+                              <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:bg-destructive/10" onClick={async () => {
+                                const result = await anularPedido(pedido.id);
+                                if (result.error) {
+                                  toast.error(result.error);
+                                } else {
+                                  toast.success('Pedido anulado com sucesso');
+                                  await loadPedidos();
+                                }
+                              }}>
+                                <Ban className="h-3 w-3 mr-1" />
+                                Anular
+                              </Button>
+                            )}
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={async () => {
+                              if (pedido.op) {
+                                const check = await verificarEdicaoPedido(pedido.id);
+                                if (!check.podeEditar) {
+                                  toast.error(check.motivo || 'Edição bloqueada');
+                                  return;
+                                }
+                              }
+                              setEditingPedido(pedido);
+                              setStepperOpen(true);
+                            }}>
                               <Edit className="h-4 w-4" />
                             </Button>
                           </div>

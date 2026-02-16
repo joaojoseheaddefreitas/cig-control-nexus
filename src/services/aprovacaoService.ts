@@ -1,38 +1,44 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
   fetchConfigCapacidade,
-  fetchCargaCarteira,
   calcularDiasProducao,
   calcularDataEntrega,
 } from "./capacidadeService";
+import {
+  fetchCarteiraHoras,
+  adicionarHorasCarteira,
+  subtrairHorasCarteira,
+} from "./carteiraService";
 
 interface ItemPedido {
-  id?: string; // existing item id (when loading from DB)
+  id?: string;
   produto_nome: string;
   produto_id?: string;
   quantidade: number;
   tempo_unitario: number;
   valor_unitario: number;
   observacoes?: string;
-  fraction_count?: number; // how many OPs to split this item into (>=1)
+  fraction_count?: number;
 }
 
 /**
- * Approve a pedido:
- * 1. Load or insert itens_pedido
- * 2. Create familia_op
- * 3. Create OPs per item respecting fraction_count
- * 4. Calculate prazo from finite capacity
- * 5. Create op_route_steps snapshot
- * 6. Update pedido status + prazo
- * 7. Lock the pedido (immutable after OP generation)
+ * Approve a pedido — complete industrial flow:
+ * 1. Idempotency check
+ * 2. Load/insert itens_pedido (never send tempo_total)
+ * 3. Calculate deadline from carteira_producao + new load
+ * 4. Create familia_op
+ * 5. Create OPs with 1/N logic (never send tempo_total)
+ * 6. Snapshot route to op_route_steps
+ * 7. Create setor_rastreamento entries
+ * 8. Update carteira_producao
+ * 9. Update pedido status + prazo + data_aprovacao
  */
 export async function aprovarPedido(
   pedidoId: string,
   itens: ItemPedido[]
 ): Promise<{ error: string | null; familiaNumero?: string; prazoEntrega?: string }> {
   try {
-    // 0. Idempotency check — prevent double-approval
+    // 0. Idempotency — prevent double approval
     const { data: existingOps } = await supabase
       .from("ops")
       .select("id")
@@ -43,23 +49,23 @@ export async function aprovarPedido(
       return { error: "Pedido já possui OPs geradas. Aprovação duplicada bloqueada." };
     }
 
-    // 1. Fetch capacity config
+    // 1. Fetch capacity config + carteira hours
     const config = await fetchConfigCapacidade();
-    const cargaCarteira = await fetchCargaCarteira();
+    const horasCarteira = await fetchCarteiraHoras();
 
-    // 2. Calculate total hours for new order
+    // 2. Calculate total hours for this order
     const cargaNovoPedido = itens.reduce((sum, item) => {
       const tempo = (item.quantidade || 0) * (item.tempo_unitario || 0);
       return sum + (isNaN(tempo) ? 0 : tempo);
     }, 0);
 
-    // 3. Calculate deadline
-    const cargaTotal = cargaCarteira + cargaNovoPedido;
+    // 3. Calculate deadline: prazo = ceil((carteira + nova_carga) / capacidade_diaria)
+    const cargaTotal = horasCarteira + cargaNovoPedido;
     const diasProducao = calcularDiasProducao(cargaTotal, config.capacidade_produtiva_diaria);
     const dataEntrega = calcularDataEntrega(new Date(), diasProducao, config.considerar_sabado);
     const prazoEntregaStr = dataEntrega.toISOString().split("T")[0];
 
-    // 4. Ensure itens_pedido exist in DB
+    // 4. Ensure itens_pedido exist in DB (never send tempo_total)
     let dbItens: Array<{
       id: string;
       produto_nome: string;
@@ -70,7 +76,6 @@ export async function aprovarPedido(
       fraction_count: number;
     }>;
 
-    // Check if items already exist
     const { data: existingItens } = await supabase
       .from("itens_pedido")
       .select("*")
@@ -87,7 +92,7 @@ export async function aprovarPedido(
         fraction_count: (i as any).fraction_count || 1,
       }));
     } else {
-      // Insert items
+      // Insert items — NO tempo_total in payload
       const itensToInsert = itens.map((item) => ({
         pedido_id: pedidoId,
         produto_nome: item.produto_nome,
@@ -133,7 +138,7 @@ export async function aprovarPedido(
 
     const codigoPedido = pedidoData.codigo;
 
-    // 6. Calculate total OPs across all items (sum of all fraction_counts)
+    // 6. Calculate total OPs (sum of all fraction_counts)
     const totalOPsPedido = dbItens.reduce((sum, item) => sum + item.fraction_count, 0);
 
     // 7. Create familia_op
@@ -153,7 +158,7 @@ export async function aprovarPedido(
       return { error: `Erro ao criar família OP: ${familiaError?.message}` };
     }
 
-    // 8. Create OPs — 1/N logic with fraction_count
+    // 8. Create OPs — 1/N logic. NEVER include tempo_total.
     let globalSequence = 0;
     const opsToInsert: Array<{
       familia_op_id: string;
@@ -173,23 +178,19 @@ export async function aprovarPedido(
     for (const item of dbItens) {
       const fractions = Math.max(1, item.fraction_count);
       const baseQty = Math.floor(item.quantidade / fractions);
-      let remainder = item.quantidade - baseQty * fractions;
+      const remainder = item.quantidade - baseQty * fractions;
 
       for (let f = 0; f < fractions; f++) {
         globalSequence++;
-        // Last fraction gets the remainder
         let qtyThisOp = baseQty;
         if (f === fractions - 1) {
           qtyThisOp += remainder;
         }
 
-        // tempo_total is GENERATED by the database (quantidade * tempo_unitario)
-        // NEVER include it in the insert payload
-
-        // Dynamic mask: single OP = just order number, multiple = order-seq/total
+        // Dynamic mask: single OP = order number, multiple = order-seq/total
         const numeroOp = totalOPsPedido === 1
           ? codigoPedido
-          : `${codigoPedido}-${globalSequence}/${totalOPsPedido}`;
+          : `${codigoPedido}-${String(globalSequence).padStart(2, "0")}`;
 
         opsToInsert.push({
           familia_op_id: familia.id,
@@ -204,6 +205,8 @@ export async function aprovarPedido(
           prazo_entrega: prazoEntregaStr,
           status_producao: "aguardando",
           status_faturamento: "pendente",
+          // sequencia_fila auto-assigned by database sequence
+          // tempo_total NEVER sent — GENERATED column
         });
       }
     }
@@ -217,7 +220,7 @@ export async function aprovarPedido(
       return { error: `Erro ao criar OPs: ${opsError.message}` };
     }
 
-    // 9. Create op_route_steps snapshot (copy current setores as route for each OP)
+    // 9. Snapshot: copy active setores as route for each OP
     const { data: setoresAtivos } = await supabase
       .from("setores_produtivos")
       .select("id, ordem")
@@ -238,7 +241,7 @@ export async function aprovarPedido(
         await supabase.from("op_route_steps").insert(routeSteps);
       }
 
-      // Also create setor_rastreamento entries for tracking
+      // Create setor_rastreamento entries for tracking
       const rastreamentoEntries = insertedOps.flatMap((op) =>
         setoresAtivos.map((setor) => ({
           op_id: op.id,
@@ -252,7 +255,10 @@ export async function aprovarPedido(
       }
     }
 
-    // 10. Update pedido — mark as programado + lock
+    // 10. Update carteira_producao — add new load
+    await adicionarHorasCarteira(cargaNovoPedido);
+
+    // 11. Update pedido — mark as programado + lock + data_aprovacao
     const { error: pedidoError } = await supabase
       .from("pedidos")
       .update({
@@ -261,14 +267,15 @@ export async function aprovarPedido(
         prazo_entrega: prazoEntregaStr,
         prazo_calculado_dias: diasProducao,
         op: codigoPedido,
-      })
+        data_aprovacao: new Date().toISOString(),
+      } as any)
       .eq("id", pedidoId);
 
     if (pedidoError) {
       return { error: `Erro ao atualizar pedido: ${pedidoError.message}` };
     }
 
-    // 11. Log action
+    // 12. Log action
     await supabase.from("action_logs").insert({
       action: "aprovar_pedido",
       entity: "pedidos",
@@ -280,6 +287,8 @@ export async function aprovarPedido(
         carga_horas: cargaNovoPedido,
         prazo_dias: diasProducao,
         prazo_entrega: prazoEntregaStr,
+        horas_carteira_antes: horasCarteira,
+        horas_carteira_depois: horasCarteira + cargaNovoPedido,
       } as any,
     });
 
@@ -290,12 +299,104 @@ export async function aprovarPedido(
 }
 
 /**
+ * Check if a pedido can be edited (all OPs still "aguardando").
+ */
+export async function verificarEdicaoPedido(pedidoId: string): Promise<{
+  podeEditar: boolean;
+  motivo?: string;
+}> {
+  const { data: ops } = await supabase
+    .from("ops")
+    .select("id, status_producao")
+    .eq("pedido_id", pedidoId);
+
+  if (!ops || ops.length === 0) {
+    return { podeEditar: true };
+  }
+
+  const todasAbertas = ops.every((op) => op.status_producao === "aguardando");
+  if (todasAbertas) {
+    return { podeEditar: true };
+  }
+
+  return {
+    podeEditar: false,
+    motivo: "Existem OPs em produção ou finalizadas. Edição bloqueada.",
+  };
+}
+
+/**
+ * Anular (cancel) a pedido and its OPs.
+ */
+export async function anularPedido(pedidoId: string): Promise<{ error: string | null }> {
+  try {
+    const { data: ops } = await supabase
+      .from("ops")
+      .select("id, status_producao")
+      .eq("pedido_id", pedidoId);
+
+    if (!ops || ops.length === 0) {
+      // No OPs, just cancel the pedido
+      await supabase
+        .from("pedidos")
+        .update({ status: "cancelado", status_producao: "cancelado" })
+        .eq("id", pedidoId);
+      return { error: null };
+    }
+
+    const algumIniciada = ops.some(
+      (op) => op.status_producao !== "aguardando" && op.status_producao !== "cancelado"
+    );
+
+    if (algumIniciada) {
+      return { error: "Existem OPs já iniciadas. Anulação total bloqueada. Use encerramento administrativo." };
+    }
+
+    // All OPs are "aguardando" — cancel them and subtract hours from carteira
+    const { data: itens } = await supabase
+      .from("itens_pedido")
+      .select("quantidade, tempo_unitario")
+      .eq("pedido_id", pedidoId);
+
+    const horasTotal = (itens || []).reduce(
+      (sum, i) => sum + Number(i.quantidade) * Number(i.tempo_unitario),
+      0
+    );
+
+    // Cancel OPs
+    await supabase
+      .from("ops")
+      .update({ status_producao: "cancelado" })
+      .eq("pedido_id", pedidoId);
+
+    // Subtract from carteira
+    await subtrairHorasCarteira(horasTotal);
+
+    // Cancel pedido
+    await supabase
+      .from("pedidos")
+      .update({ status: "cancelado", status_producao: "cancelado" })
+      .eq("id", pedidoId);
+
+    await supabase.from("action_logs").insert({
+      action: "anular_pedido",
+      entity: "pedidos",
+      entity_id: pedidoId,
+      status: "success",
+      details: { horas_removidas: horasTotal } as any,
+    });
+
+    return { error: null };
+  } catch (e: any) {
+    return { error: e.message };
+  }
+}
+
+/**
  * Check if all OPs for a pedido are finalized and auto-close the pedido.
- * Called after every setor baixa.
  */
 export async function verificarFechamentoPedido(opId: string): Promise<void> {
   try {
-    // Get pedido_id from OP
     const { data: op } = await supabase
       .from("ops")
       .select("pedido_id, familia_op_id")
@@ -304,7 +405,6 @@ export async function verificarFechamentoPedido(opId: string): Promise<void> {
 
     if (!op?.pedido_id) return;
 
-    // Check all OPs for this pedido
     const { data: allOps } = await supabase
       .from("ops")
       .select("id, status_producao")
@@ -317,16 +417,11 @@ export async function verificarFechamentoPedido(opId: string): Promise<void> {
     );
 
     if (allFinalized) {
-      // Auto-close the pedido
       await supabase
         .from("pedidos")
-        .update({
-          status: "finalizado",
-          status_producao: "finalizado",
-        })
+        .update({ status: "finalizado", status_producao: "finalizado" })
         .eq("id", op.pedido_id);
 
-      // Update familia_op status
       if (op.familia_op_id) {
         await supabase
           .from("familia_op")
@@ -334,13 +429,24 @@ export async function verificarFechamentoPedido(opId: string): Promise<void> {
           .eq("id", op.familia_op_id);
       }
 
-      // Log
+      // Subtract hours from carteira (production complete)
+      const { data: itens } = await supabase
+        .from("itens_pedido")
+        .select("quantidade, tempo_unitario")
+        .eq("pedido_id", op.pedido_id);
+
+      const horasTotal = (itens || []).reduce(
+        (sum, i) => sum + Number(i.quantidade) * Number(i.tempo_unitario),
+        0
+      );
+      await subtrairHorasCarteira(horasTotal);
+
       await supabase.from("action_logs").insert({
         action: "pedido_auto_finalizado",
         entity: "pedidos",
         entity_id: op.pedido_id,
         status: "success",
-        details: { total_ops: allOps.length } as any,
+        details: { total_ops: allOps.length, horas_liberadas: horasTotal } as any,
       });
     }
   } catch (e) {
@@ -349,16 +455,12 @@ export async function verificarFechamentoPedido(opId: string): Promise<void> {
 }
 
 /**
- * Generate the display mask for an OP.
- * - If total_ops == 1: show just the order number "1025"
- * - If total_ops > 1: show "1025-1/3" format
+ * Display mask for an OP (already stored correctly).
  */
 export function getOPDisplayMask(
   numeroOp: string,
-  sequenceNumber: number | null,
-  totalOps: number | null
+  _sequenceNumber: number | null,
+  _totalOps: number | null
 ): string {
-  // numero_op is already stored with the correct mask from generation
-  // Single OP: "1025", Multiple: "1025-1/3"
   return numeroOp;
 }
