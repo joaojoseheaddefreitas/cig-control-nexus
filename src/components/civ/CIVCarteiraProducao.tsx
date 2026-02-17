@@ -15,10 +15,6 @@ import { toast } from 'sonner';
 import { fetchPedidos, insertPedido, updatePedido, type PedidoDB } from '@/services/pedidoService';
 import { aprovarPedido, anularPedido, verificarEdicaoPedido } from '@/services/aprovacaoService';
 import { supabase } from '@/integrations/supabase/client';
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
-} from '@/components/ui/dialog';
-import { Label } from '@/components/ui/label';
 
 interface Pedido {
   id: string;
@@ -55,11 +51,7 @@ export function CIVCarteiraProducao() {
   const [editingPedido, setEditingPedido] = useState<Pedido | null>(null);
   const [loading, setLoading] = useState(true);
   
-  // Aprovação
-  const [aprovacaoOpen, setAprovacaoOpen] = useState(false);
-  const [pedidoParaAprovar, setPedidoParaAprovar] = useState<Pedido | null>(null);
-  const [itensAprovacao, setItensAprovacao] = useState<PedidoStepperItem[]>([]);
-  const [aprovando, setAprovando] = useState(false);
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     loadPedidos();
@@ -131,9 +123,17 @@ export function CIVCarteiraProducao() {
         return;
       }
       toast.success('✅ Pedido atualizado');
-    } else {
-      // Insert pedido
-      const { data: newPedido, error } = await insertPedido({
+      await loadPedidos();
+      return;
+    }
+
+    // === TRANSAÇÃO ÚNICA: Inserir pedido + itens + aprovar + gerar OPs ===
+    setSalvando(true);
+    let pedidoId: string | null = null;
+
+    try {
+      // 1. Inserir pedido
+      const { data: newPedido, error: pedidoError } = await insertPedido({
         codigo: data.codigo || `PED-${String(Date.now()).slice(-4)}`,
         cliente: data.cliente || '',
         produto: data.produto || '',
@@ -150,86 +150,80 @@ export function CIVCarteiraProducao() {
         data_expedicao: null,
         origem_dado: 'manual',
       });
-      if (error || !newPedido) {
-        toast.error('❌ Falha ao criar pedido', { description: error || 'Erro desconhecido' });
+
+      if (pedidoError || !newPedido) {
+        toast.error('❌ Falha ao criar pedido', { description: pedidoError || 'Erro desconhecido' });
+        setSalvando(false);
         return;
       }
+      pedidoId = newPedido.id;
 
-      // Insert itens_pedido for each product
-      if (itens && itens.length > 0) {
-        const itensToInsert = itens.map(item => ({
-          pedido_id: newPedido.id,
-          produto_nome: item.produto_nome,
-          quantidade: item.quantidade,
-          tempo_unitario: item.tempo_unitario,
-          valor_unitario: item.valor_unitario,
-          valor_total: item.quantidade * item.valor_unitario,
-          observacoes: item.observacoes || null,
-          fraction_count: Math.max(1, item.fraction_count || 1),
-        }));
+      // 2. Inserir itens_pedido
+      const itensParaInserir = (itens || []).map(item => ({
+        pedido_id: newPedido.id,
+        produto_nome: item.produto_nome,
+        quantidade: item.quantidade,
+        tempo_unitario: item.tempo_unitario,
+        valor_unitario: item.valor_unitario,
+        valor_total: item.quantidade * item.valor_unitario,
+        observacoes: item.observacoes || null,
+        fraction_count: Math.max(1, item.fraction_count || 1),
+      }));
 
+      if (itensParaInserir.length > 0) {
         const { error: itensError } = await supabase
           .from('itens_pedido')
-          .insert(itensToInsert);
+          .insert(itensParaInserir);
 
         if (itensError) {
-          toast.error('⚠ Pedido criado mas erro ao salvar itens', { description: itensError.message });
+          // Rollback: deletar pedido
+          await supabase.from('pedidos').delete().eq('id', pedidoId);
+          toast.error('❌ Falha ao salvar itens — pedido revertido', { description: itensError.message });
+          setSalvando(false);
+          return;
         }
       }
 
-      toast.success('✅ Pedido criado — Aguardando aprovação');
-    }
-    await loadPedidos();
-  };
+      // 3. Aprovar + Gerar OPs
+      const approvalItens: PedidoStepperItem[] = (itens || []).map(item => ({
+        produto_nome: item.produto_nome,
+        produto_id: item.produto_id,
+        quantidade: item.quantidade,
+        tempo_unitario: item.tempo_unitario,
+        valor_unitario: item.valor_unitario,
+        observacoes: item.observacoes,
+        fraction_count: item.fraction_count,
+      }));
 
-  // Aprovação — carrega itens existentes do pedido
-  const handleIniciarAprovacao = async (pedido: Pedido) => {
-    setPedidoParaAprovar(pedido);
-    
-    // Load existing itens_pedido
-    const { data: existingItens } = await supabase
-      .from('itens_pedido')
-      .select('*')
-      .eq('pedido_id', pedido.id);
+      const result = await aprovarPedido(newPedido.id, approvalItens);
 
-    if (existingItens && existingItens.length > 0) {
-      setItensAprovacao(existingItens.map(i => ({
-        produto_nome: i.produto_nome,
-        produto_id: i.produto_id || undefined,
-        quantidade: i.quantidade,
-        tempo_unitario: Number(i.tempo_unitario),
-        valor_unitario: Number(i.valor_unitario),
-      })));
-    } else {
-      // Fallback: use pedido's single product
-      setItensAprovacao([{
-        produto_nome: pedido.produto,
-        quantidade: pedido.quantidade,
-        tempo_unitario: 1,
-        valor_unitario: pedido.valorTotal / Math.max(1, pedido.quantidade),
-      }]);
-    }
-    setAprovacaoOpen(true);
-  };
+      if (result.error) {
+        // Rollback: deletar itens + pedido
+        await supabase.from('itens_pedido').delete().eq('pedido_id', pedidoId);
+        await supabase.from('pedidos').delete().eq('id', pedidoId);
+        toast.error('❌ Falha ao gerar OPs — pedido revertido', { description: result.error });
+        setSalvando(false);
+        return;
+      }
 
-  const handleConfirmarAprovacao = async () => {
-    if (!pedidoParaAprovar) return;
-    setAprovando(true);
-
-    const result = await aprovarPedido(pedidoParaAprovar.id, itensAprovacao);
-
-    if (result.error) {
-      toast.error(`❌ Erro na aprovação: ${result.error}`);
-    } else {
       toast.success(
         `✅ Pedido aprovado! OPs: ${result.familiaNumero}`,
         { description: `Prazo calculado: ${result.prazoEntrega ? new Date(result.prazoEntrega).toLocaleDateString('pt-BR') : '—'}` }
       );
-      setAprovacaoOpen(false);
-      await loadPedidos();
+    } catch (e: any) {
+      // Rollback em caso de exceção
+      if (pedidoId) {
+        await supabase.from('itens_pedido').delete().eq('pedido_id', pedidoId);
+        await supabase.from('pedidos').delete().eq('id', pedidoId);
+      }
+      toast.error('❌ Erro inesperado — pedido revertido', { description: e.message });
     }
-    setAprovando(false);
+
+    setSalvando(false);
+    await loadPedidos();
   };
+
+  // Aprovação removida — ocorre automaticamente no salvar
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -307,12 +301,6 @@ export function CIVCarteiraProducao() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-1">
-                            {pedido.status === 'aguardando' && (
-                              <Button variant="outline" size="sm" className="h-7 text-xs border-success text-success hover:bg-success/10" onClick={() => handleIniciarAprovacao(pedido)}>
-                                <Check className="h-3 w-3 mr-1" />
-                                Aprovar
-                              </Button>
-                            )}
                             {pedido.status !== 'cancelado' && pedido.status !== 'finalizado' && (
                               <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:bg-destructive/10" onClick={async () => {
                                 const result = await anularPedido(pedido.id);
@@ -373,56 +361,6 @@ export function CIVCarteiraProducao() {
         onSave={handleSavePedido}
       />
 
-      {/* Dialog de Aprovação */}
-      <Dialog open={aprovacaoOpen} onOpenChange={setAprovacaoOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-success">
-              <Check className="h-5 w-5" />
-              Aprovar Pedido — {pedidoParaAprovar?.codigo}
-            </DialogTitle>
-            <DialogDescription>
-              Confirme os itens abaixo. A aprovação gera 1 OP por item automaticamente.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="p-3 rounded-lg bg-civ/10 border border-civ/30 text-sm">
-              <p><strong>Cliente:</strong> {pedidoParaAprovar?.cliente}</p>
-              <p><strong>Valor:</strong> R$ {pedidoParaAprovar?.valorTotal.toLocaleString('pt-BR')}</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label className="text-sm font-bold">Itens do Pedido ({itensAprovacao.length})</Label>
-              {itensAprovacao.map((item, idx) => (
-                <div key={idx} className="p-3 rounded-lg bg-secondary/20 border border-border/30 text-sm flex items-center gap-3">
-                  <Badge variant="outline" className="font-mono text-[10px]">
-                    {pedidoParaAprovar?.codigo}-{String(idx + 1).padStart(2, '0')}
-                  </Badge>
-                  <span className="flex-1">{item.produto_nome}</span>
-                  <span className="text-muted-foreground">× {item.quantidade}</span>
-                  <span className="text-muted-foreground">{(item.quantidade * item.tempo_unitario).toFixed(1)}h</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="p-3 rounded-lg bg-success/10 border border-success/30 text-sm">
-              <p className="font-bold text-success">Resumo:</p>
-              <p>OPs a gerar: {itensAprovacao.length} | Carga: {itensAprovacao.reduce((s, i) => s + i.quantidade * i.tempo_unitario, 0).toFixed(1)}h</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                O prazo será calculado com base na capacidade finita configurada.
-              </p>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAprovacaoOpen(false)}>Cancelar</Button>
-            <Button className="bg-success hover:bg-success/90" onClick={handleConfirmarAprovacao} disabled={aprovando}>
-              {aprovando ? 'Processando...' : '✅ Confirmar Aprovação'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
