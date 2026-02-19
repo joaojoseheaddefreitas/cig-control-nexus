@@ -62,6 +62,54 @@ export type Database = {
         }
         Relationships: []
       }
+      clientes: {
+        Row: {
+          ativo: boolean
+          cidade: string | null
+          cnpj_cpf: string | null
+          created_at: string
+          email: string | null
+          endereco: string | null
+          estado: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          status_financeiro: string
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cidade?: string | null
+          cnpj_cpf?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          status_financeiro?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cidade?: string | null
+          cnpj_cpf?: string | null
+          created_at?: string
+          email?: string | null
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          status_financeiro?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       configuracoes_capacidade: {
         Row: {
           capacidade_produtiva_diaria: number
@@ -225,6 +273,98 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      leads: {
+        Row: {
+          created_at: string
+          email: string | null
+          empresa: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          origem: string
+          status: string
+          telefone: string | null
+          updated_at: string
+          vendedor_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          empresa?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          origem?: string
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+          vendedor_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          empresa?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          origem?: string
+          status?: string
+          telefone?: string | null
+          updated_at?: string
+          vendedor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "leads_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      lojas: {
+        Row: {
+          ativo: boolean
+          cidade: string | null
+          created_at: string
+          endereco: string | null
+          estado: string | null
+          id: string
+          nome: string
+          responsavel: string | null
+          telefone: string | null
+          tipo: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          cidade?: string | null
+          created_at?: string
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          nome: string
+          responsavel?: string | null
+          telefone?: string | null
+          tipo?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          cidade?: string | null
+          created_at?: string
+          endereco?: string | null
+          estado?: string | null
+          id?: string
+          nome?: string
+          responsavel?: string | null
+          telefone?: string | null
+          tipo?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       movimentacoes_estoque: {
         Row: {
@@ -410,6 +550,7 @@ export type Database = {
         Row: {
           canal: string
           cliente: string
+          cliente_id: string | null
           codigo: string
           created_at: string
           data_aprovacao: string | null
@@ -418,8 +559,10 @@ export type Database = {
           data_faturamento: string | null
           data_nf: string | null
           id: string
+          loja_id: string | null
           margem: number
           nota_fiscal: string | null
+          observacoes: string | null
           op: string | null
           origem_dado: string
           prazo_calculado_dias: number | null
@@ -431,10 +574,12 @@ export type Database = {
           status_producao: string
           updated_at: string
           valor_total: number
+          vendedor_id: string | null
         }
         Insert: {
           canal?: string
           cliente: string
+          cliente_id?: string | null
           codigo: string
           created_at?: string
           data_aprovacao?: string | null
@@ -443,8 +588,10 @@ export type Database = {
           data_faturamento?: string | null
           data_nf?: string | null
           id?: string
+          loja_id?: string | null
           margem?: number
           nota_fiscal?: string | null
+          observacoes?: string | null
           op?: string | null
           origem_dado?: string
           prazo_calculado_dias?: number | null
@@ -456,10 +603,12 @@ export type Database = {
           status_producao?: string
           updated_at?: string
           valor_total?: number
+          vendedor_id?: string | null
         }
         Update: {
           canal?: string
           cliente?: string
+          cliente_id?: string | null
           codigo?: string
           created_at?: string
           data_aprovacao?: string | null
@@ -468,8 +617,10 @@ export type Database = {
           data_faturamento?: string | null
           data_nf?: string | null
           id?: string
+          loja_id?: string | null
           margem?: number
           nota_fiscal?: string | null
+          observacoes?: string | null
           op?: string | null
           origem_dado?: string
           prazo_calculado_dias?: number | null
@@ -481,8 +632,88 @@ export type Database = {
           status_producao?: string
           updated_at?: string
           valor_total?: number
+          vendedor_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "pedidos_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_loja_id_fkey"
+            columns: ["loja_id"]
+            isOneToOne: false
+            referencedRelation: "lojas"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pipeline: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          data_previsao: string | null
+          etapa: string
+          id: string
+          observacoes: string | null
+          probabilidade: number
+          titulo: string
+          updated_at: string
+          valor_estimado: number
+          vendedor_id: string | null
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          data_previsao?: string | null
+          etapa?: string
+          id?: string
+          observacoes?: string | null
+          probabilidade?: number
+          titulo: string
+          updated_at?: string
+          valor_estimado?: number
+          vendedor_id?: string | null
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          data_previsao?: string | null
+          etapa?: string
+          id?: string
+          observacoes?: string | null
+          probabilidade?: number
+          titulo?: string
+          updated_at?: string
+          valor_estimado?: number
+          vendedor_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pipeline_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pipeline_vendedor_id_fkey"
+            columns: ["vendedor_id"]
+            isOneToOne: false
+            referencedRelation: "vendedores"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       produtos: {
         Row: {
@@ -516,6 +747,59 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      projetos_especiais: {
+        Row: {
+          cliente_id: string | null
+          created_at: string
+          data_inicio: string | null
+          data_previsao_entrega: string | null
+          descricao: string | null
+          id: string
+          nome: string
+          observacoes: string | null
+          responsavel: string | null
+          status: string
+          updated_at: string
+          valor_estimado: number
+        }
+        Insert: {
+          cliente_id?: string | null
+          created_at?: string
+          data_inicio?: string | null
+          data_previsao_entrega?: string | null
+          descricao?: string | null
+          id?: string
+          nome: string
+          observacoes?: string | null
+          responsavel?: string | null
+          status?: string
+          updated_at?: string
+          valor_estimado?: number
+        }
+        Update: {
+          cliente_id?: string | null
+          created_at?: string
+          data_inicio?: string | null
+          data_previsao_entrega?: string | null
+          descricao?: string | null
+          id?: string
+          nome?: string
+          observacoes?: string | null
+          responsavel?: string | null
+          status?: string
+          updated_at?: string
+          valor_estimado?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "projetos_especiais_cliente_id_fkey"
+            columns: ["cliente_id"]
+            isOneToOne: false
+            referencedRelation: "clientes"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       setor_rastreamento: {
         Row: {
@@ -594,6 +878,53 @@ export type Database = {
           ordem?: number
         }
         Relationships: []
+      }
+      vendedores: {
+        Row: {
+          ativo: boolean
+          comissao_percentual: number
+          created_at: string
+          email: string | null
+          id: string
+          loja_id: string | null
+          meta_mensal: number
+          nome: string
+          telefone: string | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          comissao_percentual?: number
+          created_at?: string
+          email?: string | null
+          id?: string
+          loja_id?: string | null
+          meta_mensal?: number
+          nome: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          comissao_percentual?: number
+          created_at?: string
+          email?: string | null
+          id?: string
+          loja_id?: string | null
+          meta_mensal?: number
+          nome?: string
+          telefone?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "vendedores_loja_id_fkey"
+            columns: ["loja_id"]
+            isOneToOne: false
+            referencedRelation: "lojas"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
