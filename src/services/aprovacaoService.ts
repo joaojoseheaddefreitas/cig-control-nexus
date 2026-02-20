@@ -100,7 +100,7 @@ export async function aprovarPedido(
         quantidade: item.quantidade,
         tempo_unitario: item.tempo_unitario,
         valor_unitario: item.valor_unitario,
-        valor_total: item.quantidade * item.valor_unitario,
+        // valor_total é coluna GERADA pelo banco — NUNCA incluir no payload
         observacoes: item.observacoes || null,
         fraction_count: Math.max(1, item.fraction_count || 1),
       }));
