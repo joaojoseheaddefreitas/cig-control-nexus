@@ -5,19 +5,15 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from '@/components/ui/select';
 import {
   AlertTriangle, Check, ChevronLeft, ChevronRight,
-  ShieldAlert, ShieldCheck, Package, Calendar, User, Plus, Trash2
+  ShieldAlert, ShieldCheck, Package, Calendar, User, Plus, Trash2, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { produtosVenda } from '@/data/civData';
-import {
-  getMateriaisPorProduto, verificarAlertasMateriais,
-  clientesFinanceiro, type Material
-} from '@/data/cicData';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface PedidoStepperItem {
@@ -62,10 +58,30 @@ interface StepperProps {
 }
 
 interface ItemForm {
-  produtoCodigo: string;
+  produtoId: string;
+  produtoNome: string;
+  tempoUnitario: number;
+  precoBase: number;
   quantidade: number;
   observacoes: string;
   fractionCount: number;
+}
+
+interface ProdutoDB {
+  id: string;
+  nome: string;
+  tempo_unitario: number;
+  unidade: string;
+  descricao: string | null;
+  ativo: boolean;
+}
+
+interface ClienteDB {
+  id: string;
+  nome: string;
+  status_financeiro: string;
+  cidade: string | null;
+  estado: string | null;
 }
 
 const steps = [
@@ -74,40 +90,73 @@ const steps = [
   { number: 3, title: 'Prazo e Confirmação', icon: Calendar },
 ];
 
-const HORAS_POR_DIA = 8;
-const DIAS_EXTRA_FALTA_MATERIAL = 5;
+const PRECO_PADRAO = 0; // Preço será informado manualmente se não houver preco_base
 
 export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }: StepperProps) {
   const [currentStep, setCurrentStep] = useState(1);
+  const [clienteId, setClienteId] = useState('');
   const [clienteNome, setClienteNome] = useState('');
   const [canal, setCanal] = useState('');
   const [margem, setMargem] = useState(0);
   const [codigoManual, setCodigoManual] = useState('');
-  const [itens, setItens] = useState<ItemForm[]>([{ produtoCodigo: '', quantidade: 1, observacoes: '', fractionCount: 1 }]);
+  const [observacoesGerais, setObservacoesGerais] = useState('');
+  const [itens, setItens] = useState<ItemForm[]>([
+    { produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, quantidade: 1, observacoes: '', fractionCount: 1 }
+  ]);
 
-  // If editing an already-approved pedido, lock fields
+  // Dados reais do banco
+  const [produtos, setProdutos] = useState<ProdutoDB[]>([]);
+  const [clientes, setClientes] = useState<ClienteDB[]>([]);
+  const [loadingData, setLoadingData] = useState(false);
+
+  // Se o pedido já tem OP, bloqueia edição de itens
   const isLocked = !!(pedido?.op);
+
+  // Carregar produtos e clientes do banco
+  useEffect(() => {
+    if (open) {
+      loadMasterData();
+    }
+  }, [open]);
+
+  const loadMasterData = async () => {
+    setLoadingData(true);
+    const [prodRes, cliRes] = await Promise.all([
+      supabase.from('produtos').select('id, nome, tempo_unitario, unidade, descricao, ativo').eq('ativo', true).order('nome'),
+      supabase.from('clientes').select('id, nome, status_financeiro, cidade, estado').eq('ativo', true).order('nome'),
+    ]);
+    if (prodRes.data) setProdutos(prodRes.data);
+    if (cliRes.data) setClientes(cliRes.data);
+    setLoadingData(false);
+  };
 
   useEffect(() => {
     if (open) {
       if (pedido) {
         setClienteNome(pedido.cliente);
+        setClienteId('');
         setCanal(pedido.canal);
         setMargem(pedido.margem);
         setCodigoManual(pedido.codigo || '');
-        const prod = produtosVenda.find(p => p.nome === pedido.produto);
-        setItens([{ produtoCodigo: prod?.codigo || '', quantidade: pedido.quantidade, observacoes: '', fractionCount: 1 }]);
+        setObservacoesGerais('');
+        setItens([{ produtoId: '', produtoNome: pedido.produto, tempoUnitario: 1, precoBase: 0, quantidade: pedido.quantidade, observacoes: '', fractionCount: 1 }]);
       } else {
-        setClienteNome('');
-        setCanal('');
-        setMargem(0);
-        setCodigoManual('');
-        setItens([{ produtoCodigo: '', quantidade: 1, observacoes: '', fractionCount: 1 }]);
+        resetForm();
         generateNextCodigo();
       }
       setCurrentStep(1);
     }
   }, [open, pedido]);
+
+  const resetForm = () => {
+    setClienteId('');
+    setClienteNome('');
+    setCanal('');
+    setMargem(0);
+    setCodigoManual('');
+    setObservacoesGerais('');
+    setItens([{ produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, quantidade: 1, observacoes: '', fractionCount: 1 }]);
+  };
 
   const generateNextCodigo = async () => {
     const { data } = await supabase
@@ -125,61 +174,34 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   };
 
   const selectedCliente = useMemo(
-    () => clientesFinanceiro.find(c => c.clienteNome === clienteNome),
-    [clienteNome]
+    () => clientes.find(c => c.id === clienteId || c.nome === clienteNome),
+    [clientes, clienteId, clienteNome]
   );
 
-  const resolvedItens = useMemo(() => {
-    return itens.map(item => ({
-      ...item,
-      produto: produtosVenda.find(p => p.codigo === item.produtoCodigo),
-    }));
-  }, [itens]);
-
-  const hasMaterialShortage = useMemo(() => {
-    return itens.some(item => {
-      if (!item.produtoCodigo) return false;
-      const { temFalta } = verificarAlertasMateriais(item.produtoCodigo);
-      return temFalta;
-    });
-  }, [itens]);
-
-  const valorTotal = useMemo(() => {
-    return resolvedItens.reduce((sum, item) => {
-      return sum + (item.produto ? item.produto.precoBase * item.quantidade : 0);
-    }, 0);
-  }, [resolvedItens]);
-
-  const cargaTotalHoras = useMemo(() => {
-    return resolvedItens.reduce((sum, item) => {
-      return sum + (item.produto ? item.produto.tempoProducao * item.quantidade : 0);
-    }, 0);
-  }, [resolvedItens]);
-
-  // Total OPs = sum of all fraction_counts
   const totalOPs = useMemo(() => {
     return itens.reduce((sum, item) => sum + Math.max(1, item.fractionCount), 0);
   }, [itens]);
 
-  const leadTimeDays = Math.ceil(cargaTotalHoras / HORAS_POR_DIA);
+  const valorTotal = useMemo(() => {
+    return itens.reduce((sum, item) => sum + (item.precoBase * item.quantidade), 0);
+  }, [itens]);
 
-  const deliveryDate = useMemo(() => {
-    if (cargaTotalHoras <= 0) return null;
-    const today = new Date();
-    const extraDays = hasMaterialShortage ? DIAS_EXTRA_FALTA_MATERIAL : 0;
-    const totalDays = leadTimeDays + extraDays;
-    const date = new Date(today);
-    date.setDate(date.getDate() + totalDays);
-    return date;
-  }, [leadTimeDays, hasMaterialShortage, cargaTotalHoras]);
+  const cargaTotalHoras = useMemo(() => {
+    return itens.reduce((sum, item) => sum + (item.tempoUnitario * item.quantidade), 0);
+  }, [itens]);
+
+  const getPreviewOPMask = (globalSeq: number) => {
+    if (totalOPs === 1) return codigoManual;
+    return `${codigoManual}-${String(globalSeq).padStart(2, '0')}`;
+  };
 
   const canProceedStep1 = clienteNome && canal && codigoManual;
-  const canProceedStep2 = itens.length > 0 && itens.every(i => i.produtoCodigo && i.quantidade > 0);
-  const canProceedStep3 = selectedCliente?.statusFinanceiro !== 'bloqueado';
+  const canProceedStep2 = itens.length > 0 && itens.every(i => i.produtoNome && i.quantidade > 0);
+  const clienteBloqueado = selectedCliente?.status_financeiro === 'BLOQUEADO';
 
   const addItem = () => {
     if (isLocked) return;
-    setItens([...itens, { produtoCodigo: '', quantidade: 1, observacoes: '', fractionCount: 1 }]);
+    setItens([...itens, { produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, quantidade: 1, observacoes: '', fractionCount: 1 }]);
   };
 
   const removeItem = (idx: number) => {
@@ -194,22 +216,32 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     setItens(updated);
   };
 
-  // Generate display mask for preview
-  const getPreviewOPMask = (globalSeq: number) => {
-    if (totalOPs === 1) return codigoManual;
-    return `${codigoManual}-${globalSeq}/${totalOPs}`;
+  const selectProduto = (idx: number, produtoId: string) => {
+    if (isLocked) return;
+    const prod = produtos.find(p => p.id === produtoId);
+    if (!prod) return;
+    const updated = [...itens];
+    updated[idx] = {
+      ...updated[idx],
+      produtoId: prod.id,
+      produtoNome: prod.nome,
+      tempoUnitario: Number(prod.tempo_unitario),
+      precoBase: 0, // Sem preco_base na tabela atual; usuário informa manualmente
+    };
+    setItens(updated);
   };
 
   const handleSave = () => {
     if (!clienteNome || !codigoManual) return;
 
-    const stepperItens: PedidoStepperItem[] = resolvedItens
-      .filter(i => i.produto)
+    const stepperItens: PedidoStepperItem[] = itens
+      .filter(i => i.produtoNome)
       .map(i => ({
-        produto_nome: i.produto!.nome,
+        produto_nome: i.produtoNome,
+        produto_id: i.produtoId || undefined,
         quantidade: i.quantidade,
-        tempo_unitario: i.produto!.tempoProducao,
-        valor_unitario: i.produto!.precoBase,
+        tempo_unitario: i.tempoUnitario,
+        valor_unitario: i.precoBase,
         observacoes: i.observacoes || undefined,
         fraction_count: Math.max(1, i.fractionCount),
       }));
@@ -222,7 +254,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       canal,
       margem,
       valorTotal,
-      prazoEntrega: deliveryDate ? deliveryDate.toISOString().split('T')[0] : '',
+      prazoEntrega: '',
       dataEntrada: new Date().toISOString().split('T')[0],
       status: 'aguardando',
     }, stepperItens);
@@ -241,7 +273,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           <DialogDescription>
             {isLocked
               ? 'Pedido já possui OPs geradas. Edição de itens bloqueada.'
-              : pedido ? 'Edite os dados do pedido selecionado' : 'Preencha os dados do pedido em 3 etapas. Cada produto gerará OPs independentes.'
+              : pedido ? 'Edite os dados do pedido selecionado' : 'Preencha os dados em 3 etapas. Cada produto gerará OPs independentes.'
             }
           </DialogDescription>
         </DialogHeader>
@@ -259,28 +291,25 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                       ? 'bg-success/20 border-success text-success'
                       : 'bg-secondary border-border text-muted-foreground'
                 )}>
-                  {currentStep > step.number ? (
-                    <Check className="h-5 w-5" />
-                  ) : (
-                    <step.icon className="h-5 w-5" />
-                  )}
+                  {currentStep > step.number ? <Check className="h-5 w-5" /> : <step.icon className="h-5 w-5" />}
                 </div>
-                <span className={cn(
-                  'text-xs mt-1.5 font-medium whitespace-nowrap',
-                  currentStep === step.number ? 'text-civ' : 'text-muted-foreground'
-                )}>
+                <span className={cn('text-xs mt-1.5 font-medium whitespace-nowrap', currentStep === step.number ? 'text-civ' : 'text-muted-foreground')}>
                   {step.title}
                 </span>
               </div>
               {i < steps.length - 1 && (
-                <div className={cn(
-                  'w-12 sm:w-16 h-0.5 mx-1 sm:mx-2 mb-6',
-                  currentStep > step.number ? 'bg-success' : 'bg-border'
-                )} />
+                <div className={cn('w-12 sm:w-16 h-0.5 mx-1 sm:mx-2 mb-6', currentStep > step.number ? 'bg-success' : 'bg-border')} />
               )}
             </div>
           ))}
         </div>
+
+        {loadingData && (
+          <div className="flex items-center justify-center py-4 gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span className="text-sm">Carregando dados...</span>
+          </div>
+        )}
 
         {/* Step Content */}
         <div className="min-h-[300px]">
@@ -297,36 +326,57 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   className="mt-1 font-mono"
                   disabled={isLocked}
                 />
-                <p className="text-xs text-muted-foreground mt-1">Gerado automaticamente, mas pode ser editado. Deve ser único.</p>
+                <p className="text-xs text-muted-foreground mt-1">Gerado automaticamente, mas pode ser editado.</p>
               </div>
 
               <div>
                 <label className="text-sm font-medium text-foreground">Cliente *</label>
-                <Select value={clienteNome} onValueChange={setClienteNome} disabled={isLocked}>
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Selecione o cliente" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {clientesFinanceiro.map((c) => (
-                      <SelectItem key={c.clienteNome} value={c.clienteNome}>
-                        <span className="flex items-center gap-2">
-                          {c.clienteNome}
-                          {c.statusFinanceiro === 'bloqueado' && <ShieldAlert className="h-3 w-3 text-destructive" />}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {clientes.length > 0 ? (
+                  <Select
+                    value={clienteId}
+                    onValueChange={(val) => {
+                      setClienteId(val);
+                      const c = clientes.find(c => c.id === val);
+                      if (c) setClienteNome(c.nome);
+                    }}
+                    disabled={isLocked}
+                  >
+                    <SelectTrigger className="mt-1">
+                      <SelectValue placeholder="Selecione o cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clientes.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          <span className="flex items-center gap-2">
+                            {c.nome}
+                            {c.status_financeiro === 'BLOQUEADO' && <ShieldAlert className="h-3 w-3 text-destructive" />}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={clienteNome}
+                    onChange={(e) => setClienteNome(e.target.value)}
+                    placeholder="Nome do cliente"
+                    className="mt-1"
+                    disabled={isLocked}
+                  />
+                )}
+                {clientes.length === 0 && !loadingData && (
+                  <p className="text-xs text-warning mt-1">⚠ Nenhum cliente cadastrado. Cadastre clientes no sistema primeiro, ou digite o nome.</p>
+                )}
               </div>
 
               {selectedCliente && (
                 <div className={cn(
                   'p-4 rounded-lg border flex items-start gap-3',
-                  selectedCliente.statusFinanceiro === 'liberado'
+                  selectedCliente.status_financeiro === 'LIBERADO'
                     ? 'bg-success/10 border-success/30'
                     : 'bg-destructive/10 border-destructive/30'
                 )}>
-                  {selectedCliente.statusFinanceiro === 'liberado' ? (
+                  {selectedCliente.status_financeiro === 'LIBERADO' ? (
                     <ShieldCheck className="h-6 w-6 text-success flex-shrink-0 mt-0.5" />
                   ) : (
                     <ShieldAlert className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
@@ -334,19 +384,15 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   <div className="flex-1">
                     <Badge className={cn(
                       'text-xs font-semibold',
-                      selectedCliente.statusFinanceiro === 'liberado'
+                      selectedCliente.status_financeiro === 'LIBERADO'
                         ? 'bg-success/20 text-success border-success/30'
                         : 'bg-destructive/20 text-destructive border-destructive/30'
                     )}>
-                      {selectedCliente.statusFinanceiro === 'liberado' ? '✓ LIBERADO' : '✕ BLOQUEADO'}
+                      {selectedCliente.status_financeiro === 'LIBERADO' ? '✓ LIBERADO' : '✕ BLOQUEADO'}
                     </Badge>
-                    {selectedCliente.statusFinanceiro === 'bloqueado' && (
-                      <p className="text-xs text-destructive mt-1 font-medium">{selectedCliente.motivoBloqueio}</p>
-                    )}
-                    <div className="text-xs text-muted-foreground mt-2 grid grid-cols-2 gap-x-4 gap-y-1">
-                      <span>Limite: R$ {selectedCliente.limiteCredito.toLocaleString('pt-BR')}</span>
-                      <span>Devedor: R$ {selectedCliente.saldoDevedor.toLocaleString('pt-BR')}</span>
-                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {selectedCliente.cidade}{selectedCliente.estado ? `/${selectedCliente.estado}` : ''}
+                    </p>
                   </div>
                 </div>
               )}
@@ -365,10 +411,35 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   </SelectContent>
                 </Select>
               </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground">Margem (%)</label>
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={margem}
+                  onChange={(e) => setMargem(Number(e.target.value))}
+                  className="mt-1"
+                  disabled={isLocked}
+                />
+              </div>
+
+              <div>
+                <label className="text-sm font-medium text-foreground">Observações Gerais do Pedido</label>
+                <Textarea
+                  value={observacoesGerais}
+                  onChange={(e) => setObservacoesGerais(e.target.value)}
+                  placeholder="Observações gerais que serão herdadas pelas OPs..."
+                  className="mt-1 resize-none"
+                  rows={3}
+                  disabled={isLocked}
+                />
+              </div>
             </div>
           )}
 
-          {/* ─── STEP 2: Múltiplos Produtos com Fraction Count ─── */}
+          {/* ─── STEP 2: Múltiplos Produtos ─── */}
           {currentStep === 2 && (
             <div className="space-y-4 animate-fade-in">
               <div className="flex items-center justify-between">
@@ -383,7 +454,6 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
               {(() => {
                 let globalSeq = 0;
                 return itens.map((item, idx) => {
-                  const prod = produtosVenda.find(p => p.codigo === item.produtoCodigo);
                   const fractions = Math.max(1, item.fractionCount);
                   const opsForItem: string[] = [];
                   for (let f = 0; f < fractions; f++) {
@@ -404,22 +474,32 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                       <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
                         <div className="sm:col-span-2">
                           <label className="text-[10px] text-muted-foreground">Produto *</label>
-                          <Select
-                            value={item.produtoCodigo}
-                            onValueChange={(val) => updateItem(idx, 'produtoCodigo', val)}
-                            disabled={isLocked}
-                          >
-                            <SelectTrigger className="h-8 text-xs">
-                              <SelectValue placeholder="Selecione" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {produtosVenda.filter(p => p.ativo).map((p) => (
-                                <SelectItem key={p.codigo} value={p.codigo}>
-                                  {p.codigo} — {p.nome}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                          {produtos.length > 0 ? (
+                            <Select
+                              value={item.produtoId}
+                              onValueChange={(val) => selectProduto(idx, val)}
+                              disabled={isLocked}
+                            >
+                              <SelectTrigger className="h-8 text-xs">
+                                <SelectValue placeholder="Selecione" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {produtos.map((p) => (
+                                  <SelectItem key={p.id} value={p.id}>
+                                    {p.nome}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input
+                              value={item.produtoNome}
+                              onChange={(e) => updateItem(idx, 'produtoNome', e.target.value)}
+                              placeholder="Nome do produto"
+                              className="h-8 text-xs"
+                              disabled={isLocked}
+                            />
+                          )}
                         </div>
                         <div>
                           <label className="text-[10px] text-muted-foreground">Quantidade *</label>
@@ -445,11 +525,47 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                           />
                         </div>
                       </div>
-                      {prod && (
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Tempo Unit. (h)</label>
+                          <Input
+                            type="number"
+                            min={0.1}
+                            step={0.1}
+                            value={item.tempoUnitario}
+                            onChange={(e) => updateItem(idx, 'tempoUnitario', parseFloat(e.target.value) || 1)}
+                            className="h-8 text-xs"
+                            disabled={isLocked}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">Valor Unit. (R$)</label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={item.precoBase}
+                            onChange={(e) => updateItem(idx, 'precoBase', parseFloat(e.target.value) || 0)}
+                            className="h-8 text-xs"
+                            disabled={isLocked}
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Observação do Item (herdada pela OP)</label>
+                        <Input
+                          value={item.observacoes}
+                          onChange={(e) => updateItem(idx, 'observacoes', e.target.value)}
+                          placeholder="Especificações técnicas, detalhes..."
+                          className="h-8 text-xs"
+                          disabled={isLocked}
+                        />
+                      </div>
+                      {item.produtoNome && (
                         <div className="space-y-1">
                           <div className="flex gap-4 text-xs text-muted-foreground">
-                            <span>Preço: R$ {(prod.precoBase * item.quantidade).toLocaleString('pt-BR')}</span>
-                            <span>Tempo: {(prod.tempoProducao * item.quantidade).toFixed(1)}h</span>
+                            <span>Subtotal: R$ {(item.precoBase * item.quantidade).toLocaleString('pt-BR')}</span>
+                            <span>Carga: {(item.tempoUnitario * item.quantidade).toFixed(1)}h</span>
                           </div>
                           <div className="flex flex-wrap gap-1">
                             {opsForItem.map((mask, fi) => (
@@ -469,7 +585,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
               </div>
 
               <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 text-xs text-muted-foreground">
-                <strong>{itens.filter(i => i.produtoCodigo).length}</strong> produto(s) → <strong>{totalOPs}</strong> OP(s) independentes | Carga total: <strong>{cargaTotalHoras.toFixed(1)}h</strong>
+                <strong>{itens.filter(i => i.produtoNome).length}</strong> produto(s) → <strong>{totalOPs}</strong> OP(s) | Carga: <strong>{cargaTotalHoras.toFixed(1)}h</strong>
               </div>
             </div>
           )}
@@ -481,32 +597,29 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                 <div className="flex items-center gap-4">
                   <Calendar className="h-8 w-8 text-civ flex-shrink-0" />
                   <div>
-                    <p className="text-sm font-medium text-civ">Data de Entrega Estimada</p>
+                    <p className="text-sm font-medium text-civ">Prazo calculado automaticamente</p>
                     <p className="text-2xl font-bold text-foreground">
-                      {deliveryDate ? deliveryDate.toLocaleDateString('pt-BR') : '—'}
+                      Será calculado após aprovação
                     </p>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Hoje + {leadTimeDays} dias (lead time)
-                      {hasMaterialShortage && (
-                        <span className="text-warning font-medium"> + 5 dias (falta de material)</span>
-                      )}
+                      Carga: {cargaTotalHoras.toFixed(1)}h | Fórmula: (Carteira + Nova Carga) ÷ Capacidade Diária
                     </p>
                   </div>
                 </div>
               </div>
 
-              {selectedCliente?.statusFinanceiro === 'bloqueado' && (
+              {clienteBloqueado && (
                 <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
                   <ShieldAlert className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
                   <div>
                     <p className="text-sm font-bold text-destructive">Cliente BLOQUEADO — Pedido não pode ser confirmado</p>
-                    <p className="text-xs text-muted-foreground">{selectedCliente.motivoBloqueio}</p>
+                    <p className="text-xs text-muted-foreground">Regularize a situação financeira antes de prosseguir.</p>
                   </div>
                 </div>
               )}
 
               <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
-                <p className="text-sm font-semibold mb-3">Resumo do Pedido — {codigoManual}</p>
+                <p className="text-sm font-semibold mb-3">Resumo — {codigoManual}</p>
                 <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
                   <div>
                     <span className="text-muted-foreground text-xs block">Cliente</span>
@@ -518,12 +631,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   </div>
                   <div className="col-span-2">
                     <span className="text-muted-foreground text-xs block">
-                      Itens ({resolvedItens.filter(i => i.produto).length} produtos → {totalOPs} OPs)
+                      {itens.filter(i => i.produtoNome).length} produto(s) → {totalOPs} OP(s)
                     </span>
                     <div className="mt-1 space-y-1">
                       {(() => {
                         let seq = 0;
-                        return resolvedItens.filter(i => i.produto).map((item, idx) => {
+                        return itens.filter(i => i.produtoNome).map((item, idx) => {
                           const fractions = Math.max(1, item.fractionCount);
                           const masks: string[] = [];
                           for (let f = 0; f < fractions; f++) {
@@ -535,21 +648,27 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                               {masks.map((m, mi) => (
                                 <Badge key={mi} variant="outline" className="font-mono text-[10px]">{m}</Badge>
                               ))}
-                              <span>{item.produto!.nome}</span>
+                              <span>{item.produtoNome}</span>
                               <span className="text-muted-foreground">× {item.quantidade}</span>
-                              {fractions > 1 && <span className="text-muted-foreground">({fractions} frações)</span>}
+                              {item.observacoes && <span className="text-warning text-[10px]">📝 obs</span>}
                             </div>
                           );
                         });
                       })()}
                     </div>
                   </div>
+                  {observacoesGerais && (
+                    <div className="col-span-2">
+                      <span className="text-muted-foreground text-xs block">Observações Gerais</span>
+                      <span className="text-xs italic text-foreground">{observacoesGerais}</span>
+                    </div>
+                  )}
                   <div>
                     <span className="text-muted-foreground text-xs block">Valor Total</span>
                     <span className="font-bold text-foreground">R$ {valorTotal.toLocaleString('pt-BR')}</span>
                   </div>
                   <div>
-                    <span className="text-muted-foreground text-xs block">Carga</span>
+                    <span className="text-muted-foreground text-xs block">Carga Total</span>
                     <span className="font-medium">{cargaTotalHoras.toFixed(1)}h</span>
                   </div>
                 </div>
@@ -585,7 +704,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           ) : (
             <Button
               onClick={handleSave}
-              disabled={!canProceedStep3 || isLocked}
+              disabled={clienteBloqueado || isLocked}
               className="bg-success hover:bg-success/90 gap-2"
             >
               <Check className="h-4 w-4" />
