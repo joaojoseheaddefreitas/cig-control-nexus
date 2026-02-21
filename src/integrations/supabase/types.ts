@@ -718,30 +718,39 @@ export type Database = {
       produtos: {
         Row: {
           ativo: boolean
+          categoria: string
           created_at: string
           descricao: string | null
           id: string
           nome: string
+          observacoes: string | null
+          preco_base: number
           tempo_unitario: number
           unidade: string
           updated_at: string
         }
         Insert: {
           ativo?: boolean
+          categoria?: string
           created_at?: string
           descricao?: string | null
           id?: string
           nome: string
+          observacoes?: string | null
+          preco_base?: number
           tempo_unitario?: number
           unidade?: string
           updated_at?: string
         }
         Update: {
           ativo?: boolean
+          categoria?: string
           created_at?: string
           descricao?: string | null
           id?: string
           nome?: string
+          observacoes?: string | null
+          preco_base?: number
           tempo_unitario?: number
           unidade?: string
           updated_at?: string
