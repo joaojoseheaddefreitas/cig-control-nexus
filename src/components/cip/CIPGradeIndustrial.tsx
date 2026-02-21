@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { RefreshCw, Factory } from 'lucide-react';
+import { RefreshCw, Factory, Printer } from 'lucide-react';
 import { toast } from 'sonner';
+import { imprimirOP } from '@/services/printService';
 import {
   fetchSetores,
   fetchOPsComRastreamento,
@@ -188,7 +189,12 @@ export function CIPGradeIndustrial() {
               return (
                 <tr key={op.id} className="border-b border-border/30 hover:bg-secondary/20">
                   <td className="py-2 px-3 sticky left-0 bg-card/80 z-10">
-                    <div className="font-mono font-bold text-foreground">{displayMask}</div>
+                    <div className="flex items-center gap-1">
+                      <div className="font-mono font-bold text-foreground">{displayMask}</div>
+                      <button onClick={() => imprimirOP(op.id)} className="text-muted-foreground hover:text-foreground" title="Imprimir OP">
+                        <Printer className="h-3 w-3" />
+                      </button>
+                    </div>
                     <div className="text-muted-foreground truncate max-w-[150px]">{op.produto_nome}</div>
                   </td>
                   <td className="text-center py-2 px-1 text-foreground font-bold">{op.quantidade}</td>

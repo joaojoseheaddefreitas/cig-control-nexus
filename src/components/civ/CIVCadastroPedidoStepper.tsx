@@ -204,7 +204,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
 
   const getPreviewOPMask = (globalSeq: number) => {
     if (totalOPs === 1) return codigoManual;
-    return `${codigoManual}-${String(globalSeq).padStart(2, '0')}`;
+    const suffix = String.fromCharCode(64 + globalSeq); // A, B, C...
+    return `${codigoManual}-${suffix}`;
   };
 
   const canProceedStep1 = clienteNome && canal && codigoManual;

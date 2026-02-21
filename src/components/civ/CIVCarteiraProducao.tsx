@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { 
   Search, Plus, Edit, Eye, Package, FileText, 
   Truck, BarChart3, CheckCircle2, Clock, AlertTriangle, 
-  Calendar, Check, Ban
+  Calendar, Check, Ban, Printer
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { CIVCadastroPedidoStepper, type PedidoStepper, type PedidoStepperItem } 
 import { toast } from 'sonner';
 import { fetchPedidos, insertPedido, updatePedido, type PedidoDB } from '@/services/pedidoService';
 import { aprovarPedido, anularPedido, verificarEdicaoPedido } from '@/services/aprovacaoService';
+import { imprimirPedido } from '@/services/printService';
 import { supabase } from '@/integrations/supabase/client';
 
 interface Pedido {
@@ -300,6 +301,9 @@ export function CIVCarteiraProducao() {
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-1">
+                            <Button variant="ghost" size="icon" className="h-8 w-8" title="Imprimir Pedido" onClick={() => imprimirPedido(pedido.id)}>
+                              <Printer className="h-4 w-4" />
+                            </Button>
                             {pedido.status !== 'cancelado' && pedido.status !== 'finalizado' && (
                               <Button variant="ghost" size="sm" className="h-7 text-xs text-destructive hover:bg-destructive/10" onClick={async () => {
                                 const result = await anularPedido(pedido.id);

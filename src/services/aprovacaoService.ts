@@ -159,6 +159,7 @@ export async function aprovarPedido(
     }
 
     // 8. Create OPs — 1/N logic. NEVER include tempo_total.
+    // Numbering: single OP = order number, multiple = order-A, order-B, etc.
     let globalSequence = 0;
     const opsToInsert: Array<{
       familia_op_id: string;
@@ -187,10 +188,11 @@ export async function aprovarPedido(
           qtyThisOp += remainder;
         }
 
-        // Dynamic mask: single OP = order number, multiple = order-seq/total
+        // Dynamic mask: single OP = order number, multiple = order-A, order-B...
+        const suffix = String.fromCharCode(64 + globalSequence); // A=65
         const numeroOp = totalOPsPedido === 1
           ? codigoPedido
-          : `${codigoPedido}-${String(globalSequence).padStart(2, "0")}`;
+          : `${codigoPedido}-${suffix}`;
 
         opsToInsert.push({
           familia_op_id: familia.id,

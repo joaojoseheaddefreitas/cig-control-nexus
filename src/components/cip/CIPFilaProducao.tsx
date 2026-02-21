@@ -5,8 +5,9 @@ import { fetchCarteiraHoras } from '@/services/carteiraService';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { KPICard } from '@/components/ui/KPICard';
-import { RefreshCw, ArrowUpDown, Clock, Factory, Package, BarChart3 } from 'lucide-react';
+import { RefreshCw, ArrowUpDown, Clock, Factory, Package, BarChart3, Printer } from 'lucide-react';
 import { toast } from 'sonner';
+import { imprimirOP } from '@/services/printService';
 
 interface OPFila {
   id: string;
@@ -158,6 +159,7 @@ export function CIPFilaProducao() {
                 <th className="text-center py-2.5 px-2 text-muted-foreground font-medium">Status</th>
                 <th className="text-center py-2.5 px-2 text-muted-foreground font-medium hidden md:table-cell">Setor</th>
                 <th className="text-center py-2.5 px-2 text-muted-foreground font-medium w-20">Ordem</th>
+                <th className="text-center py-2.5 px-2 text-muted-foreground font-medium w-10">🖨</th>
               </tr>
             </thead>
             <tbody>
@@ -194,6 +196,11 @@ export function CIPFilaProducao() {
                         <ArrowUpDown className="h-3 w-3" />
                       </Button>
                     </div>
+                  </td>
+                  <td className="text-center py-2 px-2">
+                    <Button variant="ghost" size="icon" className="h-6 w-6" title="Imprimir OP" onClick={() => imprimirOP(op.id)}>
+                      <Printer className="h-3 w-3" />
+                    </Button>
                   </td>
                 </tr>
               ))}
