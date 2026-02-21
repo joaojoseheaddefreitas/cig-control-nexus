@@ -62,6 +62,8 @@ interface ItemForm {
   produtoNome: string;
   tempoUnitario: number;
   precoBase: number;
+  precoFinal: number;
+  precoManualOverride: boolean;
   quantidade: number;
   observacoes: string;
   fractionCount: number;
@@ -71,6 +73,7 @@ interface ProdutoDB {
   id: string;
   nome: string;
   tempo_unitario: number;
+  preco_base: number;
   unidade: string;
   descricao: string | null;
   ativo: boolean;
@@ -90,7 +93,9 @@ const steps = [
   { number: 3, title: 'Prazo e Confirmação', icon: Calendar },
 ];
 
-const PRECO_PADRAO = 0; // Preço será informado manualmente se não houver preco_base
+const emptyItem = (): ItemForm => ({
+  produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, precoFinal: 0, precoManualOverride: false, quantidade: 1, observacoes: '', fractionCount: 1
+});
 
 export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }: StepperProps) {
   const [currentStep, setCurrentStep] = useState(1);
@@ -100,9 +105,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   const [margem, setMargem] = useState(0);
   const [codigoManual, setCodigoManual] = useState('');
   const [observacoesGerais, setObservacoesGerais] = useState('');
-  const [itens, setItens] = useState<ItemForm[]>([
-    { produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, quantidade: 1, observacoes: '', fractionCount: 1 }
-  ]);
+  const [itens, setItens] = useState<ItemForm[]>([emptyItem()]);
 
   // Dados reais do banco
   const [produtos, setProdutos] = useState<ProdutoDB[]>([]);
@@ -122,10 +125,10 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   const loadMasterData = async () => {
     setLoadingData(true);
     const [prodRes, cliRes] = await Promise.all([
-      supabase.from('produtos').select('id, nome, tempo_unitario, unidade, descricao, ativo').eq('ativo', true).order('nome'),
+      supabase.from('produtos').select('id, nome, tempo_unitario, preco_base, unidade, descricao, ativo').eq('ativo', true).order('nome'),
       supabase.from('clientes').select('id, nome, status_financeiro, cidade, estado').eq('ativo', true).order('nome'),
     ]);
-    if (prodRes.data) setProdutos(prodRes.data);
+    if (prodRes.data) setProdutos(prodRes.data as any);
     if (cliRes.data) setClientes(cliRes.data);
     setLoadingData(false);
   };
@@ -139,7 +142,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
         setMargem(pedido.margem);
         setCodigoManual(pedido.codigo || '');
         setObservacoesGerais('');
-        setItens([{ produtoId: '', produtoNome: pedido.produto, tempoUnitario: 1, precoBase: 0, quantidade: pedido.quantidade, observacoes: '', fractionCount: 1 }]);
+        setItens([{ ...emptyItem(), produtoNome: pedido.produto, quantidade: pedido.quantidade }]);
       } else {
         resetForm();
         generateNextCodigo();
@@ -155,7 +158,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     setMargem(0);
     setCodigoManual('');
     setObservacoesGerais('');
-    setItens([{ produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, quantidade: 1, observacoes: '', fractionCount: 1 }]);
+    setItens([emptyItem()]);
   };
 
   const generateNextCodigo = async () => {
@@ -183,12 +186,21 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   }, [itens]);
 
   const valorTotal = useMemo(() => {
-    return itens.reduce((sum, item) => sum + (item.precoBase * item.quantidade), 0);
+    return itens.reduce((sum, item) => sum + (item.precoFinal * item.quantidade), 0);
   }, [itens]);
 
   const cargaTotalHoras = useMemo(() => {
     return itens.reduce((sum, item) => sum + (item.tempoUnitario * item.quantidade), 0);
   }, [itens]);
+
+  // Recalculate all non-overridden prices when margin changes
+  useEffect(() => {
+    setItens(prev => prev.map(item => {
+      if (item.precoManualOverride || !item.produtoId) return item;
+      const pf = item.precoBase + (item.precoBase * margem / 100);
+      return { ...item, precoFinal: Math.round(pf * 100) / 100 };
+    }));
+  }, [margem]);
 
   const getPreviewOPMask = (globalSeq: number) => {
     if (totalOPs === 1) return codigoManual;
@@ -201,7 +213,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
 
   const addItem = () => {
     if (isLocked) return;
-    setItens([...itens, { produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, quantidade: 1, observacoes: '', fractionCount: 1 }]);
+    setItens([...itens, emptyItem()]);
   };
 
   const removeItem = (idx: number) => {
@@ -213,6 +225,10 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     if (isLocked) return;
     const updated = [...itens];
     (updated[idx] as any)[field] = value;
+    // If user manually edits precoFinal, mark as override
+    if (field === 'precoFinal') {
+      updated[idx].precoManualOverride = true;
+    }
     setItens(updated);
   };
 
@@ -220,13 +236,17 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     if (isLocked) return;
     const prod = produtos.find(p => p.id === produtoId);
     if (!prod) return;
+    const pb = Number(prod.preco_base) || 0;
+    const pf = pb + (pb * margem / 100);
     const updated = [...itens];
     updated[idx] = {
       ...updated[idx],
       produtoId: prod.id,
       produtoNome: prod.nome,
       tempoUnitario: Number(prod.tempo_unitario),
-      precoBase: 0, // Sem preco_base na tabela atual; usuário informa manualmente
+      precoBase: pb,
+      precoFinal: Math.round(pf * 100) / 100,
+      precoManualOverride: false,
     };
     setItens(updated);
   };
@@ -241,7 +261,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
         produto_id: i.produtoId || undefined,
         quantidade: i.quantidade,
         tempo_unitario: i.tempoUnitario,
-        valor_unitario: i.precoBase,
+        valor_unitario: i.precoFinal,
         observacoes: i.observacoes || undefined,
         fraction_count: Math.max(1, i.fractionCount),
       }));
@@ -525,9 +545,9 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                           />
                         </div>
                       </div>
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-3 gap-2">
                         <div>
-                          <label className="text-[10px] text-muted-foreground">Tempo Unit. (h)</label>
+                          <label className="text-[10px] text-muted-foreground">RTC - Tempo Unit. (h)</label>
                           <Input
                             type="number"
                             min={0.1}
@@ -539,13 +559,27 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] text-muted-foreground">Valor Unit. (R$)</label>
+                          <label className="text-[10px] text-muted-foreground">Preço Base (R$)</label>
                           <Input
                             type="number"
                             min={0}
                             step={0.01}
                             value={item.precoBase}
-                            onChange={(e) => updateItem(idx, 'precoBase', parseFloat(e.target.value) || 0)}
+                            className="h-8 text-xs bg-muted/50"
+                            disabled
+                            title="Vem do cadastro do produto"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-muted-foreground">
+                            Preço Final (R$) {item.precoManualOverride && <span className="text-warning">✏️</span>}
+                          </label>
+                          <Input
+                            type="number"
+                            min={0}
+                            step={0.01}
+                            value={item.precoFinal}
+                            onChange={(e) => updateItem(idx, 'precoFinal', parseFloat(e.target.value) || 0)}
                             className="h-8 text-xs"
                             disabled={isLocked}
                           />
@@ -564,8 +598,9 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                       {item.produtoNome && (
                         <div className="space-y-1">
                           <div className="flex gap-4 text-xs text-muted-foreground">
-                            <span>Subtotal: R$ {(item.precoBase * item.quantidade).toLocaleString('pt-BR')}</span>
+                            <span>Subtotal: R$ {(item.precoFinal * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                             <span>Carga: {(item.tempoUnitario * item.quantidade).toFixed(1)}h</span>
+                            {margem > 0 && !item.precoManualOverride && <span className="text-success">Margem {margem}% aplicada</span>}
                           </div>
                           <div className="flex flex-wrap gap-1">
                             {opsForItem.map((mask, fi) => (
