@@ -64,7 +64,7 @@ interface ItemForm {
   precoBase: number;
   precoFinal: number;
   precoManualOverride: boolean;
-  quantidade: number;
+  quantidade: number | '';
   observacoes: string;
   fractionCount: number;
 }
@@ -94,7 +94,7 @@ const steps = [
 ];
 
 const emptyItem = (): ItemForm => ({
-  produtoId: '', produtoNome: '', tempoUnitario: 1, precoBase: 0, precoFinal: 0, precoManualOverride: false, quantidade: 1, observacoes: '', fractionCount: 1
+  produtoId: '', produtoNome: '', tempoUnitario: 0, precoBase: 0, precoFinal: 0, precoManualOverride: false, quantidade: '', observacoes: '', fractionCount: 1
 });
 
 export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }: StepperProps) {
@@ -102,7 +102,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   const [clienteId, setClienteId] = useState('');
   const [clienteNome, setClienteNome] = useState('');
   const [canal, setCanal] = useState('');
-  const [margem, setMargem] = useState(0);
+  const [margem, setMargem] = useState<number | ''>('');
   const [codigoManual, setCodigoManual] = useState('');
   const [observacoesGerais, setObservacoesGerais] = useState('');
   const [itens, setItens] = useState<ItemForm[]>([emptyItem()]);
@@ -111,9 +111,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   const [produtos, setProdutos] = useState<ProdutoDB[]>([]);
   const [clientes, setClientes] = useState<ClienteDB[]>([]);
   const [loadingData, setLoadingData] = useState(false);
+  const [loadingItens, setLoadingItens] = useState(false);
 
   // Se o pedido já tem OP, bloqueia edição de itens
   const isLocked = !!(pedido?.op);
+
+  const margemNum = typeof margem === 'number' ? margem : 0;
 
   // Carregar produtos e clientes do banco
   useEffect(() => {
@@ -133,16 +136,65 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     setLoadingData(false);
   };
 
+  // Load existing itens when editing
+  const loadPedidoItens = async (pedidoId: string) => {
+    setLoadingItens(true);
+    const { data: itensDB } = await supabase
+      .from('itens_pedido')
+      .select('*')
+      .eq('pedido_id', pedidoId)
+      .order('created_at');
+
+    if (itensDB && itensDB.length > 0) {
+      const loaded: ItemForm[] = itensDB.map(i => ({
+        produtoId: i.produto_id || '',
+        produtoNome: i.produto_nome,
+        tempoUnitario: Number(i.tempo_unitario),
+        precoBase: Number(i.valor_unitario), // stored price
+        precoFinal: Number(i.valor_unitario),
+        precoManualOverride: false,
+        quantidade: i.quantidade,
+        observacoes: i.observacoes || '',
+        fractionCount: (i as any).fraction_count || 1,
+      }));
+
+      // Try to load actual preco_base from produtos table
+      const prodIds = loaded.filter(l => l.produtoId).map(l => l.produtoId);
+      if (prodIds.length > 0) {
+        const { data: prodsData } = await supabase
+          .from('produtos')
+          .select('id, preco_base')
+          .in('id', prodIds);
+        if (prodsData) {
+          const pbMap = new Map(prodsData.map(p => [p.id, Number(p.preco_base)]));
+          loaded.forEach(item => {
+            if (item.produtoId && pbMap.has(item.produtoId)) {
+              item.precoBase = pbMap.get(item.produtoId)!;
+            }
+          });
+        }
+      }
+
+      setItens(loaded);
+    }
+    setLoadingItens(false);
+  };
+
   useEffect(() => {
     if (open) {
       if (pedido) {
         setClienteNome(pedido.cliente);
         setClienteId('');
         setCanal(pedido.canal);
-        setMargem(pedido.margem);
+        setMargem(pedido.margem || '');
         setCodigoManual(pedido.codigo || '');
         setObservacoesGerais('');
-        setItens([{ ...emptyItem(), produtoNome: pedido.produto, quantidade: pedido.quantidade }]);
+        // Load real itens from DB
+        if (pedido.id) {
+          loadPedidoItens(pedido.id);
+        } else {
+          setItens([{ ...emptyItem(), produtoNome: pedido.produto, quantidade: pedido.quantidade }]);
+        }
       } else {
         resetForm();
         generateNextCodigo();
@@ -155,7 +207,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     setClienteId('');
     setClienteNome('');
     setCanal('');
-    setMargem(0);
+    setMargem('');
     setCodigoManual('');
     setObservacoesGerais('');
     setItens([emptyItem()]);
@@ -186,30 +238,36 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   }, [itens]);
 
   const valorTotal = useMemo(() => {
-    return itens.reduce((sum, item) => sum + (item.precoFinal * item.quantidade), 0);
+    return itens.reduce((sum, item) => {
+      const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
+      return sum + (item.precoFinal * qty);
+    }, 0);
   }, [itens]);
 
   const cargaTotalHoras = useMemo(() => {
-    return itens.reduce((sum, item) => sum + (item.tempoUnitario * item.quantidade), 0);
+    return itens.reduce((sum, item) => {
+      const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
+      return sum + (item.tempoUnitario * qty);
+    }, 0);
   }, [itens]);
 
   // Recalculate all non-overridden prices when margin changes
   useEffect(() => {
     setItens(prev => prev.map(item => {
       if (item.precoManualOverride || !item.produtoId) return item;
-      const pf = item.precoBase + (item.precoBase * margem / 100);
+      const pf = item.precoBase + (item.precoBase * margemNum / 100);
       return { ...item, precoFinal: Math.round(pf * 100) / 100 };
     }));
-  }, [margem]);
+  }, [margemNum]);
 
   const getPreviewOPMask = (globalSeq: number) => {
     if (totalOPs === 1) return codigoManual;
-    const suffix = String.fromCharCode(64 + globalSeq); // A, B, C...
+    const suffix = String.fromCharCode(64 + globalSeq);
     return `${codigoManual}-${suffix}`;
   };
 
   const canProceedStep1 = clienteNome && canal && codigoManual;
-  const canProceedStep2 = itens.length > 0 && itens.every(i => i.produtoNome && i.quantidade > 0);
+  const canProceedStep2 = itens.length > 0 && itens.every(i => i.produtoNome && (typeof i.quantidade === 'number' && i.quantidade > 0));
   const clienteBloqueado = selectedCliente?.status_financeiro === 'BLOQUEADO';
 
   const addItem = () => {
@@ -226,7 +284,6 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     if (isLocked) return;
     const updated = [...itens];
     (updated[idx] as any)[field] = value;
-    // If user manually edits precoFinal, mark as override
     if (field === 'precoFinal') {
       updated[idx].precoManualOverride = true;
     }
@@ -238,7 +295,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     const prod = produtos.find(p => p.id === produtoId);
     if (!prod) return;
     const pb = Number(prod.preco_base) || 0;
-    const pf = pb + (pb * margem / 100);
+    const pf = pb + (pb * margemNum / 100);
     const updated = [...itens];
     updated[idx] = {
       ...updated[idx],
@@ -248,6 +305,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       precoBase: pb,
       precoFinal: Math.round(pf * 100) / 100,
       precoManualOverride: false,
+      // Keep quantidade blank for new selection
+      quantidade: updated[idx].quantidade || '',
     };
     setItens(updated);
   };
@@ -260,7 +319,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       .map(i => ({
         produto_nome: i.produtoNome,
         produto_id: i.produtoId || undefined,
-        quantidade: i.quantidade,
+        quantidade: typeof i.quantidade === 'number' ? i.quantidade : 0,
         tempo_unitario: i.tempoUnitario,
         valor_unitario: i.precoFinal,
         observacoes: i.observacoes || undefined,
@@ -273,7 +332,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       produto: stepperItens.length === 1 ? stepperItens[0].produto_nome : `${stepperItens.length} produtos`,
       quantidade: stepperItens.reduce((s, i) => s + i.quantidade, 0),
       canal,
-      margem,
+      margem: margemNum,
       valorTotal,
       prazoEntrega: '',
       dataEntrada: new Date().toISOString().split('T')[0],
@@ -325,7 +384,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           ))}
         </div>
 
-        {loadingData && (
+        {(loadingData || loadingItens) && (
           <div className="flex items-center justify-center py-4 gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span className="text-sm">Carregando dados...</span>
@@ -439,8 +498,10 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   type="number"
                   min={0}
                   max={100}
+                  step={0.01}
                   value={margem}
-                  onChange={(e) => setMargem(Number(e.target.value))}
+                  onChange={(e) => setMargem(e.target.value === '' ? '' : Number(e.target.value))}
+                  placeholder="Ex: 15"
                   className="mt-1"
                   disabled={isLocked}
                 />
@@ -472,6 +533,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                 )}
               </div>
 
+              {produtos.length === 0 && !loadingData && (
+                <div className="p-3 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning">
+                  ⚠ Nenhum produto cadastrado no CIP. Cadastre produtos primeiro.
+                </div>
+              )}
+
               {(() => {
                 let globalSeq = 0;
                 return itens.map((item, idx) => {
@@ -481,6 +548,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                     globalSeq++;
                     opsForItem.push(getPreviewOPMask(globalSeq));
                   }
+                  const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
 
                   return (
                     <div key={idx} className="p-3 rounded-lg bg-secondary/20 border border-border/30 space-y-2">
@@ -502,12 +570,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                               disabled={isLocked}
                             >
                               <SelectTrigger className="h-8 text-xs">
-                                <SelectValue placeholder="Selecione" />
+                                <SelectValue placeholder="Selecione o produto" />
                               </SelectTrigger>
                               <SelectContent>
                                 {produtos.map((p) => (
                                   <SelectItem key={p.id} value={p.id}>
-                                    {p.nome}
+                                    {p.nome} {p.preco_base > 0 ? `(R$ ${Number(p.preco_base).toFixed(2)})` : ''}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
@@ -528,7 +596,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                             type="number"
                             min={1}
                             value={item.quantidade}
-                            onChange={(e) => updateItem(idx, 'quantidade', Math.max(1, parseInt(e.target.value) || 1))}
+                            onChange={(e) => updateItem(idx, 'quantidade', e.target.value === '' ? '' : Math.max(1, parseInt(e.target.value) || 0))}
+                            placeholder="0"
                             className="h-8 text-xs"
                             disabled={isLocked}
                           />
@@ -538,7 +607,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                           <Input
                             type="number"
                             min={1}
-                            max={item.quantidade}
+                            max={qty || 1}
                             value={item.fractionCount}
                             onChange={(e) => updateItem(idx, 'fractionCount', Math.max(1, parseInt(e.target.value) || 1))}
                             className="h-8 text-xs"
@@ -551,12 +620,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                           <label className="text-[10px] text-muted-foreground">RTC - Tempo Unit. (h)</label>
                           <Input
                             type="number"
-                            min={0.1}
+                            min={0}
                             step={0.1}
-                            value={item.tempoUnitario}
-                            onChange={(e) => updateItem(idx, 'tempoUnitario', parseFloat(e.target.value) || 1)}
-                            className="h-8 text-xs"
-                            disabled={isLocked}
+                            value={item.tempoUnitario || ''}
+                            className="h-8 text-xs bg-muted/50"
+                            disabled
+                            title="Vem do cadastro do produto"
                           />
                         </div>
                         <div>
@@ -565,7 +634,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                             type="number"
                             min={0}
                             step={0.01}
-                            value={item.precoBase}
+                            value={item.precoBase || ''}
                             className="h-8 text-xs bg-muted/50"
                             disabled
                             title="Vem do cadastro do produto"
@@ -579,8 +648,9 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                             type="number"
                             min={0}
                             step={0.01}
-                            value={item.precoFinal}
+                            value={item.precoFinal || ''}
                             onChange={(e) => updateItem(idx, 'precoFinal', parseFloat(e.target.value) || 0)}
+                            placeholder="0.00"
                             className="h-8 text-xs"
                             disabled={isLocked}
                           />
@@ -596,12 +666,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                           disabled={isLocked}
                         />
                       </div>
-                      {item.produtoNome && (
+                      {item.produtoNome && qty > 0 && (
                         <div className="space-y-1">
                           <div className="flex gap-4 text-xs text-muted-foreground">
-                            <span>Subtotal: R$ {(item.precoFinal * item.quantidade).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            <span>Carga: {(item.tempoUnitario * item.quantidade).toFixed(1)}h</span>
-                            {margem > 0 && !item.precoManualOverride && <span className="text-success">Margem {margem}% aplicada</span>}
+                            <span>Subtotal: R$ {(item.precoFinal * qty).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                            <span>Carga: {(item.tempoUnitario * qty).toFixed(1)}h</span>
+                            {margemNum > 0 && !item.precoManualOverride && <span className="text-success">Margem {margemNum}% aplicada</span>}
                           </div>
                           <div className="flex flex-wrap gap-1">
                             {opsForItem.map((mask, fi) => (
@@ -617,7 +687,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
 
               <div className="p-3 rounded-lg bg-civ/10 border border-civ/30 flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Valor Total:</span>
-                <span className="text-lg font-bold text-foreground">R$ {valorTotal.toLocaleString('pt-BR')}</span>
+                <span className="text-lg font-bold text-foreground">R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
               </div>
 
               <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 text-xs text-muted-foreground">
@@ -679,13 +749,14 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                             seq++;
                             masks.push(getPreviewOPMask(seq));
                           }
+                          const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
                           return (
                             <div key={idx} className="flex items-center gap-2 text-xs flex-wrap">
                               {masks.map((m, mi) => (
                                 <Badge key={mi} variant="outline" className="font-mono text-[10px]">{m}</Badge>
                               ))}
                               <span>{item.produtoNome}</span>
-                              <span className="text-muted-foreground">× {item.quantidade}</span>
+                              <span className="text-muted-foreground">× {qty}</span>
                               {item.observacoes && <span className="text-warning text-[10px]">📝 obs</span>}
                             </div>
                           );
@@ -701,7 +772,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   )}
                   <div>
                     <span className="text-muted-foreground text-xs block">Valor Total</span>
-                    <span className="font-bold text-foreground">R$ {valorTotal.toLocaleString('pt-BR')}</span>
+                    <span className="font-bold text-foreground">R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
                   </div>
                   <div>
                     <span className="text-muted-foreground text-xs block">Carga Total</span>
