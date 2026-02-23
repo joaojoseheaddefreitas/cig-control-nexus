@@ -724,6 +724,7 @@ export type Database = {
           id: string
           nome: string
           observacoes: string | null
+          percentual_juros: number
           preco_base: number
           tempo_unitario: number
           unidade: string
@@ -737,6 +738,7 @@ export type Database = {
           id?: string
           nome: string
           observacoes?: string | null
+          percentual_juros?: number
           preco_base?: number
           tempo_unitario?: number
           unidade?: string
@@ -750,6 +752,7 @@ export type Database = {
           id?: string
           nome?: string
           observacoes?: string | null
+          percentual_juros?: number
           preco_base?: number
           tempo_unitario?: number
           unidade?: string
