@@ -1,0 +1,1 @@
+ALTER TABLE public.produtos ADD COLUMN IF NOT EXISTS percentual_juros numeric DEFAULT 0 NOT NULL;

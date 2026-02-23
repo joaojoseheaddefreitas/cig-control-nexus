@@ -108,22 +108,64 @@ export function CIVCarteiraProducao() {
 
   const handleSavePedido = async (data: Partial<PedidoStepper>, itens?: PedidoStepperItem[]) => {
     if (editingPedido) {
-      const { error } = await updatePedido(editingPedido.id, {
-        cliente: data.cliente,
-        produto: data.produto,
-        quantidade: data.quantidade,
-        canal: data.canal,
-        margem: data.margem,
-        valor_total: data.valorTotal,
-        prazo_entrega: data.prazoEntrega || null,
-        status: data.status || editingPedido.status,
-        codigo: data.codigo || editingPedido.codigo,
-      });
-      if (error) {
-        toast.error('❌ Falha ao atualizar pedido', { description: error });
-        return;
+      setSalvando(true);
+      try {
+        // Calculate old load for delta
+        const { data: oldItens } = await supabase
+          .from('itens_pedido')
+          .select('quantidade, tempo_unitario')
+          .eq('pedido_id', editingPedido.id);
+        const oldHoras = (oldItens || []).reduce((s, i) => s + Number(i.quantidade) * Number(i.tempo_unitario), 0);
+
+        // Update pedido header
+        const { error } = await updatePedido(editingPedido.id, {
+          cliente: data.cliente,
+          produto: data.produto,
+          quantidade: data.quantidade,
+          canal: data.canal,
+          margem: data.margem,
+          valor_total: data.valorTotal,
+          prazo_entrega: data.prazoEntrega || null,
+          status: data.status || editingPedido.status,
+          codigo: data.codigo || editingPedido.codigo,
+        });
+        if (error) {
+          toast.error('❌ Falha ao atualizar pedido', { description: error });
+          setSalvando(false);
+          return;
+        }
+
+        // Update itens if provided
+        if (itens && itens.length > 0) {
+          // Delete old itens and re-insert
+          await supabase.from('itens_pedido').delete().eq('pedido_id', editingPedido.id);
+          const itensPayload = itens.map(item => ({
+            pedido_id: editingPedido.id,
+            produto_nome: item.produto_nome,
+            produto_id: item.produto_id || null,
+            quantidade: item.quantidade,
+            tempo_unitario: item.tempo_unitario,
+            valor_unitario: item.valor_unitario,
+            observacoes: item.observacoes || null,
+            fraction_count: Math.max(1, item.fraction_count || 1),
+          }));
+          await supabase.from('itens_pedido').insert(itensPayload);
+
+          // Recalculate carteira delta
+          const newHoras = itens.reduce((s, i) => s + i.quantidade * i.tempo_unitario, 0);
+          const delta = newHoras - oldHoras;
+          if (delta !== 0) {
+            const { adicionarHorasCarteira, subtrairHorasCarteira } = await import('@/services/carteiraService');
+            if (delta > 0) await adicionarHorasCarteira(delta);
+            else await subtrairHorasCarteira(Math.abs(delta));
+          }
+        }
+
+        toast.success('✅ Pedido atualizado com recálculo');
+      } catch (e: any) {
+        toast.error('❌ Erro ao editar', { description: e.message });
       }
-      toast.success('✅ Pedido atualizado');
+      setSalvando(false);
       await loadPedidos();
       return;
     }

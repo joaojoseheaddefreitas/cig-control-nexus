@@ -74,6 +74,7 @@ interface ProdutoDB {
   nome: string;
   tempo_unitario: number;
   preco_base: number;
+  percentual_juros: number;
   unidade: string;
   descricao: string | null;
   ativo: boolean;
@@ -128,10 +129,10 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   const loadMasterData = async () => {
     setLoadingData(true);
     const [prodRes, cliRes] = await Promise.all([
-      supabase.from('produtos').select('id, nome, tempo_unitario, preco_base, unidade, descricao, ativo').eq('ativo', true).order('nome'),
+      supabase.from('produtos').select('id, nome, tempo_unitario, preco_base, percentual_juros, unidade, descricao, ativo').eq('ativo', true).order('nome'),
       supabase.from('clientes').select('id, nome, status_financeiro, cidade, estado').eq('ativo', true).order('nome'),
     ]);
-    if (prodRes.data) setProdutos(prodRes.data as any);
+    if (prodRes.data) setProdutos((prodRes.data || []).map((d: any) => ({ ...d, percentual_juros: Number(d.percentual_juros) || 0 })));
     if (cliRes.data) setClientes(cliRes.data);
     setLoadingData(false);
   };
@@ -255,10 +256,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
   useEffect(() => {
     setItens(prev => prev.map(item => {
       if (item.precoManualOverride || !item.produtoId) return item;
-      const pf = item.precoBase + (item.precoBase * margemNum / 100);
+      const prod = produtos.find(p => p.id === item.produtoId);
+      const juros = prod?.percentual_juros || 0;
+      const pf = item.precoBase * (1 + juros / 100) * (1 + margemNum / 100);
       return { ...item, precoFinal: Math.round(pf * 100) / 100 };
     }));
-  }, [margemNum]);
+  }, [margemNum, produtos]);
 
   const getPreviewOPMask = (globalSeq: number) => {
     if (totalOPs === 1) return codigoManual;
@@ -295,7 +298,9 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     const prod = produtos.find(p => p.id === produtoId);
     if (!prod) return;
     const pb = Number(prod.preco_base) || 0;
-    const pf = pb + (pb * margemNum / 100);
+    const juros = prod.percentual_juros || 0;
+    // Formula: preco_final = preco_base × (1 + percentual_juros/100) × (1 + margem/100)
+    const pf = pb * (1 + juros / 100) * (1 + margemNum / 100);
     const updated = [...itens];
     updated[idx] = {
       ...updated[idx],
@@ -305,7 +310,6 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       precoBase: pb,
       precoFinal: Math.round(pf * 100) / 100,
       precoManualOverride: false,
-      // Keep quantidade blank for new selection
       quantidade: updated[idx].quantidade || '',
     };
     setItens(updated);
