@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { 
-  Search, Filter, Plus, Edit, Trash2, Eye, Package, 
-  Clock, DollarSign, Layers, Save, X, Loader2, Percent
+  Search, Plus, Edit, Trash2, Eye, Package, 
+  Clock, DollarSign, Layers, Save, X, Loader2
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,9 +17,23 @@ import { Switch } from '@/components/ui/switch';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+interface SetorProdutivo {
+  id: string;
+  nome: string;
+  ordem: number;
+}
+
+interface SetorTempo {
+  setor_id: string;
+  tempo_horas: number;
+}
+
 interface ProdutoDB {
   id: string;
   nome: string;
+  codigo: string | null;
+  modelo: string | null;
+  linha: string | null;
   descricao: string | null;
   categoria: string;
   tempo_unitario: number;
@@ -28,22 +42,28 @@ interface ProdutoDB {
   ativo: boolean;
   observacoes: string | null;
   unidade: string;
+  created_at: string;
 }
 
 interface ProdutoForm {
+  codigo: string;
+  modelo: string;
+  linha: string;
   nome: string;
   descricao: string;
   categoria: string;
-  tempo_unitario: number | '';
   preco_base: number | '';
   percentual_juros: number | '';
   ativo: boolean;
   observacoes: string;
   unidade: string;
+  setorTempos: Record<string, number>;
 }
 
 const emptyForm = (): ProdutoForm => ({
-  nome: '', descricao: '', categoria: 'sofa', tempo_unitario: '', preco_base: '', percentual_juros: 0, ativo: true, observacoes: '', unidade: 'un',
+  codigo: '', modelo: '', linha: '', nome: '', descricao: '', categoria: 'sofa',
+  preco_base: '', percentual_juros: 0, ativo: true, observacoes: '', unidade: 'un',
+  setorTempos: {},
 });
 
 const categoriaConfig: Record<string, { label: string; color: string }> = {
@@ -58,32 +78,32 @@ const categoriaConfig: Record<string, { label: string; color: string }> = {
 export function CIPCadastroProdutosCompleto() {
   const [search, setSearch] = useState('');
   const [produtos, setProdutos] = useState<ProdutoDB[]>([]);
+  const [setores, setSetores] = useState<SetorProdutivo[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('lista');
   const [form, setForm] = useState<ProdutoForm>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [detailProduct, setDetailProduct] = useState<ProdutoDB | null>(null);
+  const [detailSetorTempos, setDetailSetorTempos] = useState<SetorTempo[]>([]);
 
-  useEffect(() => { loadProdutos(); }, []);
+  useEffect(() => { loadAll(); }, []);
 
-  const loadProdutos = async () => {
+  const loadAll = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('produtos')
-      .select('*')
-      .order('nome');
-    if (error) {
-      toast.error('Erro ao carregar produtos');
-    } else {
-      setProdutos((data || []).map(d => ({ ...d, percentual_juros: Number((d as any).percentual_juros) || 0 })));
-    }
+    const [prodRes, setorRes] = await Promise.all([
+      supabase.from('produtos').select('*').order('created_at', { ascending: false }),
+      supabase.from('setores_produtivos').select('*').eq('ativo', true).order('ordem'),
+    ]);
+    if (prodRes.data) setProdutos(prodRes.data.map((d: any) => ({ ...d, percentual_juros: Number(d.percentual_juros) || 0 })));
+    if (setorRes.data) setSetores(setorRes.data);
     setLoading(false);
   };
 
   const filteredProdutos = produtos.filter(p =>
+    (p.codigo || '').toLowerCase().includes(search.toLowerCase()) ||
+    (p.modelo || '').toLowerCase().includes(search.toLowerCase()) ||
     p.nome.toLowerCase().includes(search.toLowerCase()) ||
-    (p.descricao || '').toLowerCase().includes(search.toLowerCase()) ||
     p.categoria.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -92,33 +112,51 @@ export function CIPCadastroProdutosCompleto() {
   const tempoMedio = produtos.length > 0 ? produtos.reduce((a, p) => a + Number(p.tempo_unitario), 0) / produtos.length : 0;
   const precoMedio = produtos.length > 0 ? produtos.reduce((a, p) => a + Number(p.preco_base), 0) / produtos.length : 0;
 
-  const handleEdit = (p: ProdutoDB) => {
+  const rtcCalc = Object.values(form.setorTempos).reduce((sum, v) => sum + (Number(v) || 0), 0);
+
+  const handleEdit = async (p: ProdutoDB) => {
     setEditingId(p.id);
+    // Load sector times
+    const { data: temposDB } = await supabase
+      .from('produto_setor_tempos')
+      .select('setor_id, tempo_horas')
+      .eq('produto_id', p.id);
+    const temposMap: Record<string, number> = {};
+    (temposDB || []).forEach((t: any) => { temposMap[t.setor_id] = Number(t.tempo_horas); });
+
     setForm({
+      codigo: p.codigo || '',
+      modelo: p.modelo || '',
+      linha: p.linha || '',
       nome: p.nome,
       descricao: p.descricao || '',
       categoria: p.categoria,
-      tempo_unitario: Number(p.tempo_unitario),
       preco_base: Number(p.preco_base),
-      percentual_juros: p.percentual_juros,
+      percentual_juros: Number(p.percentual_juros),
       ativo: p.ativo,
       observacoes: p.observacoes || '',
       unidade: p.unidade,
+      setorTempos: temposMap,
     });
     setActiveTab('novo');
   };
 
   const handleSave = async () => {
-    if (!form.nome.trim()) { toast.error('Nome é obrigatório'); return; }
-    if (!form.tempo_unitario || Number(form.tempo_unitario) <= 0) { toast.error('Tempo total (horas) é obrigatório e deve ser > 0'); return; }
+    if (!form.codigo.trim()) { toast.error('Código é obrigatório'); return; }
+    if (!form.modelo.trim()) { toast.error('Modelo é obrigatório'); return; }
+    if (!form.linha.trim()) { toast.error('Linha é obrigatória'); return; }
+    if (rtcCalc <= 0) { toast.error('Insira tempo em pelo menos um setor (RTC > 0)'); return; }
     if (!form.preco_base || Number(form.preco_base) <= 0) { toast.error('Preço base é obrigatório e deve ser > 0'); return; }
 
     setSaving(true);
     const payload = {
-      nome: form.nome.trim(),
+      codigo: form.codigo.trim(),
+      modelo: form.modelo.trim(),
+      linha: form.linha.trim(),
+      nome: `${form.modelo.trim()} - ${form.linha.trim()}`,
       descricao: form.descricao.trim() || null,
       categoria: form.categoria,
-      tempo_unitario: Number(form.tempo_unitario),
+      tempo_unitario: rtcCalc,
       preco_base: Number(form.preco_base),
       percentual_juros: Number(form.percentual_juros) || 0,
       ativo: form.ativo,
@@ -126,28 +164,54 @@ export function CIPCadastroProdutosCompleto() {
       unidade: form.unidade,
     };
 
+    let produtoId = editingId;
+
     if (editingId) {
       const { error } = await supabase.from('produtos').update(payload as any).eq('id', editingId);
-      if (error) { toast.error('Erro ao atualizar: ' + error.message); }
-      else { toast.success('Produto atualizado!'); }
+      if (error) { toast.error('Erro ao atualizar: ' + error.message); setSaving(false); return; }
     } else {
-      const { error } = await supabase.from('produtos').insert(payload as any);
-      if (error) { toast.error('Erro ao criar: ' + error.message); }
-      else { toast.success('Produto cadastrado!'); }
+      const { data, error } = await supabase.from('produtos').insert(payload as any).select('id').single();
+      if (error) { toast.error('Erro ao criar: ' + error.message); setSaving(false); return; }
+      produtoId = data.id;
     }
 
+    // Save sector times
+    if (produtoId) {
+      // Delete existing
+      await supabase.from('produto_setor_tempos').delete().eq('produto_id', produtoId);
+      // Insert new
+      const rows = Object.entries(form.setorTempos)
+        .filter(([, v]) => Number(v) > 0)
+        .map(([setor_id, tempo_horas]) => ({
+          produto_id: produtoId!,
+          setor_id,
+          tempo_horas: Number(tempo_horas),
+        }));
+      if (rows.length > 0) {
+        const { error } = await supabase.from('produto_setor_tempos').insert(rows);
+        if (error) { toast.error('Erro ao salvar tempos: ' + error.message); }
+      }
+    }
+
+    toast.success(editingId ? 'Produto atualizado!' : 'Produto cadastrado!');
     setSaving(false);
     setEditingId(null);
     setForm(emptyForm());
     setActiveTab('lista');
-    await loadProdutos();
+    await loadAll();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Deseja realmente excluir este produto?')) return;
     const { error } = await supabase.from('produtos').delete().eq('id', id);
     if (error) toast.error('Erro: ' + error.message);
-    else { toast.success('Produto excluído'); await loadProdutos(); }
+    else { toast.success('Produto excluído'); await loadAll(); }
+  };
+
+  const handleViewDetail = async (p: ProdutoDB) => {
+    setDetailProduct(p);
+    const { data } = await supabase.from('produto_setor_tempos').select('setor_id, tempo_horas').eq('produto_id', p.id);
+    setDetailSetorTempos((data || []).map((d: any) => ({ setor_id: d.setor_id, tempo_horas: Number(d.tempo_horas) })));
   };
 
   return (
@@ -159,7 +223,7 @@ export function CIPCadastroProdutosCompleto() {
           <div>
             <h3 className="font-semibold text-cip">Cadastro de Produtos (CIP)</h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Produtos com <strong>tempo_total, preço_base e percentual_juros</strong> obrigatórios. Dados reais do banco.
+              Estrutura industrial com tempos por setor. RTC = soma automática dos tempos.
             </p>
           </div>
         </div>
@@ -169,7 +233,7 @@ export function CIPCadastroProdutosCompleto() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <KPICard title="Total Produtos" value={totalProdutos} subtitle="Cadastrados" icon={<Package className="h-5 w-5" />} variant="cip" />
         <KPICard title="Ativos" value={produtosAtivos} subtitle={`${totalProdutos > 0 ? ((produtosAtivos/totalProdutos)*100).toFixed(0) : 0}%`} icon={<Layers className="h-5 w-5" />} variant="cip" />
-        <KPICard title="Tempo Médio" value={`${tempoMedio.toFixed(1)}h`} subtitle="RTC médio" icon={<Clock className="h-5 w-5" />} variant="cip" />
+        <KPICard title="RTC Médio" value={`${tempoMedio.toFixed(1)}h`} subtitle="Tempo médio" icon={<Clock className="h-5 w-5" />} variant="cip" />
         <KPICard title="Preço Médio" value={`R$ ${precoMedio.toFixed(0)}`} subtitle="Base" icon={<DollarSign className="h-5 w-5" />} variant="cip" />
       </div>
 
@@ -183,24 +247,27 @@ export function CIPCadastroProdutosCompleto() {
           <div className="flex gap-2">
             <div className="relative flex-1 sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Buscar produto..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
+              <Input placeholder="Buscar código, modelo, tipo..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
             </div>
+            <Button size="sm" className="bg-cip hover:bg-cip/90" onClick={() => { setEditingId(null); setForm(emptyForm()); setActiveTab('novo'); }}>
+              <Plus className="h-4 w-4 mr-1" /> Novo
+            </Button>
           </div>
         </div>
 
         {/* Lista */}
         <TabsContent value="lista" className="space-y-4">
-          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[500px]">
-            <ScrollArea className="h-full max-h-[500px]">
+          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
+            <ScrollArea className="h-[500px]">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border/50 bg-secondary/30">
-                    <th className="text-left py-3 px-4 text-muted-foreground font-medium">Nome</th>
-                    <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Descrição</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium">Categoria</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium">Tempo (h)</th>
-                    <th className="text-right py-3 px-4 text-muted-foreground font-medium">Preço Base</th>
-                    <th className="text-center py-3 px-4 text-muted-foreground font-medium hidden lg:table-cell">Juros %</th>
+                <thead className="sticky top-0 z-10 bg-secondary/80 backdrop-blur-sm">
+                  <tr className="border-b border-border/50">
+                    <th className="text-left py-3 px-4 text-muted-foreground font-medium">Código</th>
+                    <th className="text-left py-3 px-4 text-muted-foreground font-medium">Modelo</th>
+                    <th className="text-center py-3 px-4 text-muted-foreground font-medium">Tipo</th>
+                    <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Linha</th>
+                    <th className="text-center py-3 px-4 text-muted-foreground font-medium">RTC (h)</th>
+                    <th className="text-right py-3 px-4 text-muted-foreground font-medium">Custo Base</th>
                     <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
                     <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ações</th>
                   </tr>
@@ -214,18 +281,18 @@ export function CIPCadastroProdutosCompleto() {
                     const cat = categoriaConfig[p.categoria] || { label: p.categoria, color: 'bg-secondary text-foreground' };
                     return (
                       <tr key={p.id} className={cn("border-b border-border/30 hover:bg-secondary/30 transition-colors", !p.ativo && "opacity-50")}>
-                        <td className="py-3 px-4 font-semibold text-foreground">{p.nome}</td>
-                        <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{p.descricao || '—'}</td>
+                        <td className="py-3 px-4 font-mono font-semibold text-foreground">{p.codigo || '—'}</td>
+                        <td className="py-3 px-4 font-medium text-foreground">{p.modelo || p.nome}</td>
                         <td className="py-3 px-4 text-center"><Badge className={cat.color}>{cat.label}</Badge></td>
-                        <td className="py-3 px-4 text-center font-mono">{Number(p.tempo_unitario).toFixed(2)}</td>
+                        <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{p.linha || '—'}</td>
+                        <td className="py-3 px-4 text-center font-mono font-bold text-cip">{Number(p.tempo_unitario).toFixed(2)}</td>
                         <td className="py-3 px-4 text-right">R$ {Number(p.preco_base).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                        <td className="py-3 px-4 text-center hidden lg:table-cell">{p.percentual_juros}%</td>
                         <td className="py-3 px-4 text-center">
                           <Badge className={p.ativo ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}>{p.ativo ? 'Ativo' : 'Inativo'}</Badge>
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setDetailProduct(p)}><Eye className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleViewDetail(p)}><Eye className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleEdit(p)}><Edit className="h-4 w-4" /></Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(p.id)}><Trash2 className="h-4 w-4" /></Button>
                           </div>
@@ -242,70 +309,107 @@ export function CIPCadastroProdutosCompleto() {
         {/* Novo / Editar */}
         <TabsContent value="novo" className="space-y-4">
           <ModuleCard title={editingId ? 'Editar Produto' : 'Cadastrar Novo Produto'} variant="cip">
-            <div className="space-y-6">
-              <div>
-                <h4 className="text-sm font-semibold text-muted-foreground mb-3">INFORMAÇÕES BÁSICAS</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm text-muted-foreground">Nome *</label>
-                    <Input value={form.nome} onChange={(e) => setForm({ ...form, nome: e.target.value })} placeholder="Ex: Sofá Ancora 2L" className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Categoria</label>
-                    <select className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
-                      {Object.entries(categoriaConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Unidade</label>
-                    <Input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="mt-1" />
-                  </div>
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <label className="text-sm text-muted-foreground">Descrição</label>
-                    <Input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Descrição do produto" className="mt-1" />
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="text-sm font-semibold text-muted-foreground mb-3">DADOS INDUSTRIAIS E COMERCIAIS</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <label className="text-sm text-muted-foreground">Tempo Total (horas) * <span className="text-cip font-bold">RTC</span></label>
-                    <Input type="number" step="0.01" min="0.01" value={form.tempo_unitario} onChange={(e) => setForm({ ...form, tempo_unitario: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ex: 4.80" className="mt-1" />
-                    <p className="text-[10px] text-muted-foreground mt-1">Horas oficiais de produção do produto</p>
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Preço Base (R$) *</label>
-                    <Input type="number" step="0.01" min="0.01" value={form.preco_base} onChange={(e) => setForm({ ...form, preco_base: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ex: 1200.00" className="mt-1" />
-                  </div>
-                  <div>
-                    <label className="text-sm text-muted-foreground">Percentual de Juros (%)</label>
-                    <Input type="number" step="0.01" min="0" value={form.percentual_juros} onChange={(e) => setForm({ ...form, percentual_juros: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ex: 5" className="mt-1" />
+            <ScrollArea className="max-h-[65vh]">
+              <div className="space-y-6 pr-4">
+                {/* Identificação */}
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">IDENTIFICAÇÃO</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Código *</label>
+                      <Input value={form.codigo} onChange={(e) => setForm({ ...form, codigo: e.target.value })} placeholder="Ex: 112401" className="mt-1 font-mono" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Modelo *</label>
+                      <Input value={form.modelo} onChange={(e) => setForm({ ...form, modelo: e.target.value })} placeholder="Ex: Sofá Ancora" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Linha *</label>
+                      <Input value={form.linha} onChange={(e) => setForm({ ...form, linha: e.target.value })} placeholder="Ex: 02 Lugares" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Tipo (Categoria)</label>
+                      <select className="mt-1 w-full h-10 px-3 rounded-md border border-input bg-background text-sm" value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })}>
+                        {Object.entries(categoriaConfig).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="text-sm text-muted-foreground">Descrição</label>
+                      <Input value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} placeholder="Descrição detalhada do produto" className="mt-1" />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="flex items-center gap-3">
-                <Switch checked={form.ativo} onCheckedChange={(v) => setForm({ ...form, ativo: v })} />
-                <label className="text-sm text-muted-foreground">Produto Ativo</label>
-              </div>
+                {/* Tempos por Setor */}
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">TEMPOS POR SETOR (horas)</h4>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                    {setores.map((setor) => (
+                      <div key={setor.id} className="p-3 rounded-lg border border-border/30 bg-secondary/20">
+                        <label className="text-xs text-muted-foreground block mb-1">{setor.nome}</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          value={form.setorTempos[setor.id] || ''}
+                          onChange={(e) => setForm({
+                            ...form,
+                            setorTempos: { ...form.setorTempos, [setor.id]: Number(e.target.value) || 0 }
+                          })}
+                          placeholder="0.00"
+                          className="h-8 text-xs font-mono"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-3 p-3 rounded-lg bg-cip/10 border border-cip/30 flex items-center justify-between">
+                    <span className="text-sm font-medium text-cip">RTC (Tempo Total Calculado)</span>
+                    <span className="text-2xl font-bold text-cip">{rtcCalc.toFixed(2)}h</span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">RTC = soma automática dos tempos por setor. Não pode ser editado manualmente.</p>
+                </div>
 
-              <div>
-                <h4 className="text-sm font-semibold text-muted-foreground mb-3">OBSERVAÇÕES</h4>
-                <Textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações para produtos especiais, personalizações, restrições..." className="min-h-[80px]" />
-              </div>
+                {/* Dados Comerciais */}
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">DADOS COMERCIAIS</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Custo Base (R$) *</label>
+                      <Input type="number" step="0.01" min="0.01" value={form.preco_base} onChange={(e) => setForm({ ...form, preco_base: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ex: 1200.00" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Percentual de Juros (%)</label>
+                      <Input type="number" step="0.01" min="0" value={form.percentual_juros} onChange={(e) => setForm({ ...form, percentual_juros: e.target.value === '' ? '' : Number(e.target.value) })} placeholder="Ex: 5" className="mt-1" />
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Unidade</label>
+                      <Input value={form.unidade} onChange={(e) => setForm({ ...form, unidade: e.target.value })} className="mt-1" />
+                    </div>
+                  </div>
+                </div>
 
-              <div className="flex justify-end gap-2 pt-4 border-t border-border">
-                <Button variant="outline" onClick={() => { setActiveTab('lista'); setEditingId(null); setForm(emptyForm()); }}>
-                  <X className="h-4 w-4 mr-2" />Cancelar
-                </Button>
-                <Button className="bg-cip hover:bg-cip/90" onClick={handleSave} disabled={saving}>
-                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                  {editingId ? 'Atualizar Produto' : 'Salvar Produto'}
-                </Button>
+                <div className="flex items-center gap-3">
+                  <Switch checked={form.ativo} onCheckedChange={(v) => setForm({ ...form, ativo: v })} />
+                  <label className="text-sm text-muted-foreground">Produto Ativo</label>
+                </div>
+
+                {/* Observações */}
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">OBSERVAÇÕES</h4>
+                  <Textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações para produtos especiais, personalizações, restrições..." className="min-h-[80px]" />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4 border-t border-border">
+                  <Button variant="outline" onClick={() => { setActiveTab('lista'); setEditingId(null); setForm(emptyForm()); }}>
+                    <X className="h-4 w-4 mr-2" />Cancelar
+                  </Button>
+                  <Button className="bg-cip hover:bg-cip/90" onClick={handleSave} disabled={saving}>
+                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                    {editingId ? 'Atualizar Produto' : 'Salvar Produto'}
+                  </Button>
+                </div>
               </div>
-            </div>
+            </ScrollArea>
           </ModuleCard>
         </TabsContent>
       </Tabs>
@@ -314,32 +418,60 @@ export function CIPCadastroProdutosCompleto() {
       <Dialog open={!!detailProduct} onOpenChange={() => setDetailProduct(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{detailProduct?.nome}</DialogTitle>
+            <DialogTitle>{detailProduct?.codigo} — {detailProduct?.modelo || detailProduct?.nome}</DialogTitle>
           </DialogHeader>
           {detailProduct && (
-            <div className="space-y-4">
-              <p className="text-sm text-muted-foreground">{detailProduct.descricao || 'Sem descrição'}</p>
-              <div className="grid grid-cols-3 gap-4">
-                <div className="p-3 rounded-lg bg-cip/10 text-center">
-                  <p className="text-xs text-muted-foreground">Tempo Total</p>
-                  <p className="text-xl font-bold text-cip">{Number(detailProduct.tempo_unitario).toFixed(2)}h</p>
+            <ScrollArea className="max-h-[60vh]">
+              <div className="space-y-4 pr-4">
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div><span className="text-muted-foreground text-xs block">Código</span><span className="font-mono font-bold">{detailProduct.codigo || '—'}</span></div>
+                  <div><span className="text-muted-foreground text-xs block">Modelo</span><span className="font-medium">{detailProduct.modelo || '—'}</span></div>
+                  <div><span className="text-muted-foreground text-xs block">Linha</span><span>{detailProduct.linha || '—'}</span></div>
+                  <div><span className="text-muted-foreground text-xs block">Tipo</span><Badge className={(categoriaConfig[detailProduct.categoria] || { color: '' }).color}>{(categoriaConfig[detailProduct.categoria] || { label: detailProduct.categoria }).label}</Badge></div>
                 </div>
-                <div className="p-3 rounded-lg bg-secondary/50 text-center">
-                  <p className="text-xs text-muted-foreground">Preço Base</p>
-                  <p className="text-xl font-bold">R$ {Number(detailProduct.preco_base).toFixed(2)}</p>
+                {detailProduct.descricao && (
+                  <div><span className="text-muted-foreground text-xs block">Descrição</span><p className="text-sm">{detailProduct.descricao}</p></div>
+                )}
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="p-3 rounded-lg bg-cip/10 text-center">
+                    <p className="text-xs text-muted-foreground">RTC</p>
+                    <p className="text-xl font-bold text-cip">{Number(detailProduct.tempo_unitario).toFixed(2)}h</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-secondary/50 text-center">
+                    <p className="text-xs text-muted-foreground">Custo Base</p>
+                    <p className="text-xl font-bold">R$ {Number(detailProduct.preco_base).toFixed(2)}</p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-secondary/50 text-center">
+                    <p className="text-xs text-muted-foreground">Juros</p>
+                    <p className="text-xl font-bold">{detailProduct.percentual_juros}%</p>
+                  </div>
                 </div>
-                <div className="p-3 rounded-lg bg-secondary/50 text-center">
-                  <p className="text-xs text-muted-foreground">Juros</p>
-                  <p className="text-xl font-bold">{detailProduct.percentual_juros}%</p>
-                </div>
+                {/* Sector times */}
+                {detailSetorTempos.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">TEMPOS POR SETOR</h4>
+                    <div className="space-y-1">
+                      {setores.map(s => {
+                        const t = detailSetorTempos.find(st => st.setor_id === s.id);
+                        if (!t || t.tempo_horas <= 0) return null;
+                        return (
+                          <div key={s.id} className="flex justify-between text-sm px-2 py-1 rounded bg-secondary/30">
+                            <span>{s.nome}</span>
+                            <span className="font-mono font-bold">{t.tempo_horas.toFixed(2)}h</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {detailProduct.observacoes && (
+                  <div>
+                    <p className="text-xs text-muted-foreground">Observações</p>
+                    <p className="text-sm">{detailProduct.observacoes}</p>
+                  </div>
+                )}
               </div>
-              {detailProduct.observacoes && (
-                <div>
-                  <p className="text-xs text-muted-foreground">Observações</p>
-                  <p className="text-sm">{detailProduct.observacoes}</p>
-                </div>
-              )}
-            </div>
+            </ScrollArea>
           )}
         </DialogContent>
       </Dialog>
