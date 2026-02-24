@@ -715,13 +715,58 @@ export type Database = {
           },
         ]
       }
+      produto_setor_tempos: {
+        Row: {
+          created_at: string
+          id: string
+          produto_id: string
+          setor_id: string
+          tempo_horas: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          produto_id: string
+          setor_id: string
+          tempo_horas?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          produto_id?: string
+          setor_id?: string
+          tempo_horas?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "produto_setor_tempos_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "produto_setor_tempos_setor_id_fkey"
+            columns: ["setor_id"]
+            isOneToOne: false
+            referencedRelation: "setores_produtivos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       produtos: {
         Row: {
           ativo: boolean
           categoria: string
+          codigo: string | null
           created_at: string
           descricao: string | null
           id: string
+          linha: string | null
+          modelo: string | null
           nome: string
           observacoes: string | null
           percentual_juros: number
@@ -733,9 +778,12 @@ export type Database = {
         Insert: {
           ativo?: boolean
           categoria?: string
+          codigo?: string | null
           created_at?: string
           descricao?: string | null
           id?: string
+          linha?: string | null
+          modelo?: string | null
           nome: string
           observacoes?: string | null
           percentual_juros?: number
@@ -747,9 +795,12 @@ export type Database = {
         Update: {
           ativo?: boolean
           categoria?: string
+          codigo?: string | null
           created_at?: string
           descricao?: string | null
           id?: string
+          linha?: string | null
+          modelo?: string | null
           nome?: string
           observacoes?: string | null
           percentual_juros?: number

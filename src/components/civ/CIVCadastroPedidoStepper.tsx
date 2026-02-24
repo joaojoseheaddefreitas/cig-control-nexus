@@ -15,6 +15,128 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchConfigCapacidade, calcularDataEntrega, calcularDiasProducao } from '@/services/capacidadeService';
+
+// Step 3 component with real-time prazo calculation
+function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNome, canal, itens, totalOPs, valorTotal, observacoesGerais, getPreviewOPMask }: {
+  cargaTotalHoras: number; clienteBloqueado: boolean; codigoManual: string; clienteNome: string; canal: string;
+  itens: ItemForm[]; totalOPs: number; valorTotal: number; observacoesGerais: string; getPreviewOPMask: (seq: number) => string;
+}) {
+  const [prazoData, setPrazoData] = useState<string>('Calculando...');
+  const [prazoDias, setPrazoDias] = useState<number>(0);
+  const [loadingPrazo, setLoadingPrazo] = useState(true);
+
+  useEffect(() => {
+    const calc = async () => {
+      setLoadingPrazo(true);
+      try {
+        const config = await fetchConfigCapacidade();
+        // Load current wallet hours
+        const { data: carteira } = await supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle();
+        const horasCarteira = Number(carteira?.total_horas_acumuladas) || 0;
+        const totalHoras = horasCarteira + cargaTotalHoras;
+        const dias = calcularDiasProducao(totalHoras, config.capacidade_produtiva_diaria);
+        const dataEntrega = calcularDataEntrega(new Date(), dias, config.considerar_sabado);
+        setPrazoDias(dias);
+        setPrazoData(dataEntrega.toLocaleDateString('pt-BR'));
+      } catch {
+        setPrazoData('Erro no cálculo');
+      }
+      setLoadingPrazo(false);
+    };
+    calc();
+  }, [cargaTotalHoras]);
+
+  return (
+    <div className="space-y-4 animate-fade-in">
+      <div className="p-4 rounded-lg bg-civ/10 border border-civ/30">
+        <div className="flex items-center gap-4">
+          <Calendar className="h-8 w-8 text-civ flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-civ">Prazo Calculado</p>
+            {loadingPrazo ? (
+              <div className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Calculando prazo...</span></div>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-foreground">{prazoData}</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {prazoDias} dias úteis | Carga deste pedido: {cargaTotalHoras.toFixed(1)}h
+                </p>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {clienteBloqueado && (
+        <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
+          <ShieldAlert className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="text-sm font-bold text-destructive">Cliente BLOQUEADO — Pedido não pode ser confirmado</p>
+            <p className="text-xs text-muted-foreground">Regularize a situação financeira antes de prosseguir.</p>
+          </div>
+        </div>
+      )}
+
+      <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
+        <p className="text-sm font-semibold mb-3">Resumo — {codigoManual}</p>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
+          <div>
+            <span className="text-muted-foreground text-xs block">Cliente</span>
+            <span className="font-medium">{clienteNome}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground text-xs block">Canal</span>
+            <span className="font-medium">{canal}</span>
+          </div>
+          <div className="col-span-2">
+            <span className="text-muted-foreground text-xs block">
+              {itens.filter(i => i.produtoNome).length} produto(s) → {totalOPs} OP(s)
+            </span>
+            <div className="mt-1 space-y-1">
+              {(() => {
+                let seq = 0;
+                return itens.filter(i => i.produtoNome).map((item, idx) => {
+                  const fractions = Math.max(1, item.fractionCount);
+                  const masks: string[] = [];
+                  for (let f = 0; f < fractions; f++) {
+                    seq++;
+                    masks.push(getPreviewOPMask(seq));
+                  }
+                  const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
+                  return (
+                    <div key={idx} className="flex items-center gap-2 text-xs flex-wrap">
+                      {masks.map((m, mi) => (
+                        <Badge key={mi} variant="outline" className="font-mono text-[10px]">{m}</Badge>
+                      ))}
+                      <span>{item.produtoNome}</span>
+                      <span className="text-muted-foreground">× {qty}</span>
+                      {item.observacoes && <span className="text-warning text-[10px]">📝 obs</span>}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+          {observacoesGerais && (
+            <div className="col-span-2">
+              <span className="text-muted-foreground text-xs block">Observações Gerais</span>
+              <span className="text-xs italic text-foreground">{observacoesGerais}</span>
+            </div>
+          )}
+          <div>
+            <span className="text-muted-foreground text-xs block">Valor Total</span>
+            <span className="font-bold text-foreground">R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground text-xs block">Carga Total</span>
+            <span className="font-medium">{cargaTotalHoras.toFixed(1)}h</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export interface PedidoStepperItem {
   produto_nome: string;
@@ -702,89 +824,18 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
 
           {/* ─── STEP 3: Prazo e Confirmação ─── */}
           {currentStep === 3 && (
-            <div className="space-y-4 animate-fade-in">
-              <div className="p-4 rounded-lg bg-civ/10 border border-civ/30">
-                <div className="flex items-center gap-4">
-                  <Calendar className="h-8 w-8 text-civ flex-shrink-0" />
-                  <div>
-                    <p className="text-sm font-medium text-civ">Prazo calculado automaticamente</p>
-                    <p className="text-2xl font-bold text-foreground">
-                      Será calculado após aprovação
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Carga: {cargaTotalHoras.toFixed(1)}h | Fórmula: (Carteira + Nova Carga) ÷ Capacidade Diária
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {clienteBloqueado && (
-                <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
-                  <ShieldAlert className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-bold text-destructive">Cliente BLOQUEADO — Pedido não pode ser confirmado</p>
-                    <p className="text-xs text-muted-foreground">Regularize a situação financeira antes de prosseguir.</p>
-                  </div>
-                </div>
-              )}
-
-              <div className="p-4 rounded-lg bg-secondary/30 border border-border/30">
-                <p className="text-sm font-semibold mb-3">Resumo — {codigoManual}</p>
-                <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground text-xs block">Cliente</span>
-                    <span className="font-medium">{clienteNome}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground text-xs block">Canal</span>
-                    <span className="font-medium">{canal}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-muted-foreground text-xs block">
-                      {itens.filter(i => i.produtoNome).length} produto(s) → {totalOPs} OP(s)
-                    </span>
-                    <div className="mt-1 space-y-1">
-                      {(() => {
-                        let seq = 0;
-                        return itens.filter(i => i.produtoNome).map((item, idx) => {
-                          const fractions = Math.max(1, item.fractionCount);
-                          const masks: string[] = [];
-                          for (let f = 0; f < fractions; f++) {
-                            seq++;
-                            masks.push(getPreviewOPMask(seq));
-                          }
-                          const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
-                          return (
-                            <div key={idx} className="flex items-center gap-2 text-xs flex-wrap">
-                              {masks.map((m, mi) => (
-                                <Badge key={mi} variant="outline" className="font-mono text-[10px]">{m}</Badge>
-                              ))}
-                              <span>{item.produtoNome}</span>
-                              <span className="text-muted-foreground">× {qty}</span>
-                              {item.observacoes && <span className="text-warning text-[10px]">📝 obs</span>}
-                            </div>
-                          );
-                        });
-                      })()}
-                    </div>
-                  </div>
-                  {observacoesGerais && (
-                    <div className="col-span-2">
-                      <span className="text-muted-foreground text-xs block">Observações Gerais</span>
-                      <span className="text-xs italic text-foreground">{observacoesGerais}</span>
-                    </div>
-                  )}
-                  <div>
-                    <span className="text-muted-foreground text-xs block">Valor Total</span>
-                    <span className="font-bold text-foreground">R$ {valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground text-xs block">Carga Total</span>
-                    <span className="font-medium">{cargaTotalHoras.toFixed(1)}h</span>
-                  </div>
-                </div>
-              </div>
-            </div>
+            <Step3Prazo
+              cargaTotalHoras={cargaTotalHoras}
+              clienteBloqueado={clienteBloqueado}
+              codigoManual={codigoManual}
+              clienteNome={clienteNome}
+              canal={canal}
+              itens={itens}
+              totalOPs={totalOPs}
+              valorTotal={valorTotal}
+              observacoesGerais={observacoesGerais}
+              getPreviewOPMask={getPreviewOPMask}
+            />
           )}
         </div>
 
