@@ -17,6 +17,7 @@ export interface PedidoDB {
   data_faturamento: string | null;
   data_expedicao: string | null;
   origem_dado: string;
+  observacoes: string | null;
   created_at: string;
   updated_at: string;
 }

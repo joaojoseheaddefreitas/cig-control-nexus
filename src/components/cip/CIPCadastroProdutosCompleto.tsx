@@ -258,7 +258,7 @@ export function CIPCadastroProdutosCompleto() {
         {/* Lista */}
         <TabsContent value="lista" className="space-y-4">
           <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-            <ScrollArea className="h-[500px]">
+            <ScrollArea className="h-[600px]">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 z-10 bg-secondary/80 backdrop-blur-sm">
                   <tr className="border-b border-border/50">
@@ -403,10 +403,10 @@ export function CIPCadastroProdutosCompleto() {
                   <Button variant="outline" onClick={() => { setActiveTab('lista'); setEditingId(null); setForm(emptyForm()); }}>
                     <X className="h-4 w-4 mr-2" />Cancelar
                   </Button>
-                  <Button className="bg-cip hover:bg-cip/90" onClick={handleSave} disabled={saving}>
-                    {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                    {editingId ? 'Atualizar Produto' : 'Salvar Produto'}
-                  </Button>
+                   <Button className="bg-cip hover:bg-cip/90" onClick={() => { if (!saving) handleSave(); }} disabled={saving}>
+                     {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                     {editingId ? 'Atualizar Produto' : 'Salvar Produto'}
+                   </Button>
                 </div>
               </div>
             </ScrollArea>
