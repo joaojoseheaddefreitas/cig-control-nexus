@@ -161,7 +161,7 @@ export function CIPGradeIndustrial() {
       </div>
 
       {/* Grid */}
-      <div className="overflow-x-auto rounded-xl border border-border/30 bg-card/80">
+      <div className="rounded-xl border border-border/30 bg-card/80 max-h-[600px] overflow-y-auto overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
             <tr className="border-b border-border/50 bg-secondary/30">

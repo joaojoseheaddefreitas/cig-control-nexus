@@ -311,7 +311,14 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
         setCanal(pedido.canal);
         setMargem(pedido.margem || '');
         setCodigoManual(pedido.codigo || '');
-        setObservacoesGerais('');
+        // Load observações from DB
+        if (pedido.id) {
+          supabase.from('pedidos').select('observacoes').eq('id', pedido.id).single().then(({ data }) => {
+            setObservacoesGerais(data?.observacoes || '');
+          });
+        } else {
+          setObservacoesGerais('');
+        }
         // Load real itens from DB
         if (pedido.id) {
           loadPedidoItens(pedido.id);
@@ -463,7 +470,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       prazoEntrega: '',
       dataEntrada: new Date().toISOString().split('T')[0],
       status: 'aguardando',
-    }, stepperItens);
+      observacoesGerais,
+    } as any, stepperItens);
 
     onOpenChange(false);
   };

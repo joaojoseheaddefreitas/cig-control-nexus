@@ -128,6 +128,7 @@ export function CIVCarteiraProducao() {
           prazo_entrega: data.prazoEntrega || null,
           status: data.status || editingPedido.status,
           codigo: data.codigo || editingPedido.codigo,
+          observacoes: (data as any).observacoesGerais || null,
         });
         if (error) {
           toast.error('❌ Falha ao atualizar pedido', { description: error });
@@ -192,6 +193,7 @@ export function CIVCarteiraProducao() {
         data_faturamento: null,
         data_expedicao: null,
         origem_dado: 'manual',
+        observacoes: (data as any).observacoesGerais || null,
       });
 
       if (pedidoError || !newPedido) {
@@ -291,7 +293,7 @@ export function CIVCarteiraProducao() {
 
       {/* Table */}
       <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-        <ScrollArea className="max-h-[500px]">
+        <ScrollArea className="max-h-[600px]">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>

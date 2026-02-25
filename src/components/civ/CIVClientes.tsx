@@ -147,7 +147,7 @@ export function CIVClientes() {
             <span>Carregando...</span>
           </div>
         ) : (
-          <ScrollArea className="max-h-[500px]">
+          <ScrollArea className="max-h-[600px]">
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border/50 bg-secondary/30 sticky top-0">

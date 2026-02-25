@@ -1,500 +1,231 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { setoresProducao, calcularDiasEquivalentes } from '@/data/cipData';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { KPICard } from '@/components/ui/KPICard';
-import { Layers, Users, TrendingUp, AlertTriangle, Pencil, Settings, BarChart3, Power, Plus, Save, X } from 'lucide-react';
+import { Layers, Users, TrendingUp, AlertTriangle, Pencil, Settings, BarChart3, Power, Plus, Save, X, Trash2, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
-interface SetorDetalhado {
-  id: number;
+interface SetorDB {
+  id: string;
   nome: string;
-  status: 'Normal' | 'Atenção' | 'Crítico';
-  carga: number;
-  equipe: { total: number; operadores: number; auxiliares: number };
-  maquinas: number;
-  horasDisponiveis: number;
-  eficiencia: number;
-  naFila: number;
-  emExecucao: number;
-  gargalo?: boolean;
+  ordem: number;
   ativo: boolean;
 }
 
-// Dados dos setores com informações completas
-const setoresIniciais: SetorDetalhado[] = [
-  { 
-    id: 1,
-    nome: 'Corte', 
-    status: 'Normal',
-    carga: 34, 
-    equipe: { total: 6, operadores: 4, auxiliares: 2 },
-    maquinas: 3,
-    horasDisponiveis: 884,
-    eficiencia: 85,
-    naFila: 8,
-    emExecucao: 4,
-    ativo: true
-  },
-  { 
-    id: 2,
-    nome: 'Montagem Estrutura', 
-    status: 'Normal',
-    carga: 38, 
-    equipe: { total: 4, operadores: 3, auxiliares: 1 },
-    maquinas: 2,
-    horasDisponiveis: 628,
-    eficiencia: 85,
-    naFila: 6,
-    emExecucao: 6,
-    ativo: true
-  },
-  { 
-    id: 3,
-    nome: 'Montagem Base', 
-    status: 'Normal',
-    carga: 37, 
-    equipe: { total: 4, operadores: 3, auxiliares: 1 },
-    maquinas: 2,
-    horasDisponiveis: 628,
-    eficiencia: 85,
-    naFila: 14,
-    emExecucao: 5,
-    ativo: true
-  },
-  { 
-    id: 4,
-    nome: 'Corte Tecido', 
-    status: 'Atenção',
-    carga: 53, 
-    equipe: { total: 3, operadores: 2, auxiliares: 1 },
-    maquinas: 2,
-    horasDisponiveis: 471,
-    eficiencia: 78,
-    naFila: 12,
-    emExecucao: 8,
-    gargalo: true,
-    ativo: true
-  },
-  { 
-    id: 5,
-    nome: 'Costura', 
-    status: 'Normal',
-    carga: 52, 
-    equipe: { total: 10, operadores: 8, auxiliares: 2 },
-    maquinas: 8,
-    horasDisponiveis: 1478,
-    eficiencia: 80,
-    naFila: 10,
-    emExecucao: 4,
-    ativo: true
-  },
-  { 
-    id: 6,
-    nome: 'Montagem Almofadas', 
-    status: 'Normal',
-    carga: 40, 
-    equipe: { total: 5, operadores: 4, auxiliares: 1 },
-    maquinas: 2,
-    horasDisponiveis: 785,
-    eficiencia: 85,
-    naFila: 14,
-    emExecucao: 2,
-    ativo: true
-  },
-  { 
-    id: 7,
-    nome: 'Estofamento', 
-    status: 'Normal',
-    carga: 53, 
-    equipe: { total: 8, operadores: 6, auxiliares: 2 },
-    maquinas: 3,
-    horasDisponiveis: 1212,
-    eficiencia: 82,
-    naFila: 10,
-    emExecucao: 4,
-    ativo: true
-  },
-  { 
-    id: 8,
-    nome: 'Acabamento', 
-    status: 'Normal',
-    carga: 38, 
-    equipe: { total: 4, operadores: 3, auxiliares: 1 },
-    maquinas: 2,
-    horasDisponiveis: 665,
-    eficiencia: 90,
-    naFila: 16,
-    emExecucao: 7,
-    ativo: true
-  },
-];
+interface SetorComCarga extends SetorDB {
+  opsEntrada: number;
+  horasOcupadas: number;
+}
 
-// Componente Gauge Circular
-function CircularGauge({ value, size = 160 }: { value: number; size?: number }) {
+// Circular Gauge
+function CircularGauge({ value, size = 140 }: { value: number; size?: number }) {
   const strokeWidth = 12;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(100, Math.max(0, value));
-  const offset = circumference - (progress / 100) * circumference * 0.75; // 270 graus
-
-  const getColor = (val: number) => {
-    if (val >= 80) return '#ef4444';
-    if (val >= 60) return '#f59e0b';
-    return '#3b82f6';
-  };
+  const offset = circumference - (progress / 100) * circumference * 0.75;
+  const getColor = (val: number) => val >= 80 ? '#ef4444' : val >= 60 ? '#f59e0b' : '#3b82f6';
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="transform -rotate-135">
-        {/* Background arc */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="#1e293b"
-          strokeWidth={strokeWidth}
-          strokeDasharray={`${circumference * 0.75} ${circumference * 0.25}`}
-          strokeLinecap="round"
-        />
-        {/* Progress arc */}
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke={getColor(value)}
-          strokeWidth={strokeWidth}
-          strokeDasharray={`${circumference * 0.75} ${circumference * 0.25}`}
-          strokeDashoffset={offset}
-          strokeLinecap="round"
-          className="transition-all duration-500"
-        />
+        <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#1e293b" strokeWidth={strokeWidth}
+          strokeDasharray={`${circumference*0.75} ${circumference*0.25}`} strokeLinecap="round" />
+        <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={getColor(value)} strokeWidth={strokeWidth}
+          strokeDasharray={`${circumference*0.75} ${circumference*0.25}`} strokeDashoffset={offset} strokeLinecap="round"
+          className="transition-all duration-500" />
       </svg>
-      {/* Center text */}
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span 
-          className="text-3xl font-bold"
-          style={{ color: getColor(value) }}
-        >
-          {value}%
-        </span>
-        <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">
-          CARGA
-        </span>
+        <span className="text-2xl font-bold" style={{ color: getColor(value) }}>{value}%</span>
+        <span className="text-xs text-muted-foreground uppercase tracking-wider mt-1">CARGA</span>
       </div>
     </div>
   );
 }
 
-// Props do SetorCard
-interface SetorCardProps {
-  setor: SetorDetalhado;
-  onToggle: (id: number) => void;
-  onEdit: (setor: SetorDetalhado) => void;
-}
-
-// Componente Card de Setor
-function SetorCard({ setor, onToggle, onEdit }: SetorCardProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editData, setEditData] = useState({
-    operadores: setor.equipe.operadores,
-    auxiliares: setor.equipe.auxiliares,
-    maquinas: setor.maquinas,
-    horasDisponiveis: setor.horasDisponiveis,
-    eficiencia: setor.eficiencia,
-  });
-
-  const handleSave = () => {
-    const updatedSetor: SetorDetalhado = {
-      ...setor,
-      equipe: {
-        ...setor.equipe,
-        operadores: editData.operadores,
-        auxiliares: editData.auxiliares,
-        total: editData.operadores + editData.auxiliares,
-      },
-      maquinas: editData.maquinas,
-      horasDisponiveis: editData.horasDisponiveis,
-      eficiencia: editData.eficiencia,
-    };
-    onEdit(updatedSetor);
-    setIsEditing(false);
-    toast.success(`Setor "${setor.nome}" atualizado! Programação e custos recalculados.`);
-  };
-
-  const getStatusBadge = () => {
-    if (!setor.ativo) {
-      return <Badge className="bg-zinc-600 text-zinc-200">Inativo</Badge>;
-    }
-    if (setor.gargalo) {
-      return <Badge className="bg-red-600 text-white">Gargalo</Badge>;
-    }
-    switch (setor.status) {
-      case 'Normal':
-        return <Badge className="bg-green-600 text-white">Normal</Badge>;
-      case 'Atenção':
-        return <Badge className="bg-yellow-600 text-white">Atenção</Badge>;
-      case 'Crítico':
-        return <Badge className="bg-red-600 text-white">Crítico</Badge>;
-      default:
-        return <Badge className="bg-green-600 text-white">Normal</Badge>;
-    }
-  };
-
-  return (
-    <Card className={`bg-card/60 backdrop-blur-sm border-border/50 p-5 relative overflow-hidden transition-opacity ${!setor.ativo ? 'opacity-50' : ''}`}>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <div className={`p-2 rounded-lg ${setor.ativo ? 'bg-blue-500/20' : 'bg-zinc-500/20'}`}>
-            <BarChart3 className={`h-5 w-5 ${setor.ativo ? 'text-blue-400' : 'text-zinc-400'}`} />
-          </div>
-          <div>
-            <h3 className="font-semibold text-foreground text-lg">{setor.nome}</h3>
-            {getStatusBadge()}
-          </div>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          {/* Toggle Ativo/Inativo */}
-          <div className="flex items-center gap-1">
-            <Switch 
-              checked={setor.ativo} 
-              onCheckedChange={() => {
-                onToggle(setor.id);
-                toast.info(`Setor "${setor.nome}" ${setor.ativo ? 'desativado' : 'ativado'}. Capacidade recalculada.`);
-              }}
-              className="data-[state=checked]:bg-green-500"
-            />
-          </div>
-          
-          {/* Botão Editar */}
-          <Dialog open={isEditing} onOpenChange={setIsEditing}>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                <Pencil className="h-4 w-4" />
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="bg-card border-border">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-cip" />
-                  Editar Setor: {setor.nome}
-                </DialogTitle>
-              </DialogHeader>
-              <div className="grid gap-4 py-4">
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="operadores" className="text-right">Operadores</Label>
-                  <Input 
-                    id="operadores" 
-                    value={editData.operadores}
-                    onChange={(e) => setEditData({...editData, operadores: parseInt(e.target.value) || 0})}
-                    type="number"
-                    className="col-span-3 bg-secondary/50" 
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="auxiliares" className="text-right">Auxiliares</Label>
-                  <Input 
-                    id="auxiliares" 
-                    value={editData.auxiliares}
-                    onChange={(e) => setEditData({...editData, auxiliares: parseInt(e.target.value) || 0})}
-                    type="number"
-                    className="col-span-3 bg-secondary/50" 
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="maquinas" className="text-right">Máquinas</Label>
-                  <Input 
-                    id="maquinas" 
-                    value={editData.maquinas}
-                    onChange={(e) => setEditData({...editData, maquinas: parseInt(e.target.value) || 0})}
-                    type="number"
-                    className="col-span-3 bg-secondary/50" 
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="horas" className="text-right">Horas Disp.</Label>
-                  <Input 
-                    id="horas" 
-                    value={editData.horasDisponiveis}
-                    onChange={(e) => setEditData({...editData, horasDisponiveis: parseInt(e.target.value) || 0})}
-                    type="number"
-                    className="col-span-3 bg-secondary/50" 
-                  />
-                </div>
-                <div className="grid grid-cols-4 items-center gap-4">
-                  <Label htmlFor="eficiencia" className="text-right">Eficiência %</Label>
-                  <Input 
-                    id="eficiencia" 
-                    value={editData.eficiencia}
-                    onChange={(e) => setEditData({...editData, eficiencia: parseInt(e.target.value) || 0})}
-                    type="number"
-                    className="col-span-3 bg-secondary/50" 
-                  />
-                </div>
-              </div>
-              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-sm text-amber-400">
-                ⚠️ Alterações refletirão em: Programação, Custos e Indicadores.
-              </div>
-              <div className="flex justify-end gap-2 mt-4">
-                <Button variant="outline" onClick={() => setIsEditing(false)}>
-                  <X className="h-4 w-4 mr-2" />
-                  Cancelar
-                </Button>
-                <Button onClick={handleSave} className="bg-cip hover:bg-cip/90">
-                  <Save className="h-4 w-4 mr-2" />
-                  Salvar
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </div>
-
-      {/* Gauge Circular */}
-      <div className="flex justify-center mb-6">
-        <CircularGauge value={setor.ativo ? setor.carga : 0} />
-      </div>
-
-      {/* Métricas Grid */}
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div className="bg-secondary/30 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Users className="h-4 w-4" />
-            <span className="text-xs">Equipe</span>
-          </div>
-          <p className="text-xl font-bold text-foreground">
-            {setor.equipe.total}
-            <span className="text-xs text-muted-foreground font-normal ml-1">
-              ({setor.equipe.operadores}op + {setor.equipe.auxiliares}aux)
-            </span>
-          </p>
-        </div>
-
-        <div className="bg-secondary/30 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <Settings className="h-4 w-4" />
-            <span className="text-xs">Máquinas</span>
-          </div>
-          <p className="text-xl font-bold text-foreground">{setor.maquinas}</p>
-        </div>
-
-        <div className="bg-secondary/30 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <circle cx="12" cy="12" r="10" strokeWidth="2" />
-              <path strokeLinecap="round" strokeWidth="2" d="M12 6v6l4 2" />
-            </svg>
-            <span className="text-xs">Horas Disponíveis</span>
-          </div>
-          <p className="text-xl font-bold text-blue-400">{setor.horasDisponiveis}h</p>
-        </div>
-
-        <div className="bg-secondary/30 rounded-lg p-3">
-          <div className="flex items-center gap-2 text-muted-foreground mb-1">
-            <TrendingUp className="h-4 w-4" />
-            <span className="text-xs">Eficiência</span>
-          </div>
-          <p className="text-xl font-bold text-foreground">{setor.eficiencia}%</p>
-        </div>
-      </div>
-
-      {/* Footer */}
-      <div className="flex items-center justify-between pt-4 border-t border-border/30">
-        <span className="text-sm">
-          <span className="text-red-400 font-bold">{setor.naFila}</span>
-          <span className="text-muted-foreground"> na fila</span>
-        </span>
-        <span className="text-sm">
-          <span className="text-green-400 font-bold">{setor.emExecucao}</span>
-          <span className="text-muted-foreground"> em execução</span>
-        </span>
-      </div>
-    </Card>
-  );
-}
-
 export function CIPSetores() {
-  const [setores, setSetores] = useState<SetorDetalhado[]>(setoresIniciais);
+  const [setores, setSetores] = useState<SetorComCarga[]>([]);
+  const [loading, setLoading] = useState(true);
   const [novoSetorOpen, setNovoSetorOpen] = useState(false);
-  const [novoSetor, setNovoSetor] = useState({
-    nome: '',
-    operadores: 1,
-    auxiliares: 0,
-    maquinas: 0,
-    horasDisponiveis: 100,
-    eficiencia: 80,
-  });
+  const [novoNome, setNovoNome] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [deleteDialog, setDeleteDialog] = useState<SetorComCarga | null>(null);
+  const [substituteId, setSubstituteId] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
-  // Handlers
-  const handleToggle = (id: number) => {
-    setSetores(prev => prev.map(s => 
-      s.id === id ? { ...s, ativo: !s.ativo } : s
-    ));
+  useEffect(() => { loadSetores(); }, []);
+
+  const loadSetores = async () => {
+    setLoading(true);
+    const { data: setoresDB } = await supabase
+      .from('setores_produtivos')
+      .select('*')
+      .order('ordem');
+
+    if (!setoresDB) { setLoading(false); return; }
+
+    // Load carga real from setor_rastreamento (OPs em entrada = ocupando setor)
+    const { data: rastreamento } = await supabase
+      .from('setor_rastreamento')
+      .select('setor_id, op_id, status, ops(quantidade, tempo_unitario)')
+      .eq('status', 'entrada');
+
+    const cargaMap: Record<string, { ops: number; horas: number }> = {};
+    (rastreamento || []).forEach((r: any) => {
+      if (!cargaMap[r.setor_id]) cargaMap[r.setor_id] = { ops: 0, horas: 0 };
+      cargaMap[r.setor_id].ops++;
+      const q = Number(r.ops?.quantidade) || 0;
+      const t = Number(r.ops?.tempo_unitario) || 0;
+      cargaMap[r.setor_id].horas += q * t;
+    });
+
+    const mapped: SetorComCarga[] = setoresDB.map(s => ({
+      ...s,
+      opsEntrada: cargaMap[s.id]?.ops || 0,
+      horasOcupadas: cargaMap[s.id]?.horas || 0,
+    }));
+
+    setSetores(mapped);
+    setLoading(false);
   };
 
-  const handleEdit = (updatedSetor: SetorDetalhado) => {
-    setSetores(prev => prev.map(s => 
-      s.id === updatedSetor.id ? updatedSetor : s
-    ));
+  const handleToggle = async (setor: SetorComCarga) => {
+    const { error } = await supabase
+      .from('setores_produtivos')
+      .update({ ativo: !setor.ativo })
+      .eq('id', setor.id);
+    if (error) { toast.error('Erro: ' + error.message); return; }
+    toast.info(`Setor "${setor.nome}" ${setor.ativo ? 'desativado' : 'ativado'}`);
+    await loadSetores();
   };
 
-  const handleAddSetor = () => {
-    if (!novoSetor.nome.trim()) {
-      toast.error('Informe o nome do setor');
+  const handleAddSetor = async () => {
+    if (!novoNome.trim()) { toast.error('Nome é obrigatório'); return; }
+    setSaving(true);
+    const maxOrdem = setores.length > 0 ? Math.max(...setores.map(s => s.ordem)) : 0;
+    const { error } = await supabase.from('setores_produtivos').insert({
+      nome: novoNome.trim(),
+      ordem: maxOrdem + 1,
+      ativo: true,
+    });
+    if (error) { toast.error('Erro: ' + error.message); }
+    else { toast.success('Setor criado!'); setNovoSetorOpen(false); setNovoNome(''); }
+    setSaving(false);
+    await loadSetores();
+  };
+
+  const handleDeleteSetor = async () => {
+    if (!deleteDialog || !substituteId) { toast.error('Selecione o setor substituto'); return; }
+    setDeleting(true);
+
+    // Check for active vinculos
+    const { data: vinculos } = await supabase
+      .from('produto_setor_tempos')
+      .select('id, produto_id, tempo_horas')
+      .eq('setor_id', deleteDialog.id);
+
+    const { data: activeOps } = await supabase
+      .from('setor_rastreamento')
+      .select('id')
+      .eq('setor_id', deleteDialog.id)
+      .eq('status', 'entrada');
+
+    if (activeOps && activeOps.length > 0) {
+      toast.error('Setor tem OPs ativas em produção. Impossível excluir.');
+      setDeleting(false);
       return;
     }
 
-    const newSetor: SetorDetalhado = {
-      id: setores.length + 1,
-      nome: novoSetor.nome,
-      status: 'Normal',
-      carga: 0,
-      equipe: {
-        total: novoSetor.operadores + novoSetor.auxiliares,
-        operadores: novoSetor.operadores,
-        auxiliares: novoSetor.auxiliares,
-      },
-      maquinas: novoSetor.maquinas,
-      horasDisponiveis: novoSetor.horasDisponiveis,
-      eficiencia: novoSetor.eficiencia,
-      naFila: 0,
-      emExecucao: 0,
-      ativo: true,
-    };
+    // Migrate product sector times: merge into substitute
+    if (vinculos && vinculos.length > 0) {
+      for (const v of vinculos) {
+        // Check if substitute already has time for this product
+        const { data: existing } = await supabase
+          .from('produto_setor_tempos')
+          .select('id, tempo_horas')
+          .eq('produto_id', v.produto_id)
+          .eq('setor_id', substituteId)
+          .maybeSingle();
 
-    setSetores([...setores, newSetor]);
-    setNovoSetorOpen(false);
-    setNovoSetor({
-      nome: '',
-      operadores: 1,
-      auxiliares: 0,
-      maquinas: 0,
-      horasDisponiveis: 100,
-      eficiencia: 80,
+        if (existing) {
+          // Sum times
+          await supabase.from('produto_setor_tempos')
+            .update({ tempo_horas: Number(existing.tempo_horas) + Number(v.tempo_horas) })
+            .eq('id', existing.id);
+        } else {
+          // Move to substitute
+          await supabase.from('produto_setor_tempos')
+            .update({ setor_id: substituteId })
+            .eq('id', v.id);
+        }
+      }
+      // Clean up any remaining for deleted setor
+      await supabase.from('produto_setor_tempos').delete().eq('setor_id', deleteDialog.id);
+    }
+
+    // Migrate route steps
+    await supabase.from('op_route_steps')
+      .update({ setor_id: substituteId })
+      .eq('setor_id', deleteDialog.id);
+
+    // Migrate rastreamento (pendente only)
+    await supabase.from('setor_rastreamento')
+      .update({ setor_id: substituteId })
+      .eq('setor_id', deleteDialog.id)
+      .eq('status', 'pendente');
+
+    // Log the action
+    const substituteName = setores.find(s => s.id === substituteId)?.nome || substituteId;
+    await supabase.from('action_logs').insert({
+      action: 'excluir_setor',
+      entity: 'setores_produtivos',
+      entity_id: deleteDialog.id,
+      status: 'success',
+      details: {
+        setor_removido: deleteDialog.nome,
+        setor_substituto: substituteName,
+        produtos_migrados: vinculos?.length || 0,
+      } as any,
     });
-    toast.success(`Setor "${newSetor.nome}" adicionado! Capacidade recalculada.`);
+
+    // Delete the sector
+    const { error } = await supabase.from('setores_produtivos').delete().eq('id', deleteDialog.id);
+    if (error) { toast.error('Erro ao excluir: ' + error.message); }
+    else { toast.success(`Setor "${deleteDialog.nome}" excluído. Migrado para "${substituteName}".`); }
+
+    setDeleting(false);
+    setDeleteDialog(null);
+    setSubstituteId('');
+    await loadSetores();
   };
 
-  // Cálculos
+  // Calculate carga % (arbitrary max 8h/day reference)
+  const getCargaPercent = (s: SetorComCarga) => {
+    if (!s.ativo || s.horasOcupadas === 0) return 0;
+    // Assume 8h capacity per day as reference
+    return Math.min(100, Math.round((s.horasOcupadas / 8) * 100));
+  };
+
   const setoresAtivos = setores.filter(s => s.ativo);
-  const totalSetoresCount = setores.length;
-  const totalOperadores = setoresAtivos.reduce((acc, s) => acc + s.equipe.total, 0);
-  const totalMaquinas = setoresAtivos.reduce((acc, s) => acc + s.maquinas, 0);
-  const eficienciaMedia = setoresAtivos.length > 0 
-    ? setoresAtivos.reduce((acc, s) => acc + s.eficiencia, 0) / setoresAtivos.length 
-    : 0;
-  const setoresGargalo = setoresAtivos.filter(s => s.gargalo);
-  const totalNaFila = setoresAtivos.reduce((acc, s) => acc + s.naFila, 0);
-  const totalEmExecucao = setoresAtivos.reduce((acc, s) => acc + s.emExecucao, 0);
+  const totalOpsAtivas = setoresAtivos.reduce((a, s) => a + s.opsEntrada, 0);
+  const totalHorasOcupadas = setoresAtivos.reduce((a, s) => a + s.horasOcupadas, 0);
+  const gargalos = setoresAtivos.filter(s => getCargaPercent(s) >= 80);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64 gap-2 text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" /> Carregando setores...
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -504,95 +235,28 @@ export function CIPSetores() {
           <Layers className="h-6 w-6 text-cip" />
           <div>
             <h2 className="text-2xl font-bold text-foreground">Setores de Produção</h2>
-            <p className="text-sm text-muted-foreground">
-              Gestão de capacidade e eficiência por setor
-            </p>
+            <p className="text-sm text-muted-foreground">Dados reais do banco — gestão de capacidade por setor</p>
           </div>
         </div>
-        
-        {/* Botão Novo Setor */}
         <Dialog open={novoSetorOpen} onOpenChange={setNovoSetorOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-cip hover:bg-cip/90">
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Setor
-            </Button>
+            <Button className="bg-cip hover:bg-cip/90"><Plus className="h-4 w-4 mr-2" /> Novo Setor</Button>
           </DialogTrigger>
-          <DialogContent className="bg-card border-border">
+          <DialogContent>
             <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Plus className="h-5 w-5 text-cip" />
-                Adicionar Novo Setor
-              </DialogTitle>
+              <DialogTitle>Adicionar Novo Setor</DialogTitle>
+              <DialogDescription>O setor será adicionado ao final da sequência produtiva.</DialogDescription>
             </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
+            <div className="space-y-4 py-4">
+              <div>
                 <Label>Nome do Setor *</Label>
-                <Input 
-                  value={novoSetor.nome}
-                  onChange={(e) => setNovoSetor({...novoSetor, nome: e.target.value})}
-                  placeholder="Ex: Pintura"
-                  className="bg-secondary/50" 
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Operadores</Label>
-                  <Input 
-                    type="number"
-                    value={novoSetor.operadores}
-                    onChange={(e) => setNovoSetor({...novoSetor, operadores: parseInt(e.target.value) || 0})}
-                    className="bg-secondary/50" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Auxiliares</Label>
-                  <Input 
-                    type="number"
-                    value={novoSetor.auxiliares}
-                    onChange={(e) => setNovoSetor({...novoSetor, auxiliares: parseInt(e.target.value) || 0})}
-                    className="bg-secondary/50" 
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Máquinas</Label>
-                  <Input 
-                    type="number"
-                    value={novoSetor.maquinas}
-                    onChange={(e) => setNovoSetor({...novoSetor, maquinas: parseInt(e.target.value) || 0})}
-                    className="bg-secondary/50" 
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Horas Disponíveis</Label>
-                  <Input 
-                    type="number"
-                    value={novoSetor.horasDisponiveis}
-                    onChange={(e) => setNovoSetor({...novoSetor, horasDisponiveis: parseInt(e.target.value) || 0})}
-                    className="bg-secondary/50" 
-                  />
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label>Eficiência (%)</Label>
-                <Input 
-                  type="number"
-                  value={novoSetor.eficiencia}
-                  onChange={(e) => setNovoSetor({...novoSetor, eficiencia: parseInt(e.target.value) || 0})}
-                  className="bg-secondary/50" 
-                />
+                <Input value={novoNome} onChange={e => setNovoNome(e.target.value)} placeholder="Ex: Pintura" className="mt-1" />
               </div>
             </div>
             <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setNovoSetorOpen(false)}>
-                <X className="h-4 w-4 mr-2" />
-                Cancelar
-              </Button>
-              <Button onClick={handleAddSetor} className="bg-cip hover:bg-cip/90">
-                <Save className="h-4 w-4 mr-2" />
-                Criar Setor
+              <Button variant="outline" onClick={() => setNovoSetorOpen(false)}>Cancelar</Button>
+              <Button onClick={handleAddSetor} disabled={saving} className="bg-cip hover:bg-cip/90">
+                {saving ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Save className="h-4 w-4 mr-1" />} Criar
               </Button>
             </div>
           </DialogContent>
@@ -601,82 +265,101 @@ export function CIPSetores() {
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard
-          title="Total Setores"
-          value={totalSetoresCount}
-          subtitle={`${setoresAtivos.length} ativos`}
-          icon={<Layers className="h-5 w-5" />}
-          variant="cip"
-        />
-        <KPICard
-          title="Operadores"
-          value={totalOperadores}
-          subtitle={`${totalMaquinas} máquinas`}
-          icon={<Users className="h-5 w-5" />}
-          variant="cip"
-        />
-        <KPICard
-          title="Eficiência Média"
-          value={`${eficienciaMedia.toFixed(0)}%`}
-          subtitle="Produtividade geral"
-          icon={<TrendingUp className="h-5 w-5" />}
-          trend="up"
-          trendValue="+2.5%"
-          variant="cip"
-        />
-        <KPICard
-          title="Gargalos"
-          value={setoresGargalo.length}
-          subtitle="Setores críticos"
-          icon={<AlertTriangle className="h-5 w-5" />}
-          trend={setoresGargalo.length > 0 ? "down" : "up"}
-          trendValue={setoresGargalo.length > 0 ? "Requer ação" : "OK"}
-          variant="cip"
-        />
+        <KPICard title="Total Setores" value={setores.length} subtitle={`${setoresAtivos.length} ativos`} icon={<Layers className="h-5 w-5" />} variant="cip" />
+        <KPICard title="OPs Ativas" value={totalOpsAtivas} subtitle="Em setores" icon={<Users className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Horas Ocupadas" value={`${totalHorasOcupadas.toFixed(1)}h`} subtitle="Carga total" icon={<TrendingUp className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Gargalos" value={gargalos.length} subtitle={gargalos.length > 0 ? 'Requer ação' : 'OK'} icon={<AlertTriangle className="h-5 w-5" />} variant="cip" />
       </div>
 
-      {/* Resumo de Fila */}
-      <Card className="bg-card/50 backdrop-blur-sm border-border/50 p-4">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-6">
-            <div>
-              <p className="text-sm text-muted-foreground">Total na Fila</p>
-              <p className="text-2xl font-bold text-yellow-400">{totalNaFila}</p>
-            </div>
-            <div className="h-8 w-px bg-border/50" />
-            <div>
-              <p className="text-sm text-muted-foreground">Em Execução</p>
-              <p className="text-2xl font-bold text-green-400">{totalEmExecucao}</p>
-            </div>
-            <div className="h-8 w-px bg-border/50" />
-            <div>
-              <p className="text-sm text-muted-foreground">Setores Inativos</p>
-              <p className="text-2xl font-bold text-zinc-400">{setores.length - setoresAtivos.length}</p>
-            </div>
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {setoresGargalo.length > 0 && (
-              <Badge className="bg-red-600/20 text-red-400 border-red-600/50">
-                ⚠ Gargalo: {setoresGargalo.map(s => s.nome).join(', ')}
-              </Badge>
-            )}
-          </div>
+      {/* Grid de Cards */}
+      <ScrollArea className="max-h-[600px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 pr-2">
+          {setores.map(setor => {
+            const carga = getCargaPercent(setor);
+            const isGargalo = carga >= 80;
+            return (
+              <Card key={setor.id} className={`bg-card/60 backdrop-blur-sm border-border/50 p-5 transition-opacity ${!setor.ativo ? 'opacity-50' : ''}`}>
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-lg ${setor.ativo ? 'bg-blue-500/20' : 'bg-zinc-500/20'}`}>
+                      <BarChart3 className={`h-5 w-5 ${setor.ativo ? 'text-blue-400' : 'text-zinc-400'}`} />
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-foreground">{setor.nome}</h3>
+                      <span className="text-xs text-muted-foreground">Ordem: {setor.ordem}</span>
+                      {isGargalo && setor.ativo && <Badge className="ml-2 bg-red-600 text-white text-[10px]">Gargalo</Badge>}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Switch checked={setor.ativo} onCheckedChange={() => handleToggle(setor)} className="data-[state=checked]:bg-green-500" />
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive" onClick={() => { setDeleteDialog(setor); setSubstituteId(''); }}
+                      title="Excluir setor">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="flex justify-center mb-4">
+                  <CircularGauge value={setor.ativo ? carga : 0} size={130} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-secondary/30 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground">OPs em Entrada</p>
+                    <p className="text-xl font-bold text-warning">{setor.opsEntrada}</p>
+                  </div>
+                  <div className="bg-secondary/30 rounded-lg p-3">
+                    <p className="text-xs text-muted-foreground">Horas Ocupadas</p>
+                    <p className="text-xl font-bold text-blue-400">{setor.horasOcupadas.toFixed(1)}h</p>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
         </div>
-      </Card>
+      </ScrollArea>
 
-      {/* Grid de Cards de Setores */}
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-        {setores.map((setor) => (
-          <SetorCard 
-            key={setor.id} 
-            setor={setor} 
-            onToggle={handleToggle}
-            onEdit={handleEdit}
-          />
-        ))}
-      </div>
+      {/* Delete Dialog with Migration */}
+      <Dialog open={!!deleteDialog} onOpenChange={() => setDeleteDialog(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Excluir Setor: {deleteDialog?.nome}</DialogTitle>
+            <DialogDescription>
+              Todos os produtos e tempos vinculados serão migrados para o setor substituto.
+              OPs e histórico serão preservados.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            {deleteDialog && deleteDialog.opsEntrada > 0 && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive">
+                ⚠ Este setor tem {deleteDialog.opsEntrada} OP(s) ativa(s). Exclusão bloqueada até finalização.
+              </div>
+            )}
+            <div>
+              <Label>Setor Substituto (migração obrigatória) *</Label>
+              <Select value={substituteId} onValueChange={setSubstituteId}>
+                <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione o setor destino" /></SelectTrigger>
+                <SelectContent>
+                  {setores.filter(s => s.id !== deleteDialog?.id).map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground mt-1">Tempos dos produtos serão somados ao setor destino.</p>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={handleDeleteSetor}
+              disabled={deleting || !substituteId || (deleteDialog?.opsEntrada || 0) > 0}>
+              {deleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
+              Excluir e Migrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
-      {/* Legenda */}
+      {/* Legend */}
       <Card className="bg-secondary/30 border-border/50 p-4">
         <div className="flex flex-wrap items-center gap-6">
           <span className="text-sm text-muted-foreground font-medium">Indicadores:</span>
@@ -694,11 +377,7 @@ export function CIPSetores() {
           </div>
           <div className="flex items-center gap-2">
             <Power className="h-4 w-4 text-green-500" />
-            <span className="text-sm text-muted-foreground">Ativar/Desativar setor</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-4 w-4 text-red-500" />
-            <span className="text-sm text-muted-foreground">Gargalo identificado</span>
+            <span className="text-sm text-muted-foreground">Ativar/Desativar</span>
           </div>
         </div>
       </Card>
