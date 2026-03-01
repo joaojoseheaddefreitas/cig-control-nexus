@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { 
   LayoutDashboard, TrendingUp, Factory, Package, Wallet, 
   X, Home
@@ -70,7 +70,15 @@ export function TopModuleTabs({ activeModule, onModuleChange, onSubPageChange }:
   const [selectedPage, setSelectedPage] = useState('dashboard');
 
   const handleModuleClick = (module: ModuleType) => {
+    // If clicking the same module that's already active, just toggle sidebar
+    if (module === activeModule) {
+      setSidebarOpen(prev => !prev);
+      return;
+    }
+    // Switch module, open sidebar, reset to dashboard
     onModuleChange(module);
+    setSelectedPage('dashboard');
+    onSubPageChange?.('dashboard');
     setSidebarOpen(true);
   };
 
@@ -103,7 +111,7 @@ export function TopModuleTabs({ activeModule, onModuleChange, onSubPageChange }:
             <span className="text-xs font-bold tracking-wide">HOME</span>
           </button>
 
-          {/* Abas dos Módulos com ÍCONE + TEXTO — Visual com relevo sutil 3D */}
+          {/* Abas dos Módulos */}
           <nav className="flex items-center gap-1 sm:gap-1.5">
             {modules.map((module) => {
               const isActive = activeModule === module.id;
