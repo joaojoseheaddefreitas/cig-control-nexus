@@ -922,21 +922,33 @@ export type Database = {
         Row: {
           ativo: boolean
           created_at: string
+          eficiencia: number
+          horas_turno: number
           id: string
+          mao_de_obra: number
+          maquinas_automaticas: number
           nome: string
           ordem: number
         }
         Insert: {
           ativo?: boolean
           created_at?: string
+          eficiencia?: number
+          horas_turno?: number
           id?: string
+          mao_de_obra?: number
+          maquinas_automaticas?: number
           nome: string
           ordem?: number
         }
         Update: {
           ativo?: boolean
           created_at?: string
+          eficiencia?: number
+          horas_turno?: number
           id?: string
+          mao_de_obra?: number
+          maquinas_automaticas?: number
           nome?: string
           ordem?: number
         }

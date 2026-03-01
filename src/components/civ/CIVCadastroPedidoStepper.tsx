@@ -444,8 +444,12 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     setItens(updated);
   };
 
+  const [savingOrder, setSavingOrder] = useState(false);
+
   const handleSave = () => {
+    if (savingOrder) return;
     if (!clienteNome || !codigoManual) return;
+    setSavingOrder(true);
 
     const stepperItens: PedidoStepperItem[] = itens
       .filter(i => i.produtoNome)
@@ -474,6 +478,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     } as any, stepperItens);
 
     onOpenChange(false);
+    setSavingOrder(false);
   };
 
   return (
@@ -558,7 +563,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                     <SelectTrigger className="mt-1">
                       <SelectValue placeholder="Selecione o cliente" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-[300px] overflow-y-auto">
                       {clientes.map((c) => (
                         <SelectItem key={c.id} value={c.id}>
                           <span className="flex items-center gap-2">
@@ -706,7 +711,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                               <SelectTrigger className="h-8 text-xs">
                                 <SelectValue placeholder="Selecione o produto" />
                               </SelectTrigger>
-                              <SelectContent>
+                              <SelectContent className="max-h-[300px] overflow-y-auto">
                                 {produtos.map((p) => (
                                   <SelectItem key={p.id} value={p.id}>
                                     {p.nome} {p.preco_base > 0 ? `(R$ ${Number(p.preco_base).toFixed(2)})` : ''}
@@ -874,7 +879,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           ) : (
             <Button
               onClick={handleSave}
-              disabled={clienteBloqueado || isLocked}
+              disabled={clienteBloqueado || isLocked || savingOrder}
               className="bg-success hover:bg-success/90 gap-2"
             >
               <Check className="h-4 w-4" />
