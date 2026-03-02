@@ -332,9 +332,9 @@ export function CIPSetores() {
         </div>
       </Card>
 
-      {/* Grid de Cards with Scroll */}
-      <ScrollArea className="max-h-[600px]">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 pr-2">
+      {/* Grid de Cards */}
+      <div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
           {setores.map(setor => (
             <Card key={setor.id} className={`bg-card/60 backdrop-blur-sm border-border/50 p-5 transition-opacity ${!setor.ativo ? 'opacity-50' : ''}`}>
               {/* Header */}
@@ -396,7 +396,7 @@ export function CIPSetores() {
             </Card>
           ))}
         </div>
-      </ScrollArea>
+      </div>
 
       {/* Edit Dialog */}
       <Dialog open={!!editDialog} onOpenChange={() => setEditDialog(null)}>
