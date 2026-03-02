@@ -21,6 +21,7 @@ interface SetorProdutivo {
   id: string;
   nome: string;
   ordem: number;
+  eficiencia: number;
 }
 
 interface SetorTempo {
@@ -93,10 +94,10 @@ export function CIPCadastroProdutosCompleto() {
     setLoading(true);
     const [prodRes, setorRes] = await Promise.all([
       supabase.from('produtos').select('*').order('created_at', { ascending: false }),
-      supabase.from('setores_produtivos').select('*').eq('ativo', true).order('ordem'),
+      supabase.from('setores_produtivos').select('id, nome, ordem, eficiencia').eq('ativo', true).order('ordem'),
     ]);
     if (prodRes.data) setProdutos(prodRes.data.map((d: any) => ({ ...d, percentual_juros: Number(d.percentual_juros) || 0 })));
-    if (setorRes.data) setSetores(setorRes.data);
+    if (setorRes.data) setSetores(setorRes.data.map((s: any) => ({ ...s, eficiencia: Number(s.eficiencia) || 0.85 })));
     setLoading(false);
   };
 
@@ -112,7 +113,11 @@ export function CIPCadastroProdutosCompleto() {
   const tempoMedio = produtos.length > 0 ? produtos.reduce((a, p) => a + Number(p.tempo_unitario), 0) / produtos.length : 0;
   const precoMedio = produtos.length > 0 ? produtos.reduce((a, p) => a + Number(p.preco_base), 0) / produtos.length : 0;
 
-  const rtcCalc = Object.values(form.setorTempos).reduce((sum, v) => sum + (Number(v) || 0), 0);
+  // RTC = Σ(Horas × Eficiência do Setor)
+  const rtcCalc = setores.reduce((sum, setor) => {
+    const horas = Number(form.setorTempos[setor.id]) || 0;
+    return sum + (horas * setor.eficiencia);
+  }, 0);
 
   const handleEdit = async (p: ProdutoDB) => {
     setEditingId(p.id);
@@ -346,7 +351,10 @@ export function CIPCadastroProdutosCompleto() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                     {setores.map((setor) => (
                       <div key={setor.id} className="p-3 rounded-lg border border-border/30 bg-secondary/20">
-                        <label className="text-xs text-muted-foreground block mb-1">{setor.nome}</label>
+                        <label className="text-xs text-muted-foreground block mb-1">
+                          {setor.nome}
+                          <span className="text-[10px] ml-1 opacity-60">(eff: {Math.round(setor.eficiencia * 100)}%)</span>
+                        </label>
                         <Input
                           type="number"
                           step="0.01"
@@ -359,6 +367,11 @@ export function CIPCadastroProdutosCompleto() {
                           placeholder="0.00"
                           className="h-8 text-xs font-mono"
                         />
+                        {(form.setorTempos[setor.id] || 0) > 0 && (
+                          <p className="text-[10px] text-cip mt-1">
+                            Contribuição RTC: {((Number(form.setorTempos[setor.id]) || 0) * setor.eficiencia).toFixed(2)}h
+                          </p>
+                        )}
                       </div>
                     ))}
                   </div>
