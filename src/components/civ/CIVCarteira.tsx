@@ -140,10 +140,10 @@ export function CIVCarteira() {
             <span>Carregando...</span>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="max-h-[600px] overflow-y-auto overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-border/50">
+              <tr className="border-b border-border/50 sticky top-0 bg-secondary/80 backdrop-blur-sm z-10">
                   <th className="text-left py-3 px-4 text-muted-foreground font-medium">Pedido</th>
                   <th className="text-left py-3 px-4 text-muted-foreground font-medium">Cliente</th>
                   <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden md:table-cell">Canal</th>

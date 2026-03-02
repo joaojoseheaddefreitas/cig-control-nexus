@@ -69,10 +69,10 @@ export function CIPCadastroPedidos() {
 
       {/* Table */}
       <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-        <div className="overflow-x-auto">
+        <div className="max-h-[600px] overflow-y-auto overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50 bg-secondary/30">
+              <tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Código</th>
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Cliente</th>
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium hidden sm:table-cell">Produto</th>

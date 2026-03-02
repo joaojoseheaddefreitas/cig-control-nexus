@@ -95,10 +95,10 @@ export function CIVProdutos() {
 
       {/* Tabela de Produtos */}
       <ModuleCard title="Produtos & Mix de Vendas" variant="civ">
-        <div className="overflow-x-auto">
+        <div className="max-h-[600px] overflow-y-auto overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50">
+              <tr className="border-b border-border/50 sticky top-0 bg-secondary/80 backdrop-blur-sm z-10">
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Código</th>
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Produto</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Categoria</th>

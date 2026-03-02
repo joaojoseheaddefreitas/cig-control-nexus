@@ -146,10 +146,10 @@ export function CIPFilaProducao() {
           <p className="text-muted-foreground">Aprove pedidos no CIV para gerar OPs.</p>
         </div>
       ) : (
-        <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
+        <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[600px] overflow-y-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50 bg-secondary/30">
+              <tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
                 <th className="text-center py-2.5 px-2 text-muted-foreground font-medium w-12">#</th>
                 <th className="text-left py-2.5 px-3 text-muted-foreground font-medium">OP</th>
                 <th className="text-left py-2.5 px-3 text-muted-foreground font-medium hidden md:table-cell">Produto</th>
