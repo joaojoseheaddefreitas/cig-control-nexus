@@ -483,7 +483,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {pedido ? `Editar Pedido — ${pedido.codigo}` : 'Novo Pedido — Cadastro'}
@@ -530,8 +530,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           </div>
         )}
 
-        {/* Step Content */}
-        <div className="min-h-[300px]">
+        {/* Step Content - scrollable area */}
+        <div className="min-h-[200px] flex-1 overflow-y-auto pr-1">
 
           {/* ─── STEP 1: Cliente / Canal / Código ─── */}
           {currentStep === 1 && (
@@ -852,8 +852,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           )}
         </div>
 
-        {/* Navigation */}
-        <div className="flex items-center justify-between pt-4 border-t border-border/30">
+        {/* Navigation - sticky footer */}
+        <div className="flex items-center justify-between pt-4 border-t border-border/30 bg-background sticky bottom-0 shrink-0">
           <Button
             variant="outline"
             onClick={() => setCurrentStep(prev => Math.max(1, prev - 1))}
