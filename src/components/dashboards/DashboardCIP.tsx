@@ -21,8 +21,9 @@ import { CIPIA } from '@/components/cip/CIPIA';
 import { CIPAnalytics } from '@/components/cip/CIPAnalytics';
 import { CIPGradeIndustrial } from '@/components/cip/CIPGradeIndustrial';
 import { CIPFilaProducao } from '@/components/cip/CIPFilaProducao';
+import { CIPCargaDiaria } from '@/components/cip/CIPCargaDiaria';
 
-type TabType = 'dashboard' | 'programacao' | 'grade' | 'fila' | 'producao' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
+type TabType = 'dashboard' | 'programacao' | 'grade' | 'fila' | 'carga' | 'producao' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
 
 // Menu items - CIP focado em Programação, OPs e Produtos
 // IMPORTANTE: CIP NÃO TEM CARTEIRA DE VENDAS - Carteira está no CIV
@@ -30,6 +31,7 @@ const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
   { id: 'grade', label: 'Grade Industrial', icon: Layers, tipo: 'entrada', badge: 'APONTAR' },
   { id: 'fila', label: 'Fila PCP (FIFO)', icon: ClipboardList, tipo: 'visualizacao', badge: 'FIFO' },
+  { id: 'carga', label: 'Carga Diária', icon: Truck, tipo: 'entrada', badge: 'CARGA' },
   { id: 'programacao', label: 'Programação / OPs', icon: Calendar, tipo: 'entrada', badge: '+ OP' },
   { id: 'producao', label: 'Baixas por Setor', icon: Factory, tipo: 'baixa', badge: '- Baixa' },
   { id: 'setores', label: 'Setores Produtivos', icon: Layers, tipo: 'configuracao' },
@@ -54,6 +56,7 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
       case 'dashboard': return <CIPDashboardNew />;
       case 'grade': return <CIPGradeIndustrial />;
       case 'fila': return <CIPFilaProducao />;
+      case 'carga': return <CIPCargaDiaria />;
       case 'programacao': return <CIPProgramacaoDiaria />;
       case 'producao': return <CIPProducao />;
       case 'setores': return <CIPSetores />;
