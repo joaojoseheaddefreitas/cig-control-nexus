@@ -314,8 +314,8 @@ export function CIPCadastroProdutosCompleto() {
         {/* Novo / Editar */}
         <TabsContent value="novo" className="space-y-4">
           <ModuleCard title={editingId ? 'Editar Produto' : 'Cadastrar Novo Produto'} variant="cip">
-            <ScrollArea className="max-h-[65vh]">
-              <div className="space-y-6 pr-4">
+            <div className="flex flex-col max-h-[75vh]">
+            <div className="flex-1 overflow-y-auto pr-2 space-y-6">
                 {/* Identificação */}
                 <div>
                   <h4 className="text-sm font-semibold text-muted-foreground mb-3">IDENTIFICAÇÃO</h4>
@@ -412,17 +412,18 @@ export function CIPCadastroProdutosCompleto() {
                   <Textarea value={form.observacoes} onChange={(e) => setForm({ ...form, observacoes: e.target.value })} placeholder="Observações para produtos especiais, personalizações, restrições..." className="min-h-[80px]" />
                 </div>
 
-                <div className="flex justify-end gap-2 pt-4 border-t border-border">
-                  <Button variant="outline" onClick={() => { setActiveTab('lista'); setEditingId(null); setForm(emptyForm()); }}>
-                    <X className="h-4 w-4 mr-2" />Cancelar
-                  </Button>
-                   <Button className="bg-cip hover:bg-cip/90" onClick={() => { if (!saving) handleSave(); }} disabled={saving}>
-                     {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                     {editingId ? 'Atualizar Produto' : 'Salvar Produto'}
-                   </Button>
-                </div>
               </div>
-            </ScrollArea>
+            {/* Sticky footer buttons */}
+            <div className="flex justify-end gap-2 pt-4 border-t border-border/30 bg-background sticky bottom-0 shrink-0 mt-2">
+              <Button variant="outline" onClick={() => { setActiveTab('lista'); setEditingId(null); setForm(emptyForm()); }}>
+                <X className="h-4 w-4 mr-2" />Cancelar
+              </Button>
+              <Button className="bg-cip hover:bg-cip/90" onClick={() => { if (!saving) handleSave(); }} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                {editingId ? 'Atualizar Produto' : 'Salvar Produto'}
+              </Button>
+            </div>
+            </div>
           </ModuleCard>
         </TabsContent>
       </Tabs>
