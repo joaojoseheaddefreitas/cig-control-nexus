@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { verificarFechamentoPedido } from "./aprovacaoService";
+import { atualizarStatusCarga } from "./cargaService";
 
 export interface SetorProdutivo {
   id: string;
@@ -110,6 +111,9 @@ export async function handleSetorClick(
         details: { setor_id: setorId, setor_nome: setorAtual.nome } as any,
       });
 
+      // Update carga status if applicable
+      await atualizarStatusCarga(opId);
+
       return { error: null, newStatus: "entrada" };
     }
 
@@ -151,6 +155,9 @@ export async function handleSetorClick(
         // AUTO-CLOSE: Check if all OPs for the pedido are finalized
         await verificarFechamentoPedido(opId);
       }
+
+      // Update carga status if applicable
+      await atualizarStatusCarga(opId);
 
       return { error: null, newStatus: "baixa" };
     }

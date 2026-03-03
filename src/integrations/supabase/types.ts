@@ -44,6 +44,36 @@ export type Database = {
         }
         Relationships: []
       }
+      cargas: {
+        Row: {
+          created_at: string
+          data_emissao: string
+          id: string
+          modo: string
+          observacoes: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          data_emissao?: string
+          id?: string
+          modo?: string
+          observacoes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          data_emissao?: string
+          id?: string
+          modo?: string
+          observacoes?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       carteira_producao: {
         Row: {
           id: string
@@ -451,6 +481,7 @@ export type Database = {
       }
       ops: {
         Row: {
+          carga_id: string | null
           created_at: string
           current_sector: string | null
           data_nf: string | null
@@ -475,6 +506,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          carga_id?: string | null
           created_at?: string
           current_sector?: string | null
           data_nf?: string | null
@@ -499,6 +531,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          carga_id?: string | null
           created_at?: string
           current_sector?: string | null
           data_nf?: string | null
@@ -523,6 +556,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "ops_carga_id_fkey"
+            columns: ["carga_id"]
+            isOneToOne: false
+            referencedRelation: "cargas"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "ops_familia_op_id_fkey"
             columns: ["familia_op_id"]
