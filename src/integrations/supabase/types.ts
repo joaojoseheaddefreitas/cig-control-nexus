@@ -485,6 +485,7 @@ export type Database = {
           created_at: string
           current_sector: string | null
           data_nf: string | null
+          data_programada: string | null
           desenho_url: string | null
           familia_op_id: string
           id: string
@@ -498,6 +499,7 @@ export type Database = {
           quantidade: number
           sequence_number: number | null
           sequencia_fila: number | null
+          sequencia_programada: number | null
           status_faturamento: string
           status_producao: string
           tempo_total: number | null
@@ -510,6 +512,7 @@ export type Database = {
           created_at?: string
           current_sector?: string | null
           data_nf?: string | null
+          data_programada?: string | null
           desenho_url?: string | null
           familia_op_id: string
           id?: string
@@ -523,6 +526,7 @@ export type Database = {
           quantidade?: number
           sequence_number?: number | null
           sequencia_fila?: number | null
+          sequencia_programada?: number | null
           status_faturamento?: string
           status_producao?: string
           tempo_total?: number | null
@@ -535,6 +539,7 @@ export type Database = {
           created_at?: string
           current_sector?: string | null
           data_nf?: string | null
+          data_programada?: string | null
           desenho_url?: string | null
           familia_op_id?: string
           id?: string
@@ -548,6 +553,7 @@ export type Database = {
           quantidade?: number
           sequence_number?: number | null
           sequencia_fila?: number | null
+          sequencia_programada?: number | null
           status_faturamento?: string
           status_producao?: string
           tempo_total?: number | null

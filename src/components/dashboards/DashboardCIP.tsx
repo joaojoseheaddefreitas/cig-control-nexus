@@ -1,42 +1,31 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
-  BarChart2, Calendar, Layers, Factory, Package, ClipboardList, 
-  Brain, LineChart, MapPin, Menu, X, ChevronLeft, ChevronRight,
-  ArrowDownCircle, ArrowUpCircle, Truck, Home
+  BarChart2, Layers, Factory, Package, 
+  Brain, LineChart, Menu, X, ChevronLeft, ChevronRight,
+  ArrowDownCircle, ArrowUpCircle, Truck, Home, ClipboardCheck
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
-// Import all CIP tabs - SEM CARTEIRA (Carteira está no CIV)
+// Import CIP components
 import { CIPDashboardNew } from '@/components/cip/CIPDashboardNew';
-import { CIPProgramacaoDiaria } from '@/components/cip/CIPProgramacaoDiaria';
+import { CIPPCPControle } from '@/components/cip/CIPPCPControle';
 import { CIPSetores } from '@/components/cip/CIPSetores';
-import { CIPProducao } from '@/components/cip/CIPProducao';
 import { CIPCadastroProdutosCompleto } from '@/components/cip/CIPCadastroProdutosCompleto';
 import { CIPRastreamento } from '@/components/cip/CIPRastreamento';
 import { CIPIA } from '@/components/cip/CIPIA';
 import { CIPAnalytics } from '@/components/cip/CIPAnalytics';
-import { CIPGradeIndustrial } from '@/components/cip/CIPGradeIndustrial';
-import { CIPFilaProducao } from '@/components/cip/CIPFilaProducao';
-import { CIPCargaDiaria } from '@/components/cip/CIPCargaDiaria';
 
-type TabType = 'dashboard' | 'programacao' | 'grade' | 'fila' | 'carga' | 'producao' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
+type TabType = 'dashboard' | 'pcp' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
 
-// Menu items - CIP focado em Programação, OPs e Produtos
-// IMPORTANTE: CIP NÃO TEM CARTEIRA DE VENDAS - Carteira está no CIV
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
-  { id: 'grade', label: 'Grade Industrial', icon: Layers, tipo: 'entrada', badge: 'APONTAR' },
-  { id: 'fila', label: 'Fila PCP (FIFO)', icon: ClipboardList, tipo: 'visualizacao', badge: 'FIFO' },
-  { id: 'carga', label: 'Carga Diária', icon: Truck, tipo: 'entrada', badge: 'CARGA' },
-  { id: 'programacao', label: 'Programação / OPs', icon: Calendar, tipo: 'entrada', badge: '+ OP' },
-  { id: 'producao', label: 'Baixas por Setor', icon: Factory, tipo: 'baixa', badge: '- Baixa' },
+  { id: 'pcp', label: 'PCP e Controle de Produção', icon: ClipboardCheck, tipo: 'operacional', badge: 'TELA ÚNICA' },
   { id: 'setores', label: 'Setores Produtivos', icon: Layers, tipo: 'configuracao' },
   { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package, tipo: 'configuracao', badge: 'RTC' },
-  { id: 'rastreamento', label: 'Rastreamento OPs', icon: MapPin, tipo: 'visualizacao' },
+  { id: 'rastreamento', label: 'Rastreamento OPs', icon: Factory, tipo: 'visualizacao' },
   { id: 'ia', label: 'Inteligência IA', icon: Brain, tipo: 'visualizacao' },
   { id: 'analytics', label: 'Analytics', icon: LineChart, tipo: 'visualizacao' },
 ];
@@ -54,11 +43,7 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return <CIPDashboardNew />;
-      case 'grade': return <CIPGradeIndustrial />;
-      case 'fila': return <CIPFilaProducao />;
-      case 'carga': return <CIPCargaDiaria />;
-      case 'programacao': return <CIPProgramacaoDiaria />;
-      case 'producao': return <CIPProducao />;
+      case 'pcp': return <CIPPCPControle />;
       case 'setores': return <CIPSetores />;
       case 'cadastro_produtos': return <CIPCadastroProdutosCompleto />;
       case 'rastreamento': return <CIPRastreamento />;
@@ -75,10 +60,10 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
 
   const getTipoBadge = (tipo: string) => {
     switch (tipo) {
-      case 'entrada':
-        return <span className="ml-auto text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded">ENTRADA</span>;
-      case 'baixa':
-        return <span className="ml-auto text-[10px] bg-cip/20 text-cip px-1.5 py-0.5 rounded">BAIXA</span>;
+      case 'operacional':
+        return <span className="ml-auto text-[10px] bg-cip/20 text-cip px-1.5 py-0.5 rounded">PCP</span>;
+      case 'configuracao':
+        return <span className="ml-auto text-[10px] bg-secondary/50 text-muted-foreground px-1.5 py-0.5 rounded">CONFIG</span>;
       default:
         return null;
     }
@@ -90,7 +75,7 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
         {!isCollapsed ? (
           <>
             <h3 className="text-cip font-display text-lg font-bold">CIP CONTROL</h3>
-            <p className="text-xs text-muted-foreground">Programação & Produtos</p>
+            <p className="text-xs text-muted-foreground">Programação & Produção</p>
             <div className="mt-2 p-2 rounded bg-warning/10 border border-warning/30">
               <p className="text-[10px] text-warning">⚠ Carteira de Vendas está no CIV</p>
             </div>
@@ -127,25 +112,6 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
         ))}
       </nav>
 
-      {/* Legenda de cores */}
-      {!isCollapsed && (
-        <div className="mt-6 pt-4 border-t border-border/30 space-y-2">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Fluxo CIP</p>
-          <div className="flex items-center gap-2 text-xs">
-            <ArrowUpCircle className="h-3 w-3 text-success" />
-            <span className="text-muted-foreground">Entrada = Recebe OP do CIV</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <ArrowDownCircle className="h-3 w-3 text-cip" />
-            <span className="text-muted-foreground">Baixa = Registra produção</span>
-          </div>
-          <div className="flex items-center gap-2 text-xs">
-            <Truck className="h-3 w-3 text-primary" />
-            <span className="text-muted-foreground">Expedição = Encerra OP</span>
-          </div>
-        </div>
-      )}
-
       {/* HOME */}
       <div className={cn("mt-4 pt-4 border-t border-border/30", isCollapsed && "pt-2 mt-2")}>
         <button
@@ -164,7 +130,7 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
 
   return (
     <div className="flex animate-fade-in min-h-screen">
-      {/* Mobile Header - Sempre visível */}
+      {/* Mobile Header */}
       {isMobile && (
         <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3 safe-area-top">
           <div className="flex items-center justify-between">
@@ -184,46 +150,33 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
             
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-cip animate-pulse" />
-              <span className="text-sm font-semibold text-cip">CIP CONTROL 360</span>
+              <span className="text-sm font-semibold text-cip">CIP CONTROL</span>
             </div>
             
             <div className="w-10" />
           </div>
           
-          {/* Tab atual */}
           <div className="mt-2 flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Aba:</span>
             <span className="text-sm font-medium text-foreground">
               {menuItems.find(m => m.id === activeTab)?.label}
             </span>
-            {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada' && (
-              <span className="text-[10px] bg-success/20 text-success px-1.5 py-0.5 rounded">ENTRADA</span>
-            )}
-            {menuItems.find(m => m.id === activeTab)?.tipo === 'baixa' && (
-              <span className="text-[10px] bg-cip/20 text-cip px-1.5 py-0.5 rounded">BAIXA</span>
-            )}
           </div>
         </div>
       )}
 
-      {/* Desktop Sidebar - Colapsável */}
+      {/* Desktop Sidebar */}
       {!isMobile && (
         <aside className={cn(
           'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative',
           sidebarCollapsed ? 'w-16' : 'w-60'
         )}>
-          {/* Botão de colapsar */}
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
             className="absolute -right-3 top-6 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-secondary transition-colors z-10"
           >
-            {sidebarCollapsed ? (
-              <ChevronRight className="h-3 w-3" />
-            ) : (
-              <ChevronLeft className="h-3 w-3" />
-            )}
+            {sidebarCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
           </button>
-          
           <SidebarContent isCollapsed={sidebarCollapsed} />
         </aside>
       )}
@@ -233,31 +186,15 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
         'flex-1 overflow-x-hidden',
         isMobile ? 'pt-24 px-3 pb-4' : 'p-4 lg:p-6'
       )}>
-        {/* Header desktop */}
         {!isMobile && (
           <div className="mb-6">
-            <div className="flex items-center gap-3">
-              <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
-                {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
-              </h2>
-              {menuItems.find(m => m.id === activeTab)?.tipo === 'entrada' && (
-                <span className="text-xs bg-success/20 text-success px-2 py-1 rounded-full font-medium">
-                  ↑ RECEBE OP DO CIV
-                </span>
-              )}
-              {menuItems.find(m => m.id === activeTab)?.tipo === 'baixa' && (
-                <span className="text-xs bg-cip/20 text-cip px-2 py-1 rounded-full font-medium">
-                  ↓ BAIXA POR SETOR
-                </span>
-              )}
-            </div>
-            <p className="text-muted-foreground mt-1">
-              CIP – Recebe volume aprovado do CIV e programa produção
-            </p>
+            <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground">
+              {menuItems.find(m => m.id === activeTab)?.label || 'Dashboard'}
+            </h2>
+            <p className="text-muted-foreground mt-1">CIP – Programação & Controle de Produção</p>
           </div>
         )}
         
-        {/* Conteúdo da aba */}
         <div className="animate-fade-in">
           {renderContent()}
         </div>

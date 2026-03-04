@@ -36,8 +36,7 @@ const subPages: Record<ModuleType, { id: string; label: string }[]> = {
   ],
   CIP: [
     { id: 'dashboard', label: 'Dashboard' },
-    { id: 'programacao', label: 'Programação / OPs' },
-    { id: 'producao', label: 'Baixas por Setor' },
+    { id: 'pcp', label: 'PCP e Controle de Produção' },
     { id: 'setores', label: 'Setores Produtivos' },
     { id: 'produtos', label: 'Cadastro Produtos' },
     { id: 'rastreamento', label: 'Rastreamento' },
