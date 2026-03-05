@@ -7,25 +7,33 @@ import { Input } from '@/components/ui/input';
 import {
   RefreshCw, Factory, Printer, PackagePlus, Zap, AlertTriangle,
   CheckCircle2, Clock, Gauge, Package, Calendar, ArrowRight,
+  Search, ChevronUp, ChevronDown, ScanBarcode, Tag, Trash2,
+  History, ArrowUpDown, Wand2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getOPDisplayMask } from '@/services/aprovacaoService';
 import { imprimirOP } from '@/services/printService';
+import { imprimirEtiqueta } from '@/services/labelService';
 import {
   fetchSetores,
   handleSetorClick,
   type SetorProdutivo,
 } from '@/services/setorTrackingService';
 import {
-  fetchCargas, calcularGargalo, emitirCargaManual,
-  imprimirCarga, type Carga, type GargaloResult,
+  fetchCargas, emitirCargaManual,
+  type Carga,
 } from '@/services/cargaService';
+import { useBarcodeScanner } from '@/hooks/useBarcodeScanner';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ReferenceLine, Cell, ComposedChart, Line,
+  Cell, ComposedChart, Line, Legend,
 } from 'recharts';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle,
+} from '@/components/ui/dialog';
 
+// ─── Types ───────────────────────────────────────────────────────────
 interface OPRow {
   id: string;
   numero_op: string;
@@ -42,7 +50,7 @@ interface OPRow {
   data_programada: string | null;
   sequencia_programada: number | null;
   pedido_id: string | null;
-  rastreamento?: { setor_id: string; status: string }[];
+  rastreamento?: { setor_id: string; status: string; data_entrada: string | null; data_baixa: string | null }[];
 }
 
 interface SetorComCapacidade extends SetorProdutivo {
@@ -52,9 +60,17 @@ interface SetorComCapacidade extends SetorProdutivo {
   maquinas_automaticas: number;
 }
 
+interface RouteStep {
+  op_id: string;
+  setor_id: string;
+  tempo_estimado: number;
+}
+
+// ─── Component ───────────────────────────────────────────────────────
 export function CIPPCPControle() {
   const [ops, setOps] = useState<OPRow[]>([]);
   const [setores, setSetores] = useState<SetorComCapacidade[]>([]);
+  const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
   const [cargas, setCargas] = useState<Carga[]>([]);
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
@@ -62,7 +78,11 @@ export function CIPPCPControle() {
   const [emitting, setEmitting] = useState(false);
   const [dataProgramada, setDataProgramada] = useState(new Date().toISOString().split('T')[0]);
   const [dataFiltro, setDataFiltro] = useState(new Date().toISOString().split('T')[0]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [scannerInput, setScannerInput] = useState('');
+  const [historyOp, setHistoryOp] = useState<OPRow | null>(null);
 
+  // ─── Data Loading ──────────────────────────────────────────────────
   const loadData = useCallback(async () => {
     setLoading(true);
     const [setoresResult, cargasData, opsResult] = await Promise.all([
@@ -82,15 +102,17 @@ export function CIPPCPControle() {
 
     const opIds = opsData.map(o => o.id);
     if (opIds.length > 0) {
-      const { data: tracking } = await supabase
-        .from('setor_rastreamento')
-        .select('op_id, setor_id, status')
-        .in('op_id', opIds);
+      const [trackingResult, stepsResult] = await Promise.all([
+        supabase.from('setor_rastreamento').select('op_id, setor_id, status, data_entrada, data_baixa').in('op_id', opIds),
+        supabase.from('op_route_steps').select('op_id, setor_id, tempo_estimado').in('op_id', opIds),
+      ]);
+
       opsData.forEach(op => {
-        op.rastreamento = (tracking || [])
+        op.rastreamento = (trackingResult.data || [])
           .filter(t => t.op_id === op.id)
-          .map(t => ({ setor_id: t.setor_id, status: t.status }));
+          .map(t => ({ setor_id: t.setor_id, status: t.status, data_entrada: t.data_entrada, data_baixa: t.data_baixa }));
       });
+      setRouteSteps((stepsResult.data || []) as RouteStep[]);
     }
 
     setOps(opsData);
@@ -99,6 +121,7 @@ export function CIPPCPControle() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
+  // ─── Realtime ──────────────────────────────────────────────────────
   useEffect(() => {
     const channel = supabase
       .channel('pcp-unified')
@@ -109,33 +132,98 @@ export function CIPPCPControle() {
     return () => { supabase.removeChannel(channel); };
   }, [loadData]);
 
-  // === CAPACITY CALCULATION (memoized) ===
+  // ─── Global Barcode Scanner ────────────────────────────────────────
+  const handleScan = useCallback(async (code: string) => {
+    const op = ops.find(o => o.numero_op === code || o.numero_op.toUpperCase() === code.toUpperCase());
+    if (!op) {
+      toast.error(`OP "${code}" não encontrada`);
+      return;
+    }
+
+    // Find next pending sector for this OP
+    for (const setor of setores) {
+      const track = op.rastreamento?.find(t => t.setor_id === setor.id);
+      if (!track || track.status === 'pendente') {
+        // Register entrada
+        const result = await handleSetorClick(op.id, setor.id, setores);
+        if (result.error) toast.error(result.error);
+        else toast.success(`📷 Scanner: ${code} → ${setor.nome} (${result.newStatus === 'entrada' ? '🟡 Entrada' : '🟢 Baixa'})`);
+        await loadData();
+        return;
+      }
+      if (track.status === 'entrada') {
+        // Register baixa
+        const result = await handleSetorClick(op.id, setor.id, setores);
+        if (result.error) toast.error(result.error);
+        else toast.success(`📷 Scanner: ${code} → ${setor.nome} (🟢 Baixa)`);
+        await loadData();
+        return;
+      }
+      // If baixa, continue to next sector
+    }
+    toast.info(`OP ${code}: todos os setores já finalizados`);
+  }, [ops, setores, loadData]);
+
+  useBarcodeScanner(handleScan);
+
+  // ─── Capacity Calculation (per sector, using route_steps) ──────────
   const capacidadePorSetor = useMemo(() => {
     return setores.map(setor => {
       const capacidadeTotal = (setor.mao_de_obra + setor.maquinas_automaticas) * setor.horas_turno * setor.eficiencia;
-      
-      // Sum hours for OPs that are PROGRAMADA or EM_PRODUCAO for the selected date
-      const opsDoSetor = ops.filter(op => {
+
+      // Sum hours from route_steps for OPs programmed/in-production on the filtered date
+      const opsNoFiltro = ops.filter(op => {
         if (op.status_producao !== 'programada' && op.status_producao !== 'em_producao') return false;
         if (dataFiltro && op.data_programada !== dataFiltro) return false;
-        // Check if this OP has a route step in this sector (via rastreamento or route_steps)
-        return true; // We'll refine with route steps
+        return true;
       });
+      const opIdsSet = new Set(opsNoFiltro.map(o => o.id));
 
-      const horasOcupadas = opsDoSetor.reduce((sum, op) => sum + Number(op.tempo_total || 0), 0);
+      const horasOcupadas = routeSteps
+        .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
+        .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
+
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
 
+      return { id: setor.id, nome: setor.nome, capacidadeTotal, horasOcupadas, horasLivres, percentual };
+    });
+  }, [setores, ops, routeSteps, dataFiltro]);
+
+  // Production tracking chart data (horas produzidas vs programadas)
+  const chartProducao = useMemo(() => {
+    return setores.map(setor => {
+      const opsProgDay = ops.filter(op => {
+        if (dataFiltro && op.data_programada !== dataFiltro) return false;
+        return op.status_producao === 'programada' || op.status_producao === 'em_producao';
+      });
+      const opIdsSet = new Set(opsProgDay.map(o => o.id));
+
+      const totalProgramada = routeSteps
+        .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
+        .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
+
+      // Hours "produced" = from OPs with baixa in this sector
+      const horasProduzidas = opsProgDay
+        .filter(op => {
+          const track = op.rastreamento?.find(t => t.setor_id === setor.id);
+          return track?.status === 'baixa';
+        })
+        .reduce((sum, op) => {
+          const step = routeSteps.find(s => s.op_id === op.id && s.setor_id === setor.id);
+          return sum + Number(step?.tempo_estimado || 0);
+        }, 0);
+
+      const pctProd = totalProgramada > 0 ? (horasProduzidas / totalProgramada) * 100 : 0;
+
       return {
-        id: setor.id,
-        nome: setor.nome,
-        capacidadeTotal,
-        horasOcupadas,
-        horasLivres,
-        percentual,
+        setor: setor.nome.length > 10 ? setor.nome.substring(0, 10) + '…' : setor.nome,
+        produzidas: Number(horasProduzidas.toFixed(1)),
+        pendentes: Number(Math.max(0, totalProgramada - horasProduzidas).toFixed(1)),
+        pctProd: Math.round(pctProd),
       };
     });
-  }, [setores, ops, dataFiltro]);
+  }, [setores, ops, routeSteps, dataFiltro]);
 
   const isOverCapacity = useCallback(() => {
     return capacidadePorSetor.some(s => s.percentual >= 100);
@@ -148,20 +236,21 @@ export function CIPPCPControle() {
     return { bg: 'bg-destructive/20', bar: 'bg-destructive', text: 'text-destructive', label: 'GARGALO' };
   };
 
-  const getCapacityFill = (pct: number) => {
-    if (pct === 0) return 'hsl(215, 80%, 50%)';
-    if (pct < 80) return 'hsl(145, 70%, 42%)';
-    if (pct < 100) return 'hsl(45, 95%, 50%)';
-    return 'hsl(0, 72%, 51%)';
-  };
-
-  // Max gargalo
   const gargaloMax = useMemo(() => {
     if (capacidadePorSetor.length === 0) return null;
     return capacidadePorSetor.reduce((max, s) => s.percentual > max.percentual ? s : max, capacidadePorSetor[0]);
   }, [capacidadePorSetor]);
 
-  // === HANDLERS ===
+  // Chart data for load composition
+  const chartCarga = useMemo(() => {
+    return capacidadePorSetor.map(s => ({
+      setor: s.nome.length > 10 ? s.nome.substring(0, 10) + '…' : s.nome,
+      programada: Number(s.horasOcupadas.toFixed(1)),
+      capacidadeMax: Number(s.capacidadeTotal.toFixed(1)),
+    }));
+  }, [capacidadePorSetor]);
+
+  // ─── Handlers ──────────────────────────────────────────────────────
   const handleCellClick = async (opId: string, setorId: string) => {
     setProcessing(`${opId}-${setorId}`);
     const result = await handleSetorClick(opId, setorId, setores);
@@ -189,16 +278,13 @@ export function CIPPCPControle() {
       return;
     }
     setEmitting(true);
-
     const ids = Array.from(selected);
-    
-    // Get current max sequencia for this date
+
     const existingProgrammed = ops.filter(o => o.data_programada === dataProgramada && o.sequencia_programada);
-    const maxSeq = existingProgrammed.length > 0 
-      ? Math.max(...existingProgrammed.map(o => o.sequencia_programada || 0)) 
+    const maxSeq = existingProgrammed.length > 0
+      ? Math.max(...existingProgrammed.map(o => o.sequencia_programada || 0))
       : 0;
 
-    // Update each OP with date and sequence
     for (let i = 0; i < ids.length; i++) {
       await supabase.from('ops').update({
         data_programada: dataProgramada,
@@ -217,6 +303,64 @@ export function CIPPCPControle() {
     setEmitting(false);
   };
 
+  // ─── 1️⃣ TETRIS INDUSTRIAL – Auto-suggestion ──────────────────────
+  const handleSugerirCarga = async () => {
+    const pending = ops.filter(o => !o.data_programada && (o.status_producao === 'aguardando' || o.status_producao === 'PENDENTE'));
+    if (pending.length === 0) {
+      toast.info('Nenhuma OP pendente para sugerir');
+      return;
+    }
+
+    // Sort by prazo_entrega (earliest first), then by sequencia
+    const sorted = [...pending].sort((a, b) => {
+      if (a.prazo_entrega && b.prazo_entrega) return a.prazo_entrega.localeCompare(b.prazo_entrega);
+      if (a.prazo_entrega) return -1;
+      if (b.prazo_entrega) return 1;
+      return 0;
+    });
+
+    // Build capacity remaining per sector (starting from current occupation)
+    const capRestante: Record<string, number> = {};
+    capacidadePorSetor.forEach(s => {
+      capRestante[s.id] = s.horasLivres;
+    });
+
+    const autoSelected = new Set<string>();
+
+    for (const op of sorted) {
+      // Get route steps for this OP
+      const opSteps = routeSteps.filter(s => s.op_id === op.id);
+      if (opSteps.length === 0) {
+        // Fallback: distribute tempo_total equally across sectors
+        const perSetor = Number(op.tempo_total || 0) / Math.max(1, setores.length);
+        const fits = setores.every(s => (capRestante[s.id] || 0) >= perSetor);
+        if (fits) {
+          autoSelected.add(op.id);
+          setores.forEach(s => { capRestante[s.id] = (capRestante[s.id] || 0) - perSetor; });
+        }
+        continue;
+      }
+
+      // Check if OP fits in all sectors
+      const fits = opSteps.every(step => (capRestante[step.setor_id] || 0) >= Number(step.tempo_estimado));
+      if (fits) {
+        autoSelected.add(op.id);
+        opSteps.forEach(step => {
+          capRestante[step.setor_id] = (capRestante[step.setor_id] || 0) - Number(step.tempo_estimado);
+        });
+      }
+      // If doesn't fit, skip (Tetris: try next one)
+    }
+
+    if (autoSelected.size === 0) {
+      toast.warning('Nenhuma OP cabe na capacidade restante dos setores');
+      return;
+    }
+
+    setSelected(autoSelected);
+    toast.success(`🧩 Tetris: ${autoSelected.size} OPs sugeridas para a carga`);
+  };
+
   const handleRemoverDaCarga = async (opId: string) => {
     await supabase.from('ops').update({
       data_programada: null,
@@ -228,14 +372,45 @@ export function CIPPCPControle() {
     await loadData();
   };
 
-  // === DERIVED DATA ===
+  // ─── Reorder OPs ──────────────────────────────────────────────────
+  const handleMoveOp = async (opId: string, direction: 'up' | 'down') => {
+    const idx = programmedOps.findIndex(o => o.id === opId);
+    if (idx < 0) return;
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= programmedOps.length) return;
+
+    const seqA = programmedOps[idx].sequencia_programada || idx + 1;
+    const seqB = programmedOps[swapIdx].sequencia_programada || swapIdx + 1;
+
+    await Promise.all([
+      supabase.from('ops').update({ sequencia_programada: seqB } as any).eq('id', programmedOps[idx].id),
+      supabase.from('ops').update({ sequencia_programada: seqA } as any).eq('id', programmedOps[swapIdx].id),
+    ]);
+    await loadData();
+  };
+
+  // ─── Manual scanner input ─────────────────────────────────────────
+  const handleManualScan = () => {
+    if (scannerInput.trim()) {
+      handleScan(scannerInput.trim());
+      setScannerInput('');
+    }
+  };
+
+  // ─── Derived Data ──────────────────────────────────────────────────
   const getCellStatus = (op: OPRow, setorId: string): 'pendente' | 'entrada' | 'baixa' => {
     const track = op.rastreamento?.find(t => t.setor_id === setorId);
     if (!track || track.status === 'pendente') return 'pendente';
     return track.status as 'entrada' | 'baixa';
   };
 
-  const pendingOps = ops.filter(o => !o.data_programada && (o.status_producao === 'aguardando' || o.status_producao === 'PENDENTE'));
+  const allPendingOps = ops.filter(o => !o.data_programada && (o.status_producao === 'aguardando' || o.status_producao === 'PENDENTE'));
+  const pendingOps = allPendingOps.filter(o => {
+    if (!searchTerm) return true;
+    const term = searchTerm.toLowerCase();
+    return o.numero_op.toLowerCase().includes(term) || o.produto_nome.toLowerCase().includes(term);
+  });
+
   const programmedOps = ops.filter(o => {
     if (!o.data_programada) return false;
     if (dataFiltro && o.data_programada !== dataFiltro) return false;
@@ -243,31 +418,11 @@ export function CIPPCPControle() {
   }).sort((a, b) => (a.sequencia_programada || 999) - (b.sequencia_programada || 999));
 
   const totalHoras = ops.reduce((s, o) => s + Number(o.tempo_total || 0), 0);
-  const opsPendentes = pendingOps.length;
+  const opsPendentes = allPendingOps.length;
   const opsEmProducao = ops.filter(o => o.status_producao === 'em_producao').length;
   const opsProgramadas = ops.filter(o => o.status_producao === 'programada').length;
 
-  // Chart data for capacity
-  const chartCapacidade = useMemo(() => {
-    return capacidadePorSetor.map(s => ({
-      setor: s.nome.length > 10 ? s.nome.substring(0, 10) + '…' : s.nome,
-      ocupacao: Math.round(s.percentual),
-      capacidade: Math.round(s.capacidadeTotal),
-      horasOcupadas: Number(s.horasOcupadas.toFixed(1)),
-      horasLivres: Number(s.horasLivres.toFixed(1)),
-      pct: s.percentual,
-    }));
-  }, [capacidadePorSetor]);
-
-  // Chart data for load composition
-  const chartCarga = useMemo(() => {
-    return capacidadePorSetor.map(s => ({
-      setor: s.nome.length > 10 ? s.nome.substring(0, 10) + '…' : s.nome,
-      programada: Number(s.horasOcupadas.toFixed(1)),
-      capacidadeMax: Number(s.capacidadeTotal.toFixed(1)),
-    }));
-  }, [capacidadePorSetor]);
-
+  // ─── Render ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -281,7 +436,7 @@ export function CIPPCPControle() {
     <div className="space-y-4 animate-fade-in">
       {/* ═══════════════════ ZONA SUPERIOR – PAINEL DE CAPACIDADE ═══════════════════ */}
       <div className="space-y-3">
-        {/* KPI Summary Row */}
+        {/* KPI Summary + Scanner */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/30 bg-card/80">
             <Package className="h-4 w-4 text-cip" />
@@ -303,9 +458,26 @@ export function CIPPCPControle() {
             <span className="text-xs text-muted-foreground">Total Horas:</span>
             <span className="text-sm font-bold text-cip">{totalHoras.toFixed(1)}h</span>
           </div>
-          <Button variant="outline" size="sm" className="h-8 text-xs ml-auto" onClick={loadData}>
-            <RefreshCw className="h-3.5 w-3.5 mr-1" /> Atualizar
-          </Button>
+
+          {/* Manual scanner input */}
+          <div className="flex items-center gap-1 ml-auto">
+            <div className="relative">
+              <ScanBarcode className="absolute left-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Scanner OP..."
+                value={scannerInput}
+                onChange={e => setScannerInput(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleManualScan()}
+                className="pl-8 h-8 text-xs w-36"
+              />
+            </div>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={handleManualScan}>
+              <Zap className="h-3.5 w-3.5" />
+            </Button>
+            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={loadData}>
+              <RefreshCw className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
 
         {/* GRID HORIZONTAL COMPACTO – Cards de Setor */}
@@ -331,7 +503,6 @@ export function CIPPCPControle() {
                 <div className={cn('text-xl font-display font-bold leading-none', colors.text)}>
                   {Math.round(setor.percentual)}%
                 </div>
-                {/* Progress bar */}
                 <div className="h-1.5 bg-secondary/50 rounded-full mt-1.5 overflow-hidden">
                   <div
                     className={cn('h-full rounded-full transition-all', colors.bar)}
@@ -348,27 +519,31 @@ export function CIPPCPControle() {
 
         {/* Recharts – Two charts side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {/* Chart 1: Acompanhamento de Produção – Ocupação por setor */}
+          {/* Chart 1: Acompanhamento de Produção */}
           <div className="rounded-xl border border-border/30 bg-card/80 p-4">
             <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
               <Gauge className="h-3.5 w-3.5 text-cip" /> Acompanhamento de Produção
             </h4>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartCapacidade} layout="vertical" margin={{ left: 70, right: 20 }}>
+                <BarChart data={chartProducao} layout="vertical" margin={{ left: 70, right: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" horizontal vertical={false} />
-                  <XAxis type="number" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} axisLine={{ stroke: 'hsl(220, 18%, 22%)' }} />
+                  <XAxis type="number" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} axisLine={{ stroke: 'hsl(220, 18%, 22%)' }} unit="h" />
                   <YAxis type="category" dataKey="setor" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} axisLine={{ stroke: 'hsl(220, 18%, 22%)' }} width={68} />
                   <Tooltip
                     contentStyle={{ backgroundColor: 'hsl(220, 20%, 14%)', border: '1px solid hsl(220, 18%, 22%)', borderRadius: '8px', fontSize: '11px' }}
                     formatter={(value: number, name: string) => {
-                      if (name === 'horasOcupadas') return [`${value}h`, 'Horas Ocupadas'];
-                      if (name === 'horasLivres') return [`${value}h`, 'Horas Livres'];
+                      if (name === 'produzidas') return [`${value}h`, '✅ Produzidas'];
+                      if (name === 'pendentes') return [`${value}h`, '⏳ Pendentes'];
                       return [value, name];
                     }}
                   />
-                  <Bar dataKey="horasOcupadas" stackId="a" fill="hsl(145, 70%, 42%)" radius={[0, 0, 0, 0]} name="horasOcupadas" />
-                  <Bar dataKey="horasLivres" stackId="a" fill="hsl(220, 18%, 25%)" radius={[0, 4, 4, 0]} name="horasLivres" />
+                  <Legend
+                    wrapperStyle={{ fontSize: '10px' }}
+                    formatter={(value) => value === 'produzidas' ? '✅ Concluídas' : '⏳ Pendentes'}
+                  />
+                  <Bar dataKey="produzidas" stackId="a" fill="hsl(145, 70%, 42%)" radius={[0, 0, 0, 0]} name="produzidas" />
+                  <Bar dataKey="pendentes" stackId="a" fill="hsl(220, 18%, 30%)" radius={[0, 4, 4, 0]} name="pendentes" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -381,9 +556,9 @@ export function CIPPCPControle() {
             </h4>
             <div className="h-48">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={chartCarga} layout="vertical" margin={{ left: 70, right: 20 }}>
+                <ComposedChart data={chartCarga} layout="vertical" margin={{ left: 70, right: 30 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" horizontal vertical={false} />
-                  <XAxis type="number" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} axisLine={{ stroke: 'hsl(220, 18%, 22%)' }} />
+                  <XAxis type="number" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} axisLine={{ stroke: 'hsl(220, 18%, 22%)' }} unit="h" />
                   <YAxis type="category" dataKey="setor" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} axisLine={{ stroke: 'hsl(220, 18%, 22%)' }} width={68} />
                   <Tooltip
                     contentStyle={{ backgroundColor: 'hsl(220, 20%, 14%)', border: '1px solid hsl(220, 18%, 22%)', borderRadius: '8px', fontSize: '11px' }}
@@ -393,6 +568,7 @@ export function CIPPCPControle() {
                       return [value, name];
                     }}
                   />
+                  <Legend wrapperStyle={{ fontSize: '10px' }} formatter={(v) => v === 'programada' ? '📦 Programada' : '🔴 Cap. Máx'} />
                   <Bar dataKey="programada" name="programada" radius={[0, 4, 4, 0]}>
                     {chartCarga.map((entry, idx) => (
                       <Cell
@@ -419,14 +595,25 @@ export function CIPPCPControle() {
 
       {/* ═══════════════════ ZONA INFERIOR – GRADE + PROGRAMAÇÃO ═══════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
-        
+
         {/* ZONA ESQUERDA – GRADE DE OPs PENDENTES */}
         <div className="lg:col-span-4 space-y-2">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-sm font-display font-bold text-foreground flex items-center gap-1.5">
               <Package className="h-4 w-4 text-cip" /> Grade de OPs
-              <Badge variant="outline" className="text-[10px] ml-1">{pendingOps.length}</Badge>
+              <Badge variant="outline" className="text-[10px] ml-1">{allPendingOps.length}</Badge>
             </h3>
+          </div>
+
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Buscar OP ou produto..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="pl-8 h-7 text-xs"
+            />
           </div>
 
           {/* Action bar */}
@@ -443,7 +630,15 @@ export function CIPPCPControle() {
               onClick={handleMontarCarga}
               disabled={emitting || selected.size === 0 || isOverCapacity()}
             >
-              <PackagePlus className="h-3 w-3 mr-1" /> Montar Carga ({selected.size})
+              <PackagePlus className="h-3 w-3 mr-1" /> Montar ({selected.size})
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-xs border-cip/30 text-cip hover:bg-cip/10"
+              onClick={handleSugerirCarga}
+            >
+              <Wand2 className="h-3 w-3 mr-1" /> Sugerir
             </Button>
           </div>
 
@@ -458,23 +653,35 @@ export function CIPPCPControle() {
                 <tr className="border-b border-border/50">
                   <th className="py-2 px-2 w-7">
                     <Checkbox
-                      checked={pendingOps.length > 0 && selected.size === pendingOps.length}
+                      checked={pendingOps.length > 0 && pendingOps.every(o => selected.has(o.id))}
                       onCheckedChange={() => {
-                        if (selected.size === pendingOps.length) setSelected(new Set());
-                        else setSelected(new Set(pendingOps.map(o => o.id)));
+                        if (pendingOps.every(o => selected.has(o.id))) {
+                          setSelected(prev => {
+                            const next = new Set(prev);
+                            pendingOps.forEach(o => next.delete(o.id));
+                            return next;
+                          });
+                        } else {
+                          setSelected(prev => {
+                            const next = new Set(prev);
+                            pendingOps.forEach(o => next.add(o.id));
+                            return next;
+                          });
+                        }
                       }}
                     />
                   </th>
                   <th className="text-left py-2 px-1 font-medium text-muted-foreground">Nº OP</th>
                   <th className="text-left py-2 px-1 font-medium text-muted-foreground">Produto</th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground">Hrs</th>
+                  <th className="text-center py-2 px-1 font-medium text-muted-foreground w-6"></th>
                 </tr>
               </thead>
               <tbody>
                 {pendingOps.length === 0 ? (
-                  <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">
+                  <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">
                     <CheckCircle2 className="h-6 w-6 mx-auto mb-2 opacity-30" />
-                    Nenhuma OP pendente
+                    {searchTerm ? 'Nenhuma OP encontrada' : 'Nenhuma OP pendente'}
                   </td></tr>
                 ) : pendingOps.map(op => {
                   const mask = getOPDisplayMask(op.numero_op, op.sequence_number, op.total_ops_at_generation);
@@ -491,8 +698,13 @@ export function CIPPCPControle() {
                         <Checkbox checked={selected.has(op.id)} onCheckedChange={() => toggleSelect(op.id)} />
                       </td>
                       <td className="py-1.5 px-1 font-mono font-bold text-foreground text-[11px]">{mask}</td>
-                      <td className="py-1.5 px-1 text-muted-foreground truncate max-w-[120px]">{op.produto_nome}</td>
+                      <td className="py-1.5 px-1 text-muted-foreground truncate max-w-[100px]">{op.produto_nome}</td>
                       <td className="text-center py-1.5 px-1 font-bold text-cip">{Number(op.tempo_total || 0).toFixed(1)}</td>
+                      <td className="text-center py-1 px-0.5">
+                        <button onClick={e => { e.stopPropagation(); imprimirEtiqueta(op); }} className="text-muted-foreground hover:text-foreground" title="Imprimir etiqueta">
+                          <Tag className="h-3 w-3" />
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -533,6 +745,10 @@ export function CIPPCPControle() {
               <div className="w-3 h-3 rounded bg-success/30 border border-success/50" />
               <span className="text-muted-foreground">Baixa 🟢</span>
             </div>
+            <div className="flex items-center gap-1.5 ml-auto">
+              <ScanBarcode className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="text-[10px] text-muted-foreground">Scanner ativo (global)</span>
+            </div>
           </div>
 
           {/* Tracking Grid */}
@@ -541,14 +757,16 @@ export function CIPPCPControle() {
               <thead className="sticky top-0 z-10 bg-secondary/80 backdrop-blur-sm">
                 <tr className="border-b border-border/50">
                   <th className="text-left py-2 px-2 font-medium text-muted-foreground sticky left-0 bg-secondary/80 z-20 min-w-[130px]">OP / Produto</th>
-                  <th className="text-center py-2 px-1 font-medium text-muted-foreground min-w-[30px]">Seq</th>
+                  <th className="text-center py-2 px-1 font-medium text-muted-foreground min-w-[40px]">
+                    <ArrowUpDown className="h-3 w-3 mx-auto" />
+                  </th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground min-w-[35px]">Hrs</th>
                   {setores.map(s => (
                     <th key={s.id} className="text-center py-2 px-1 font-medium text-muted-foreground min-w-[50px]">
                       <span className="block truncate text-[10px]" title={s.nome}>{s.nome.substring(0, 7)}</span>
                     </th>
                   ))}
-                  <th className="text-center py-2 px-1 font-medium text-muted-foreground w-14">Ações</th>
+                  <th className="text-center py-2 px-1 font-medium text-muted-foreground w-20">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -557,7 +775,7 @@ export function CIPPCPControle() {
                     <Factory className="h-8 w-8 mx-auto mb-2 opacity-30" />
                     Nenhuma OP programada para {new Date(dataFiltro + 'T12:00:00').toLocaleDateString('pt-BR')}
                   </td></tr>
-                ) : programmedOps.map(op => {
+                ) : programmedOps.map((op, idx) => {
                   const mask = getOPDisplayMask(op.numero_op, op.sequence_number, op.total_ops_at_generation);
                   return (
                     <tr key={op.id} className="border-b border-border/30 hover:bg-secondary/20">
@@ -565,7 +783,25 @@ export function CIPPCPControle() {
                         <div className="font-mono font-bold text-foreground text-[11px]">{mask}</div>
                         <div className="text-muted-foreground truncate max-w-[120px]">{op.produto_nome}</div>
                       </td>
-                      <td className="text-center py-1.5 px-1 font-bold text-primary">{op.sequencia_programada || '—'}</td>
+                      <td className="text-center py-1 px-0.5">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <button
+                            onClick={() => handleMoveOp(op.id, 'up')}
+                            disabled={idx === 0}
+                            className="text-muted-foreground hover:text-foreground disabled:opacity-20"
+                          >
+                            <ChevronUp className="h-3 w-3" />
+                          </button>
+                          <span className="text-[9px] font-bold text-primary">{op.sequencia_programada || '—'}</span>
+                          <button
+                            onClick={() => handleMoveOp(op.id, 'down')}
+                            disabled={idx === programmedOps.length - 1}
+                            className="text-muted-foreground hover:text-foreground disabled:opacity-20"
+                          >
+                            <ChevronDown className="h-3 w-3" />
+                          </button>
+                        </div>
+                      </td>
                       <td className="text-center py-1.5 px-1 font-bold text-cip">{Number(op.tempo_total || 0).toFixed(1)}</td>
                       {setores.map(s => {
                         const status = getCellStatus(op, s.id);
@@ -577,10 +813,10 @@ export function CIPPCPControle() {
                               disabled={isProc || status === 'baixa'}
                               className={cn(
                                 'w-10 h-8 rounded border text-[10px] font-bold transition-all',
-                                status === 'baixa' 
-                                  ? 'bg-success/30 border-success/50 text-success cursor-default' 
-                                  : status === 'entrada' 
-                                    ? 'bg-warning/30 border-warning/50 text-warning cursor-pointer hover:bg-warning/40' 
+                                status === 'baixa'
+                                  ? 'bg-success/30 border-success/50 text-success cursor-default'
+                                  : status === 'entrada'
+                                    ? 'bg-warning/30 border-warning/50 text-warning cursor-pointer hover:bg-warning/40'
                                     : 'bg-secondary/30 border-border/30 text-muted-foreground cursor-pointer hover:bg-secondary/50',
                                 isProc && 'animate-pulse',
                               )}
@@ -596,9 +832,15 @@ export function CIPPCPControle() {
                           <button onClick={() => imprimirOP(op.id)} className="text-muted-foreground hover:text-foreground" title="Imprimir OP">
                             <Printer className="h-3 w-3" />
                           </button>
+                          <button onClick={() => imprimirEtiqueta(op)} className="text-muted-foreground hover:text-foreground" title="Imprimir etiqueta">
+                            <Tag className="h-3 w-3" />
+                          </button>
+                          <button onClick={() => setHistoryOp(op)} className="text-muted-foreground hover:text-foreground" title="Histórico">
+                            <History className="h-3 w-3" />
+                          </button>
                           {op.status_producao === 'programada' && (
                             <button onClick={() => handleRemoverDaCarga(op.id)} className="text-muted-foreground hover:text-destructive" title="Remover da carga">
-                              <ArrowRight className="h-3 w-3 rotate-180" />
+                              <Trash2 className="h-3 w-3" />
                             </button>
                           )}
                         </div>
@@ -611,6 +853,66 @@ export function CIPPCPControle() {
           </div>
         </div>
       </div>
+
+      {/* ═══════════════════ MODAL – HISTÓRICO DA OP ═══════════════════ */}
+      <Dialog open={!!historyOp} onOpenChange={() => setHistoryOp(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-4 w-4 text-cip" />
+              Histórico – {historyOp?.numero_op}
+            </DialogTitle>
+          </DialogHeader>
+          {historyOp && (
+            <div className="space-y-2">
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{historyOp.produto_nome}</span> · Qtd: {historyOp.quantidade}
+              </div>
+              <div className="rounded-lg border border-border/30 overflow-hidden">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="bg-secondary/50 border-b border-border/30">
+                      <th className="text-left py-2 px-3 font-medium text-muted-foreground">Setor</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Status</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Entrada</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Baixa</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {setores.map(setor => {
+                      const track = historyOp.rastreamento?.find(t => t.setor_id === setor.id);
+                      return (
+                        <tr key={setor.id} className="border-b border-border/20">
+                          <td className="py-1.5 px-3 font-medium text-foreground">{setor.nome}</td>
+                          <td className="text-center py-1.5 px-2">
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                'text-[10px]',
+                                track?.status === 'baixa' ? 'border-success/50 text-success' :
+                                track?.status === 'entrada' ? 'border-warning/50 text-warning' :
+                                'border-border/30 text-muted-foreground'
+                              )}
+                            >
+                              {track?.status === 'baixa' ? '🟢 Baixa' : track?.status === 'entrada' ? '🟡 Entrada' : '— Pendente'}
+                            </Badge>
+                          </td>
+                          <td className="text-center py-1.5 px-2 text-[10px] text-muted-foreground">
+                            {track?.data_entrada ? new Date(track.data_entrada).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td className="text-center py-1.5 px-2 text-[10px] text-muted-foreground">
+                            {track?.data_baixa ? new Date(track.data_baixa).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
