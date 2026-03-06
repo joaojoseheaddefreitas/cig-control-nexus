@@ -230,14 +230,40 @@ export async function aprovarPedido(
       .order("ordem", { ascending: true });
 
     if (setoresAtivos && insertedOps) {
-      const routeSteps = insertedOps.flatMap((op) =>
-        setoresAtivos.map((setor) => ({
-          op_id: op.id,
-          setor_id: setor.id,
-          ordem: setor.ordem,
-          tempo_estimado: (Number(op.quantidade) * Number(op.tempo_unitario)) / setoresAtivos.length,
-        }))
-      );
+      // Fetch produto_setor_tempos for per-sector time allocation
+      const produtoIds = dbItens.map(i => i.produto_id).filter(Boolean) as string[];
+      let temposPorSetor: Array<{ produto_id: string; setor_id: string; tempo_horas: number }> = [];
+      if (produtoIds.length > 0) {
+        const { data: temposData } = await supabase
+          .from("produto_setor_tempos")
+          .select("produto_id, setor_id, tempo_horas")
+          .in("produto_id", produtoIds);
+        temposPorSetor = (temposData || []) as any;
+      }
+
+      // Map item_pedido_id -> produto_id for lookup
+      const itemProdutoMap: Record<string, string | null> = {};
+      dbItens.forEach(i => { itemProdutoMap[i.id] = i.produto_id; });
+
+      const routeSteps = insertedOps.flatMap((op) => {
+        const produtoId = itemProdutoMap[op.item_pedido_id];
+        return setoresAtivos.map((setor) => {
+          // Try to find specific sector time from produto_setor_tempos
+          const tempoSetor = produtoId
+            ? temposPorSetor.find(t => t.produto_id === produtoId && t.setor_id === setor.id)
+            : null;
+          // horas_OP_setor = tempo_setor × quantidade
+          const tempoEstimado = tempoSetor
+            ? Number(tempoSetor.tempo_horas) * Number(op.quantidade)
+            : (Number(op.quantidade) * Number(op.tempo_unitario)) / setoresAtivos.length;
+          return {
+            op_id: op.id,
+            setor_id: setor.id,
+            ordem: setor.ordem,
+            tempo_estimado: tempoEstimado,
+          };
+        });
+      });
 
       if (routeSteps.length > 0) {
         await supabase.from("op_route_steps").insert(routeSteps);
