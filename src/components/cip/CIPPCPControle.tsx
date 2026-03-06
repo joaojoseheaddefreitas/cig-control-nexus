@@ -8,13 +8,14 @@ import {
   RefreshCw, Factory, Printer, PackagePlus, Zap, AlertTriangle,
   CheckCircle2, Clock, Gauge, Package, Calendar, ArrowRight,
   Search, ChevronUp, ChevronDown, ScanBarcode, Tag, Trash2,
-  History, ArrowUpDown, Wand2,
+  History, ArrowUpDown, Wand2, FileText, ClipboardList,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { getOPDisplayMask } from '@/services/aprovacaoService';
 import { imprimirOP } from '@/services/printService';
 import { imprimirEtiqueta } from '@/services/labelService';
+import { imprimirCarga } from '@/services/cargaService';
 import {
   fetchSetores,
   handleSetorClick,
@@ -32,6 +33,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface OPRow {
@@ -66,6 +70,17 @@ interface RouteStep {
   tempo_estimado: number;
 }
 
+// ─── Utility: status label ──────────────────────────────────────────
+function statusLabel(s: string): { label: string; color: string } {
+  switch (s) {
+    case 'aguardando': return { label: 'PENDENTE', color: 'border-border/50 text-muted-foreground bg-secondary/30' };
+    case 'programada': return { label: 'PROGRAMADA', color: 'border-primary/50 text-primary bg-primary/10' };
+    case 'em_producao': return { label: 'EM PRODUÇÃO', color: 'border-warning/50 text-warning bg-warning/10' };
+    case 'Producao Finalizada': return { label: 'FINALIZADA', color: 'border-success/50 text-success bg-success/10' };
+    default: return { label: s.toUpperCase(), color: 'border-border/30 text-muted-foreground' };
+  }
+}
+
 // ─── Component ───────────────────────────────────────────────────────
 export function CIPPCPControle() {
   const [ops, setOps] = useState<OPRow[]>([]);
@@ -81,6 +96,7 @@ export function CIPPCPControle() {
   const [searchTerm, setSearchTerm] = useState('');
   const [scannerInput, setScannerInput] = useState('');
   const [historyOp, setHistoryOp] = useState<OPRow | null>(null);
+  const [gradeFilter, setGradeFilter] = useState<string>('all');
 
   // ─── Data Loading ──────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -91,7 +107,6 @@ export function CIPPCPControle() {
       supabase
         .from('ops')
         .select('id, numero_op, produto_nome, quantidade, tempo_total, tempo_unitario, status_producao, carga_id, sequence_number, total_ops_at_generation, prazo_entrega, current_sector, data_programada, sequencia_programada, pedido_id')
-        .neq('status_producao', 'Producao Finalizada')
         .order('sequencia_programada', { ascending: true, nullsFirst: true }),
     ]);
 
@@ -140,11 +155,10 @@ export function CIPPCPControle() {
       return;
     }
 
-    // Find next pending sector for this OP
+    // Find next pending/entrada sector for this OP
     for (const setor of setores) {
       const track = op.rastreamento?.find(t => t.setor_id === setor.id);
       if (!track || track.status === 'pendente') {
-        // Register entrada
         const result = await handleSetorClick(op.id, setor.id, setores);
         if (result.error) toast.error(result.error);
         else toast.success(`📷 Scanner: ${code} → ${setor.nome} (${result.newStatus === 'entrada' ? '🟡 Entrada' : '🟢 Baixa'})`);
@@ -152,27 +166,27 @@ export function CIPPCPControle() {
         return;
       }
       if (track.status === 'entrada') {
-        // Register baixa
         const result = await handleSetorClick(op.id, setor.id, setores);
         if (result.error) toast.error(result.error);
         else toast.success(`📷 Scanner: ${code} → ${setor.nome} (🟢 Baixa)`);
         await loadData();
         return;
       }
-      // If baixa, continue to next sector
     }
     toast.info(`OP ${code}: todos os setores já finalizados`);
   }, [ops, setores, loadData]);
 
   useBarcodeScanner(handleScan);
 
-  // ─── Capacity Calculation (per sector, using route_steps) ──────────
+  // ─── Capacity Calculation ─────────────────────────────────────────
+  // REGRA: capacidade_setor = operadores × 8.8
   const capacidadePorSetor = useMemo(() => {
     return setores.map(setor => {
-      const capacidadeTotal = (setor.mao_de_obra + setor.maquinas_automaticas) * setor.horas_turno * setor.eficiencia;
+      const capacidadeTotal = setor.mao_de_obra * 8.8;
 
       // Sum hours from route_steps for OPs programmed/in-production on the filtered date
       const opsNoFiltro = ops.filter(op => {
+        if (op.status_producao === 'Producao Finalizada') return false;
         if (op.status_producao !== 'programada' && op.status_producao !== 'em_producao') return false;
         if (dataFiltro && op.data_programada !== dataFiltro) return false;
         return true;
@@ -190,12 +204,12 @@ export function CIPPCPControle() {
     });
   }, [setores, ops, routeSteps, dataFiltro]);
 
-  // Production tracking chart data (horas produzidas vs programadas)
+  // Production tracking chart — 3 states: PENDENTE, EM PRODUÇÃO, PRODUZIDO
   const chartProducao = useMemo(() => {
     return setores.map(setor => {
       const opsProgDay = ops.filter(op => {
         if (dataFiltro && op.data_programada !== dataFiltro) return false;
-        return op.status_producao === 'programada' || op.status_producao === 'em_producao';
+        return op.status_producao === 'programada' || op.status_producao === 'em_producao' || op.status_producao === 'Producao Finalizada';
       });
       const opIdsSet = new Set(opsProgDay.map(o => o.id));
 
@@ -203,24 +217,29 @@ export function CIPPCPControle() {
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
         .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
 
-      // Hours "produced" = from OPs with baixa in this sector
+      // Produzido = OPs com baixa neste setor
       const horasProduzidas = opsProgDay
-        .filter(op => {
-          const track = op.rastreamento?.find(t => t.setor_id === setor.id);
-          return track?.status === 'baixa';
-        })
+        .filter(op => op.rastreamento?.find(t => t.setor_id === setor.id)?.status === 'baixa')
         .reduce((sum, op) => {
           const step = routeSteps.find(s => s.op_id === op.id && s.setor_id === setor.id);
           return sum + Number(step?.tempo_estimado || 0);
         }, 0);
 
-      const pctProd = totalProgramada > 0 ? (horasProduzidas / totalProgramada) * 100 : 0;
+      // Em Produção = OPs com entrada neste setor
+      const horasEmProducao = opsProgDay
+        .filter(op => op.rastreamento?.find(t => t.setor_id === setor.id)?.status === 'entrada')
+        .reduce((sum, op) => {
+          const step = routeSteps.find(s => s.op_id === op.id && s.setor_id === setor.id);
+          return sum + Number(step?.tempo_estimado || 0);
+        }, 0);
+
+      const horasPendentes = Math.max(0, totalProgramada - horasProduzidas - horasEmProducao);
 
       return {
         setor: setor.nome.length > 10 ? setor.nome.substring(0, 10) + '…' : setor.nome,
         produzidas: Number(horasProduzidas.toFixed(1)),
-        pendentes: Number(Math.max(0, totalProgramada - horasProduzidas).toFixed(1)),
-        pctProd: Math.round(pctProd),
+        emProducao: Number(horasEmProducao.toFixed(1)),
+        pendentes: Number(horasPendentes.toFixed(1)),
       };
     });
   }, [setores, ops, routeSteps, dataFiltro]);
@@ -229,11 +248,19 @@ export function CIPPCPControle() {
     return capacidadePorSetor.some(s => s.percentual >= 100);
   }, [capacidadePorSetor]);
 
+  // Colors: 0%=AZUL, 1-79%=VERDE, 80-99%=AMARELO, >=100%=VERMELHO
   const getCapacityColor = (pct: number) => {
-    if (pct === 0) return { bg: 'bg-primary/20', bar: 'bg-primary', text: 'text-primary', label: 'LIVRE' };
+    if (pct === 0) return { bg: 'bg-blue-500/20', bar: 'bg-blue-500', text: 'text-blue-400', label: 'LIVRE' };
     if (pct < 80) return { bg: 'bg-success/20', bar: 'bg-success', text: 'text-success', label: 'OK' };
     if (pct < 100) return { bg: 'bg-warning/20', bar: 'bg-warning', text: 'text-warning', label: 'ALTO' };
     return { bg: 'bg-destructive/20', bar: 'bg-destructive', text: 'text-destructive', label: 'GARGALO' };
+  };
+
+  const getCapacityBarColor = (pct: number) => {
+    if (pct === 0) return 'hsl(210, 100%, 56%)';
+    if (pct < 80) return 'hsl(145, 70%, 42%)';
+    if (pct < 100) return 'hsl(45, 93%, 47%)';
+    return 'hsl(0, 72%, 51%)';
   };
 
   const gargaloMax = useMemo(() => {
@@ -241,7 +268,6 @@ export function CIPPCPControle() {
     return capacidadePorSetor.reduce((max, s) => s.percentual > max.percentual ? s : max, capacidadePorSetor[0]);
   }, [capacidadePorSetor]);
 
-  // Chart data for load composition
   const chartCarga = useMemo(() => {
     return capacidadePorSetor.map(s => ({
       setor: s.nome.length > 10 ? s.nome.substring(0, 10) + '…' : s.nome,
@@ -249,6 +275,27 @@ export function CIPPCPControle() {
       capacidadeMax: Number(s.capacidadeTotal.toFixed(1)),
     }));
   }, [capacidadePorSetor]);
+
+  // ─── Validate OP fits capacity per sector ──────────────────────────
+  const validateOpCapacity = useCallback((opId: string): { fits: boolean; blocker?: string } => {
+    const opSteps = routeSteps.filter(s => s.op_id === opId);
+    for (const step of opSteps) {
+      const cap = capacidadePorSetor.find(c => c.id === step.setor_id);
+      if (!cap) continue;
+      const horasOp = Number(step.tempo_estimado);
+      // Regra 3: OP não pode ter horas > capacidade diária do setor
+      if (horasOp > cap.capacidadeTotal) {
+        const setorNome = setores.find(s => s.id === step.setor_id)?.nome || 'Setor';
+        return { fits: false, blocker: `OP excede capacidade diária do setor "${setorNome}" (${horasOp.toFixed(1)}h > ${cap.capacidadeTotal.toFixed(1)}h)` };
+      }
+      // Regra 5: horas_programadas + horas_OP <= capacidade
+      if (cap.horasOcupadas + horasOp > cap.capacidadeTotal) {
+        const setorNome = setores.find(s => s.id === step.setor_id)?.nome || 'Setor';
+        return { fits: false, blocker: `Setor "${setorNome}" ficaria com ${(cap.horasOcupadas + horasOp).toFixed(1)}h (cap: ${cap.capacidadeTotal.toFixed(1)}h)` };
+      }
+    }
+    return { fits: true };
+  }, [routeSteps, capacidadePorSetor, setores]);
 
   // ─── Handlers ──────────────────────────────────────────────────────
   const handleCellClick = async (opId: string, setorId: string) => {
@@ -273,12 +320,26 @@ export function CIPPCPControle() {
 
   const handleMontarCarga = async () => {
     if (selected.size === 0) return;
-    if (isOverCapacity()) {
-      toast.error('🔴 Emissão bloqueada: capacidade excedida em algum setor');
-      return;
-    }
     setEmitting(true);
     const ids = Array.from(selected);
+
+    // Validate each OP fits capacity
+    for (const id of ids) {
+      const { fits, blocker } = validateOpCapacity(id);
+      if (!fits) {
+        const op = ops.find(o => o.id === id);
+        toast.error(`🔴 OP ${op?.numero_op || ''}: ${blocker}`);
+        setEmitting(false);
+        return;
+      }
+      // Check OP not already in this carga date
+      const existing = ops.find(o => o.id === id);
+      if (existing?.data_programada === dataProgramada && existing?.status_producao === 'programada') {
+        toast.error(`OP ${existing.numero_op} já está programada para esta data`);
+        setEmitting(false);
+        return;
+      }
+    }
 
     const existingProgrammed = ops.filter(o => o.data_programada === dataProgramada && o.sequencia_programada);
     const maxSeq = existingProgrammed.length > 0
@@ -303,15 +364,14 @@ export function CIPPCPControle() {
     setEmitting(false);
   };
 
-  // ─── 1️⃣ TETRIS INDUSTRIAL – Auto-suggestion ──────────────────────
+  // ─── TETRIS INDUSTRIAL – Auto-suggestion ──────────────────────────
   const handleSugerirCarga = async () => {
-    const pending = ops.filter(o => !o.data_programada && (o.status_producao === 'aguardando' || o.status_producao === 'PENDENTE'));
+    const pending = ops.filter(o => !o.data_programada && (o.status_producao === 'aguardando'));
     if (pending.length === 0) {
       toast.info('Nenhuma OP pendente para sugerir');
       return;
     }
 
-    // Sort by prazo_entrega (earliest first), then by sequencia
     const sorted = [...pending].sort((a, b) => {
       if (a.prazo_entrega && b.prazo_entrega) return a.prazo_entrega.localeCompare(b.prazo_entrega);
       if (a.prazo_entrega) return -1;
@@ -319,21 +379,21 @@ export function CIPPCPControle() {
       return 0;
     });
 
-    // Build capacity remaining per sector (starting from current occupation)
+    // Build capacity remaining per sector
     const capRestante: Record<string, number> = {};
-    capacidadePorSetor.forEach(s => {
-      capRestante[s.id] = s.horasLivres;
-    });
+    capacidadePorSetor.forEach(s => { capRestante[s.id] = s.horasLivres; });
 
     const autoSelected = new Set<string>();
 
     for (const op of sorted) {
-      // Get route steps for this OP
       const opSteps = routeSteps.filter(s => s.op_id === op.id);
       if (opSteps.length === 0) {
-        // Fallback: distribute tempo_total equally across sectors
         const perSetor = Number(op.tempo_total || 0) / Math.max(1, setores.length);
-        const fits = setores.every(s => (capRestante[s.id] || 0) >= perSetor);
+        // Check no sector exceeds capacity
+        const fits = setores.every(s => {
+          const capSetor = s.mao_de_obra * 8.8;
+          return perSetor <= capSetor && (capRestante[s.id] || 0) >= perSetor;
+        });
         if (fits) {
           autoSelected.add(op.id);
           setores.forEach(s => { capRestante[s.id] = (capRestante[s.id] || 0) - perSetor; });
@@ -341,7 +401,13 @@ export function CIPPCPControle() {
         continue;
       }
 
-      // Check if OP fits in all sectors
+      // Check: OP hours per sector cannot exceed daily capacity
+      const exceeds = opSteps.some(step => {
+        const capSetor = setores.find(s => s.id === step.setor_id);
+        return capSetor ? Number(step.tempo_estimado) > capSetor.mao_de_obra * 8.8 : false;
+      });
+      if (exceeds) continue; // Skip OPs that exceed sector capacity
+
       const fits = opSteps.every(step => (capRestante[step.setor_id] || 0) >= Number(step.tempo_estimado));
       if (fits) {
         autoSelected.add(op.id);
@@ -349,7 +415,6 @@ export function CIPPCPControle() {
           capRestante[step.setor_id] = (capRestante[step.setor_id] || 0) - Number(step.tempo_estimado);
         });
       }
-      // If doesn't fit, skip (Tetris: try next one)
     }
 
     if (autoSelected.size === 0) {
@@ -372,7 +437,6 @@ export function CIPPCPControle() {
     await loadData();
   };
 
-  // ─── Reorder OPs ──────────────────────────────────────────────────
   const handleMoveOp = async (opId: string, direction: 'up' | 'down') => {
     const idx = programmedOps.findIndex(o => o.id === opId);
     if (idx < 0) return;
@@ -389,11 +453,44 @@ export function CIPPCPControle() {
     await loadData();
   };
 
-  // ─── Manual scanner input ─────────────────────────────────────────
   const handleManualScan = () => {
     if (scannerInput.trim()) {
       handleScan(scannerInput.trim());
       setScannerInput('');
+    }
+  };
+
+  // ─── Print Carga Relation ─────────────────────────────────────────
+  const handlePrintCargaDia = () => {
+    if (programmedOps.length === 0) {
+      toast.info('Nenhuma OP programada para imprimir');
+      return;
+    }
+    // Find carga_id from programmed ops
+    const cargaId = programmedOps.find(o => o.carga_id)?.carga_id;
+    if (cargaId) {
+      imprimirCarga(cargaId);
+    } else {
+      // Print a simple relation
+      const rows = programmedOps.map((op, i) => `<tr>
+        <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${i + 1}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;font-family:monospace;font-weight:bold">${op.numero_op}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd">${op.produto_nome}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${op.quantidade}</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${Number(op.tempo_total || 0).toFixed(1)}h</td>
+        <td style="padding:4px 8px;border:1px solid #ddd;text-align:center">${statusLabel(op.status_producao).label}</td>
+      </tr>`).join('');
+
+      const totalH = programmedOps.reduce((s, o) => s + Number(o.tempo_total || 0), 0);
+      const html = `<html><head><title>Carga ${dataFiltro}</title>
+        <style>body{font-family:Arial,sans-serif;padding:30px;color:#333}h1{font-size:20px}table{width:100%;border-collapse:collapse;font-size:12px;margin-top:16px}th{background:#f5f5f5;padding:6px 8px;border:1px solid #ddd;text-align:left;font-size:10px;text-transform:uppercase}.footer{margin-top:20px;font-size:10px;color:#999;border-top:1px solid #eee;padding-top:8px}@media print{body{padding:10px}}</style></head><body>
+        <h1>RELAÇÃO DA CARGA — ${new Date(dataFiltro + 'T12:00:00').toLocaleDateString('pt-BR')}</h1>
+        <p style="font-size:12px;color:#666">Total: ${programmedOps.length} OPs · ${totalH.toFixed(1)}h</p>
+        <table><thead><tr><th>#</th><th>OP</th><th>Produto</th><th style="text-align:center">Qtd</th><th style="text-align:center">Horas</th><th style="text-align:center">Status</th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="footer">Impresso em ${new Date().toLocaleString('pt-BR')} | Sistema Industrial</div>
+        </body></html>`;
+      const win = window.open('', '_blank');
+      if (win) { win.document.write(html); win.document.close(); win.print(); }
     }
   };
 
@@ -404,12 +501,17 @@ export function CIPPCPControle() {
     return track.status as 'entrada' | 'baixa';
   };
 
-  const allPendingOps = ops.filter(o => !o.data_programada && (o.status_producao === 'aguardando' || o.status_producao === 'PENDENTE'));
-  const pendingOps = allPendingOps.filter(o => {
+  // REGRA 4: Grade mostra TODAS as OPs, apenas muda o status. Filtro opcional.
+  const allGradeOps = ops.filter(o => o.status_producao !== 'cancelado');
+  const filteredGradeOps = allGradeOps.filter(o => {
+    if (gradeFilter !== 'all' && o.status_producao !== gradeFilter) return false;
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
     return o.numero_op.toLowerCase().includes(term) || o.produto_nome.toLowerCase().includes(term);
   });
+
+  // Only PENDENTE ops are selectable for carga
+  const selectableOps = filteredGradeOps.filter(o => o.status_producao === 'aguardando' && !o.data_programada);
 
   const programmedOps = ops.filter(o => {
     if (!o.data_programada) return false;
@@ -418,9 +520,10 @@ export function CIPPCPControle() {
   }).sort((a, b) => (a.sequencia_programada || 999) - (b.sequencia_programada || 999));
 
   const totalHoras = ops.reduce((s, o) => s + Number(o.tempo_total || 0), 0);
-  const opsPendentes = allPendingOps.length;
+  const opsPendentes = ops.filter(o => o.status_producao === 'aguardando').length;
   const opsEmProducao = ops.filter(o => o.status_producao === 'em_producao').length;
   const opsProgramadas = ops.filter(o => o.status_producao === 'programada').length;
+  const opsFinalizadas = ops.filter(o => o.status_producao === 'Producao Finalizada').length;
 
   // ─── Render ────────────────────────────────────────────────────────
   if (loading) {
@@ -439,9 +542,14 @@ export function CIPPCPControle() {
         {/* KPI Summary + Scanner */}
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/30 bg-card/80">
-            <Package className="h-4 w-4 text-cip" />
+            <Package className="h-4 w-4 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Pendentes:</span>
             <span className="text-sm font-bold text-foreground">{opsPendentes}</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/30 bg-card/80">
+            <Calendar className="h-4 w-4 text-primary" />
+            <span className="text-xs text-muted-foreground">Programadas:</span>
+            <span className="text-sm font-bold text-foreground">{opsProgramadas}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/30 bg-card/80">
             <Factory className="h-4 w-4 text-warning" />
@@ -449,9 +557,9 @@ export function CIPPCPControle() {
             <span className="text-sm font-bold text-foreground">{opsEmProducao}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/30 bg-card/80">
-            <Calendar className="h-4 w-4 text-primary" />
-            <span className="text-xs text-muted-foreground">Programadas:</span>
-            <span className="text-sm font-bold text-foreground">{opsProgramadas}</span>
+            <CheckCircle2 className="h-4 w-4 text-success" />
+            <span className="text-xs text-muted-foreground">Finalizadas:</span>
+            <span className="text-sm font-bold text-foreground">{opsFinalizadas}</span>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-border/30 bg-card/80">
             <Clock className="h-4 w-4 text-cip" />
@@ -519,7 +627,7 @@ export function CIPPCPControle() {
 
         {/* Recharts – Two charts side by side */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-          {/* Chart 1: Acompanhamento de Produção */}
+          {/* Chart 1: Acompanhamento de Produção — 3 states */}
           <div className="rounded-xl border border-border/30 bg-card/80 p-4">
             <h4 className="text-xs font-semibold text-muted-foreground mb-3 flex items-center gap-1.5">
               <Gauge className="h-3.5 w-3.5 text-cip" /> Acompanhamento de Produção
@@ -533,17 +641,19 @@ export function CIPPCPControle() {
                   <Tooltip
                     contentStyle={{ backgroundColor: 'hsl(220, 20%, 14%)', border: '1px solid hsl(220, 18%, 22%)', borderRadius: '8px', fontSize: '11px' }}
                     formatter={(value: number, name: string) => {
-                      if (name === 'produzidas') return [`${value}h`, '✅ Produzidas'];
-                      if (name === 'pendentes') return [`${value}h`, '⏳ Pendentes'];
+                      if (name === 'produzidas') return [`${value}h`, '🟢 Produzido'];
+                      if (name === 'emProducao') return [`${value}h`, '🟡 Em Produção'];
+                      if (name === 'pendentes') return [`${value}h`, '⬜ Pendente'];
                       return [value, name];
                     }}
                   />
                   <Legend
                     wrapperStyle={{ fontSize: '10px' }}
-                    formatter={(value) => value === 'produzidas' ? '✅ Concluídas' : '⏳ Pendentes'}
+                    formatter={(value) => value === 'produzidas' ? '🟢 Produzido' : value === 'emProducao' ? '🟡 Em Produção' : '⬜ Pendente'}
                   />
                   <Bar dataKey="produzidas" stackId="a" fill="hsl(145, 70%, 42%)" radius={[0, 0, 0, 0]} name="produzidas" />
-                  <Bar dataKey="pendentes" stackId="a" fill="hsl(220, 18%, 30%)" radius={[0, 4, 4, 0]} name="pendentes" />
+                  <Bar dataKey="emProducao" stackId="a" fill="hsl(45, 93%, 47%)" radius={[0, 0, 0, 0]} name="emProducao" />
+                  <Bar dataKey="pendentes" stackId="a" fill="hsl(220, 18%, 35%)" radius={[0, 4, 4, 0]} name="pendentes" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -571,10 +681,7 @@ export function CIPPCPControle() {
                   <Legend wrapperStyle={{ fontSize: '10px' }} formatter={(v) => v === 'programada' ? '📦 Programada' : '🔴 Cap. Máx'} />
                   <Bar dataKey="programada" name="programada" radius={[0, 4, 4, 0]}>
                     {chartCarga.map((entry, idx) => (
-                      <Cell
-                        key={idx}
-                        fill={entry.programada > entry.capacidadeMax ? 'hsl(0, 72%, 51%)' : 'hsl(30, 90%, 50%)'}
-                      />
+                      <Cell key={idx} fill={entry.programada > entry.capacidadeMax ? 'hsl(0, 72%, 51%)' : getCapacityBarColor((entry.programada / Math.max(1, entry.capacidadeMax)) * 100)} />
                     ))}
                   </Bar>
                   <Line
@@ -596,24 +703,38 @@ export function CIPPCPControle() {
       {/* ═══════════════════ ZONA INFERIOR – GRADE + PROGRAMAÇÃO ═══════════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
-        {/* ZONA ESQUERDA – GRADE DE OPs PENDENTES */}
+        {/* ZONA ESQUERDA – GRADE DE OPs (TODAS) */}
         <div className="lg:col-span-4 space-y-2">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-sm font-display font-bold text-foreground flex items-center gap-1.5">
               <Package className="h-4 w-4 text-cip" /> Grade de OPs
-              <Badge variant="outline" className="text-[10px] ml-1">{allPendingOps.length}</Badge>
+              <Badge variant="outline" className="text-[10px] ml-1">{allGradeOps.length}</Badge>
             </h3>
           </div>
 
-          {/* Search */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Buscar OP ou produto..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-8 h-7 text-xs"
-            />
+          {/* Search + Filter */}
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Buscar OP ou produto..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-8 h-7 text-xs"
+              />
+            </div>
+            <Select value={gradeFilter} onValueChange={setGradeFilter}>
+              <SelectTrigger className="w-[120px] h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas</SelectItem>
+                <SelectItem value="aguardando">Pendente</SelectItem>
+                <SelectItem value="programada">Programada</SelectItem>
+                <SelectItem value="em_producao">Em Produção</SelectItem>
+                <SelectItem value="Producao Finalizada">Finalizada</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Action bar */}
@@ -628,7 +749,7 @@ export function CIPPCPControle() {
               size="sm"
               className="bg-cip hover:bg-cip/90 h-7 text-xs"
               onClick={handleMontarCarga}
-              disabled={emitting || selected.size === 0 || isOverCapacity()}
+              disabled={emitting || selected.size === 0}
             >
               <PackagePlus className="h-3 w-3 mr-1" /> Montar ({selected.size})
             </Button>
@@ -642,64 +763,50 @@ export function CIPPCPControle() {
             </Button>
           </div>
 
-          {isOverCapacity() && selected.size > 0 && (
-            <p className="text-[10px] text-destructive font-medium px-2">🔴 Bloqueado: setor(es) ≥ 100%</p>
-          )}
-
-          {/* OP List */}
+          {/* OP List – ALL OPs with status column */}
           <div className="rounded-xl border border-border/30 bg-card/80 max-h-[500px] overflow-y-auto">
             <table className="w-full text-xs">
               <thead className="sticky top-0 z-10 bg-secondary/80 backdrop-blur-sm">
                 <tr className="border-b border-border/50">
-                  <th className="py-2 px-2 w-7">
-                    <Checkbox
-                      checked={pendingOps.length > 0 && pendingOps.every(o => selected.has(o.id))}
-                      onCheckedChange={() => {
-                        if (pendingOps.every(o => selected.has(o.id))) {
-                          setSelected(prev => {
-                            const next = new Set(prev);
-                            pendingOps.forEach(o => next.delete(o.id));
-                            return next;
-                          });
-                        } else {
-                          setSelected(prev => {
-                            const next = new Set(prev);
-                            pendingOps.forEach(o => next.add(o.id));
-                            return next;
-                          });
-                        }
-                      }}
-                    />
-                  </th>
+                  <th className="py-2 px-2 w-7"></th>
                   <th className="text-left py-2 px-1 font-medium text-muted-foreground">Nº OP</th>
                   <th className="text-left py-2 px-1 font-medium text-muted-foreground">Produto</th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground">Hrs</th>
+                  <th className="text-center py-2 px-1 font-medium text-muted-foreground">Status</th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground w-6"></th>
                 </tr>
               </thead>
               <tbody>
-                {pendingOps.length === 0 ? (
-                  <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">
+                {filteredGradeOps.length === 0 ? (
+                  <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">
                     <CheckCircle2 className="h-6 w-6 mx-auto mb-2 opacity-30" />
-                    {searchTerm ? 'Nenhuma OP encontrada' : 'Nenhuma OP pendente'}
+                    {searchTerm ? 'Nenhuma OP encontrada' : 'Nenhuma OP'}
                   </td></tr>
-                ) : pendingOps.map(op => {
+                ) : filteredGradeOps.map(op => {
                   const mask = getOPDisplayMask(op.numero_op, op.sequence_number, op.total_ops_at_generation);
+                  const isSelectable = op.status_producao === 'aguardando' && !op.data_programada;
+                  const st = statusLabel(op.status_producao);
                   return (
                     <tr
                       key={op.id}
                       className={cn(
-                        'border-b border-border/30 hover:bg-secondary/20 cursor-pointer',
+                        'border-b border-border/30 hover:bg-secondary/20',
+                        isSelectable && 'cursor-pointer',
                         selected.has(op.id) && 'bg-cip/10'
                       )}
-                      onClick={() => toggleSelect(op.id)}
+                      onClick={() => isSelectable && toggleSelect(op.id)}
                     >
                       <td className="py-1.5 px-2" onClick={e => e.stopPropagation()}>
-                        <Checkbox checked={selected.has(op.id)} onCheckedChange={() => toggleSelect(op.id)} />
+                        {isSelectable && (
+                          <Checkbox checked={selected.has(op.id)} onCheckedChange={() => toggleSelect(op.id)} />
+                        )}
                       </td>
                       <td className="py-1.5 px-1 font-mono font-bold text-foreground text-[11px]">{mask}</td>
                       <td className="py-1.5 px-1 text-muted-foreground truncate max-w-[100px]">{op.produto_nome}</td>
                       <td className="text-center py-1.5 px-1 font-bold text-cip">{Number(op.tempo_total || 0).toFixed(1)}</td>
+                      <td className="text-center py-1.5 px-1">
+                        <Badge variant="outline" className={cn('text-[9px]', st.color)}>{st.label}</Badge>
+                      </td>
                       <td className="text-center py-1 px-0.5">
                         <button onClick={e => { e.stopPropagation(); imprimirEtiqueta(op); }} className="text-muted-foreground hover:text-foreground" title="Imprimir etiqueta">
                           <Tag className="h-3 w-3" />
@@ -721,6 +828,9 @@ export function CIPPCPControle() {
               <Badge variant="outline" className="text-[10px] ml-1">{programmedOps.length} OPs</Badge>
             </h3>
             <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" className="h-7 text-xs" onClick={handlePrintCargaDia} title="Imprimir relação da carga">
+                <ClipboardList className="h-3 w-3 mr-1" /> Imprimir Carga
+              </Button>
               <span className="text-[10px] text-muted-foreground">Filtro:</span>
               <Input
                 type="date"
@@ -735,7 +845,7 @@ export function CIPPCPControle() {
           <div className="flex gap-4 text-xs px-1">
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded bg-secondary/30 border border-border/30" />
-              <span className="text-muted-foreground">Pendente —</span>
+              <span className="text-muted-foreground">Pendente</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-3 rounded bg-warning/30 border border-warning/50" />
@@ -876,11 +986,15 @@ export function CIPPCPControle() {
                       <th className="text-center py-2 px-2 font-medium text-muted-foreground">Status</th>
                       <th className="text-center py-2 px-2 font-medium text-muted-foreground">Entrada</th>
                       <th className="text-center py-2 px-2 font-medium text-muted-foreground">Baixa</th>
+                      <th className="text-center py-2 px-2 font-medium text-muted-foreground">Tempo</th>
                     </tr>
                   </thead>
                   <tbody>
                     {setores.map(setor => {
                       const track = historyOp.rastreamento?.find(t => t.setor_id === setor.id);
+                      const entrada = track?.data_entrada ? new Date(track.data_entrada) : null;
+                      const baixa = track?.data_baixa ? new Date(track.data_baixa) : null;
+                      const tempoMin = entrada && baixa ? Math.round((baixa.getTime() - entrada.getTime()) / 60000) : null;
                       return (
                         <tr key={setor.id} className="border-b border-border/20">
                           <td className="py-1.5 px-3 font-medium text-foreground">{setor.nome}</td>
@@ -898,10 +1012,13 @@ export function CIPPCPControle() {
                             </Badge>
                           </td>
                           <td className="text-center py-1.5 px-2 text-[10px] text-muted-foreground">
-                            {track?.data_entrada ? new Date(track.data_entrada).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            {entrada ? entrada.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
                           </td>
                           <td className="text-center py-1.5 px-2 text-[10px] text-muted-foreground">
-                            {track?.data_baixa ? new Date(track.data_baixa).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                            {baixa ? baixa.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'}
+                          </td>
+                          <td className="text-center py-1.5 px-2 text-[10px] font-medium text-cip">
+                            {tempoMin !== null ? `${Math.floor(tempoMin / 60)}h${String(tempoMin % 60).padStart(2, '0')}m` : '—'}
                           </td>
                         </tr>
                       );
