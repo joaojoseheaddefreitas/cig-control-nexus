@@ -505,7 +505,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
       )}
 
       <main className={cn(
-        'flex-1 overflow-hidden',
+        'flex-1',
         isMobile ? 'pt-28 px-3 pb-4' : 'p-4 lg:p-6'
       )}>
         {!isMobile && (
