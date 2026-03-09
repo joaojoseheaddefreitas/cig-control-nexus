@@ -98,7 +98,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const fmt = (v: number) => `R$ ${(v / 1000).toFixed(0)}k`;
 
   const renderDashboard = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KPICard title="Faturamento" value={fmt(data!.faturamento)} subtitle="Total pedidos" icon={<DollarSign className="h-5 w-5" />} variant="cif" />
         <KPICard title="Custo MOB" value={fmt(data!.custoMaoDeObra)} subtitle="Mão de obra" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
@@ -157,7 +157,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   const renderFluxo = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard title="Faturamento" value={fmt(data!.faturamento)} subtitle="Receita total" icon={<TrendingUp className="h-5 w-5" />} variant="cif" />
         <KPICard title="Custos" value={fmt(data!.custoTotal + data!.custoFixo)} subtitle="Total" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
@@ -192,7 +192,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     const withPercent = custoCategories.map(c => ({ ...c, percentual: total > 0 ? ((c.valor / total) * 100).toFixed(1) : '0' }));
 
     return (
-      <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+      <div className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KPICard title="Custo Fixo" value={fmt(data!.custoFixo)} subtitle="Mensal" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
           <KPICard title="Custo MOB" value={fmt(data!.custoMaoDeObra)} subtitle="Variável" icon={<Activity className="h-5 w-5" />} variant="cif" />
@@ -229,7 +229,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   };
 
   const renderEquilibrio = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-card border border-border/30">
           <p className="text-xs text-muted-foreground">Ponto de Equilíbrio (R$)</p>
@@ -288,7 +288,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   const renderRentabilidade = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
         <p className="text-sm text-muted-foreground"><strong className="text-cif">Rentabilidade & Pricing</strong> — Margem por SKU calculada a partir de dados reais de produção.</p>
       </div>
@@ -345,7 +345,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   const renderAuditoria = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
         <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria & Compliance</strong> — Logs de ações do sistema. Registros imutáveis.</p>
       </div>
@@ -381,7 +381,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   const renderAnalytics = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ModuleCard title="Resultado por Período" variant="cif">
           <div className="h-72">
@@ -467,7 +467,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   return (
-    <div className="flex animate-fade-in h-[calc(100vh-3rem)]">
+    <div className="flex animate-fade-in min-h-screen">
       {isMobile && (
         <div className="fixed top-12 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
           <div className="flex items-center justify-between">
@@ -491,7 +491,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
 
       {!isMobile && (
         <aside className={cn(
-          'h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
+          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
           sidebarCollapsed ? 'w-16' : 'w-56'
         )}>
           <button

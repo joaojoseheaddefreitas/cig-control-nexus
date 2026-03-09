@@ -105,7 +105,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
   // === DASHBOARD ===
   const renderDashboard = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
         <KPICard title="Valor Estoque" value={`R$ ${(valorEstoqueTotal / 1000).toFixed(0)}k`} subtitle="Total valorizado" icon={<Warehouse className="h-5 w-5" />} variant="cic" />
         <KPICard title="Materiais Ativos" value={materiais.length} subtitle="Cadastrados" icon={<Package className="h-5 w-5" />} variant="cic" />
@@ -177,7 +177,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
   // === GESTÃO DE MATERIAIS (Alcance, Ponto de Pedido) ===
   const renderMateriais = () => (
-    <div className="space-y-4 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-4">
       <div className="p-3 rounded-lg bg-cic/10 border border-cic/30">
         <p className="text-sm text-muted-foreground"><strong className="text-cic">Gestão de Materiais</strong> — Alcance, Ponto de Pedido, Proposta de Compra. Dados reais do banco.</p>
       </div>
@@ -263,7 +263,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   const renderCompras = () => {
     const comprasPendentes = materiais.filter(m => (m.proposta_compra || 0) > 0);
     return (
-      <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+      <div className="space-y-6">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KPICard title="Propostas Ativas" value={comprasPendentes.length} subtitle="Materiais" icon={<ShoppingCart className="h-5 w-5" />} variant="cic" />
           <KPICard title="Valor Propostas" value={`R$ ${(totalPropostaCompra / 1000).toFixed(0)}k`} subtitle="Total estimado" icon={<DollarSign className="h-5 w-5" />} variant="cic" />
@@ -304,7 +304,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
   // === FORNECEDORES ===
   const renderFornecedores = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="flex gap-2 max-w-md">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -345,7 +345,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   const renderMRP = () => {
     const necessidades = materiais.filter(m => (m.proposta_compra || 0) > 0 || m.status === 'critico');
     return (
-      <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+      <div className="space-y-6">
         <div className="p-3 rounded-lg bg-warning/10 border border-warning/30">
           <div className="flex items-start gap-3">
             <ClipboardList className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
@@ -395,7 +395,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
   // === IA ===
   const renderIA = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="p-3 rounded-lg bg-cic/10 border border-cic/30">
         <p className="text-sm text-muted-foreground"><strong className="text-cic">IA Executiva</strong> — Alertas críticos baseados em dados reais de estoque e produção.</p>
       </div>
@@ -436,7 +436,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
   // === ANALYTICS ===
   const renderAnalytics = () => (
-    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+    <div className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ModuleCard title="Alcance por Material (dias)" variant="cic">
           <div className="h-64">
@@ -517,7 +517,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   );
 
   return (
-    <div className="flex animate-fade-in h-[calc(100vh-3rem)]">
+    <div className="flex animate-fade-in min-h-screen">
       {isMobile && (
         <div className="fixed top-12 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
           <div className="flex items-center justify-between">
@@ -541,7 +541,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
       {!isMobile && (
         <aside className={cn(
-          'h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
+          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
           sidebarCollapsed ? 'w-16' : 'w-56'
         )}>
           <button
