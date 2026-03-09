@@ -1,9 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, ComposedChart, Legend,
 } from 'recharts';
-import { executiveKPIs, chartData } from '@/data/cigData';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -11,13 +10,14 @@ import { Badge } from '@/components/ui/badge';
 import {
   Wallet, TrendingUp, DollarSign, PiggyBank, CreditCard, BarChart2,
   Brain, Home, ChevronLeft, ChevronRight, Menu, X,
-  Target, Shield, Gauge, AlertTriangle, CheckCircle2,
-  FileText, Eye, Activity, Scale
+  Target, Shield, Gauge, Activity, Scale, RefreshCw,
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
+import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
+import { supabase } from '@/integrations/supabase/client';
 
 const CHART_COLORS = {
   azulMarinho: 'hsl(215, 75%, 48%)',
@@ -40,73 +40,6 @@ const menuItems: { id: CIFTab; label: string; icon: typeof BarChart2 }[] = [
   { id: 'analytics', label: 'Analytics', icon: Activity },
 ];
 
-// Data
-const receitaCusto = [
-  { mes: 'Jan', receita: 145000, custo: 112000, margem: 22.8 },
-  { mes: 'Fev', receita: 158000, custo: 118000, margem: 25.3 },
-  { mes: 'Mar', receita: 172000, custo: 128000, margem: 25.6 },
-  { mes: 'Abr', receita: 168000, custo: 125000, margem: 25.6 },
-  { mes: 'Mai', receita: 179188, custo: 142888, margem: 20.3 },
-  { mes: 'Jun', receita: 185000, custo: 145000, margem: 21.6 },
-];
-
-const fluxoCaixaMensal = [
-  { mes: 'Jan', entradas: 145000, saidas: 118000, saldo: 27000 },
-  { mes: 'Fev', entradas: 158000, saidas: 125000, saldo: 33000 },
-  { mes: 'Mar', entradas: 172000, saidas: 135000, saldo: 37000 },
-  { mes: 'Abr', entradas: 168000, saidas: 130000, saldo: 38000 },
-  { mes: 'Mai', entradas: 179188, saidas: 148000, saldo: 31188 },
-  { mes: 'Jun', entradas: 185000, saidas: 150000, saldo: 35000 },
-];
-
-const custosPorCategoria = [
-  { categoria: 'Matéria Prima', valor: 68000, percentual: 47.6, color: CHART_COLORS.vermelho },
-  { categoria: 'Mão de Obra', valor: 42000, percentual: 29.4, color: CHART_COLORS.laranja },
-  { categoria: 'Energia', valor: 12000, percentual: 8.4, color: CHART_COLORS.amarelo },
-  { categoria: 'Logística', valor: 15000, percentual: 10.5, color: CHART_COLORS.verde },
-  { categoria: 'Outros', valor: 5888, percentual: 4.1, color: CHART_COLORS.azulMarinho },
-];
-
-const custoFixoVariavel = [
-  { mes: 'Jan', fixo: 52000, variavel: 60000 },
-  { mes: 'Fev', fixo: 52000, variavel: 66000 },
-  { mes: 'Mar', fixo: 53000, variavel: 75000 },
-  { mes: 'Abr', fixo: 53000, variavel: 72000 },
-  { mes: 'Mai', fixo: 54000, variavel: 88888 },
-  { mes: 'Jun', fixo: 54000, variavel: 91000 },
-];
-
-const rentabilidadeSKU = [
-  { sku: 'Sofá 3L', preco: 2800, custo: 1820, margem: 35, volume: 45 },
-  { sku: 'Poltrona R', preco: 1200, custo: 840, margem: 30, volume: 62 },
-  { sku: 'Sofá Retrátil', preco: 3500, custo: 2450, margem: 30, volume: 28 },
-  { sku: 'Puff Grande', preco: 450, custo: 270, margem: 40, volume: 95 },
-  { sku: 'Cama Box', preco: 1800, custo: 1260, margem: 30, volume: 35 },
-  { sku: 'Cabeceira', preco: 650, custo: 390, margem: 40, volume: 48 },
-];
-
-const auditoriaLogs = [
-  { data: '2025-02-05', tipo: 'NF-e', descricao: 'NF-e 00145 — entrada conferida', status: 'ok' },
-  { data: '2025-02-04', tipo: 'Conciliação', descricao: 'Extrato bancário conciliado — sem divergência', status: 'ok' },
-  { data: '2025-02-03', tipo: 'Anomalia', descricao: 'Duplicidade de lançamento detectada — R$ 2.450', status: 'alerta' },
-  { data: '2025-02-02', tipo: 'Fiscal', descricao: 'DARF vencida — IRPJ competência 01/2025', status: 'critico' },
-  { data: '2025-02-01', tipo: 'NF-e', descricao: 'NF-e 00139 — entrada conferida', status: 'ok' },
-  { data: '2025-01-30', tipo: 'Conciliação', descricao: 'Divergência de R$ 1.200 no extrato — em análise', status: 'alerta' },
-];
-
-// Ponto de equilíbrio
-const custoFixoTotal = 54000;
-const margemContribuicaoPercent = 35;
-const pontoEquilibrio = custoFixoTotal / (margemContribuicaoPercent / 100);
-const faturamentoAtual = 185000;
-const diferencaEquilibrio = faturamentoAtual - pontoEquilibrio;
-const percentualAcima = ((diferencaEquilibrio / pontoEquilibrio) * 100).toFixed(1);
-const statusEquilibrio = diferencaEquilibrio > 0 ? 'acima' : diferencaEquilibrio === 0 ? 'empate' : 'abaixo';
-
-// EBITDA simplificado
-const ebitda = faturamentoAtual - (custoFixoTotal + 91000);
-const margemLiquida = ((ebitda / faturamentoAtual) * 100).toFixed(1);
-
 interface DashboardCIFProps {
   onGoHome?: () => void;
 }
@@ -115,12 +48,39 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const [activeTab, setActiveTab] = useState<CIFTab>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<CIFDashboardData | null>(null);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
   const isMobile = useIsMobile();
+
+  const loadData = async () => {
+    setLoading(true);
+    const [cifData, logsResult] = await Promise.all([
+      fetchCIFData(),
+      supabase.from('action_logs').select('*').order('created_at', { ascending: false }).limit(20),
+    ]);
+    setData(cifData);
+    setAuditLogs(logsResult.data || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
 
   const handleTabChange = (tabId: CIFTab) => {
     setActiveTab(tabId);
     setSidebarOpen(false);
   };
+
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center h-[60vh]">
+        <RefreshCw className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const statusEquilibrio = data.faturamento > data.pontoEquilibrio ? 'acima' : data.faturamento === data.pontoEquilibrio ? 'empate' : 'abaixo';
+  const percentualAcima = data.pontoEquilibrio > 0 ? (((data.faturamento - data.pontoEquilibrio) / data.pontoEquilibrio) * 100).toFixed(1) : '0';
 
   const renderContent = () => {
     switch (activeTab) {
@@ -135,16 +95,16 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     }
   };
 
-  // === DASHBOARD EXECUTIVO ===
+  const fmt = (v: number) => `R$ ${(v / 1000).toFixed(0)}k`;
+
   const renderDashboard = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPICard title="Saldo de Caixa" value={`R$ ${(fluxoCaixaMensal[5].saldo / 1000).toFixed(0)}k`} subtitle="Atual" icon={<Wallet className="h-5 w-5" />} variant="cif" trend="up" trendValue="+12%" />
-        <KPICard title="Faturamento" value={`R$ ${(faturamentoAtual / 1000).toFixed(0)}k`} subtitle="Este mês" icon={<DollarSign className="h-5 w-5" />} variant="cif" trend="up" trendValue="+6.7%" />
-        <KPICard title="Custo Total" value={`R$ ${((custoFixoTotal + 91000) / 1000).toFixed(0)}k`} subtitle="Este mês" icon={<CreditCard className="h-5 w-5" />} variant="cif" trend="up" trendValue="+3.2%" />
-        <KPICard title="EBITDA" value={`R$ ${(ebitda / 1000).toFixed(0)}k`} subtitle="Resultado" icon={<TrendingUp className="h-5 w-5" />} variant="cif" trend={ebitda > 0 ? 'up' : 'down'} trendValue={ebitda > 0 ? 'Positivo' : 'Negativo'} />
-        <KPICard title="Margem Líquida" value={`${margemLiquida}%`} subtitle="Rentabilidade" icon={<PiggyBank className="h-5 w-5" />} variant="cif" />
-        {/* Ponto de Equilíbrio Badge */}
+        <KPICard title="Faturamento" value={fmt(data!.faturamento)} subtitle="Total pedidos" icon={<DollarSign className="h-5 w-5" />} variant="cif" />
+        <KPICard title="Custo MOB" value={fmt(data!.custoMaoDeObra)} subtitle="Mão de obra" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
+        <KPICard title="Custo Material" value={fmt(data!.custoMateriais)} subtitle="Em estoque" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
+        <KPICard title="EBITDA" value={fmt(data!.ebitda)} subtitle="Resultado" icon={<TrendingUp className="h-5 w-5" />} variant="cif" trend={data!.ebitda > 0 ? 'up' : 'down'} trendValue={data!.ebitda > 0 ? 'Positivo' : 'Negativo'} />
+        <KPICard title="Margem Líq." value={`${data!.margemLiquida.toFixed(1)}%`} subtitle="Rentabilidade" icon={<PiggyBank className="h-5 w-5" />} variant="cif" />
         <div className={cn(
           "p-3 rounded-xl border flex flex-col justify-center items-center",
           statusEquilibrio === 'acima' ? "bg-success/10 border-success/30" :
@@ -153,23 +113,18 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         )}>
           <span className="text-[10px] text-muted-foreground uppercase">Ponto de Equilíbrio</span>
           <span className={cn("text-sm font-bold mt-1",
-            statusEquilibrio === 'acima' ? "text-success" :
-            statusEquilibrio === 'empate' ? "text-warning" : "text-destructive"
+            statusEquilibrio === 'acima' ? "text-success" : statusEquilibrio === 'empate' ? "text-warning" : "text-destructive"
           )}>
-            {statusEquilibrio === 'acima' ? `${percentualAcima}% ACIMA` :
-             statusEquilibrio === 'empate' ? 'EMPATE' : `${Math.abs(Number(percentualAcima))}% ABAIXO`}
-          </span>
-          <span className="text-[9px] text-muted-foreground mt-0.5">
-            {statusEquilibrio === 'acima' ? '🟢 Lucro' : statusEquilibrio === 'empate' ? '🟡 Neutro' : '🔴 Prejuízo'}
+            {statusEquilibrio === 'acima' ? `${percentualAcima}% ACIMA` : statusEquilibrio === 'empate' ? 'EMPATE' : `${Math.abs(Number(percentualAcima))}% ABAIXO`}
           </span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="Receita vs Custo" variant="cif">
+        <ModuleCard title="Receita vs Custo (Mensal)" variant="cif">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={receitaCusto}>
+              <ComposedChart data={data!.receitaMensal}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                 <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -185,7 +140,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         <ModuleCard title="Faturamento x Ponto de Equilíbrio" variant="cif">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={receitaCusto.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: pontoEquilibrio }))}>
+              <ComposedChart data={data!.receitaMensal.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: data!.pontoEquilibrio }))}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                 <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -201,62 +156,25 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     </div>
   );
 
-  // === FLUXO DE CAIXA ===
   const renderFluxo = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard title="Entradas" value={`R$ ${(fluxoCaixaMensal[5].entradas / 1000).toFixed(0)}k`} subtitle="Este mês" icon={<TrendingUp className="h-5 w-5" />} variant="cif" trend="up" trendValue="+3.2%" />
-        <KPICard title="Saídas" value={`R$ ${(fluxoCaixaMensal[5].saidas / 1000).toFixed(0)}k`} subtitle="Este mês" icon={<CreditCard className="h-5 w-5" />} variant="cif" trend="up" trendValue="+1.4%" />
-        <KPICard title="Saldo" value={`R$ ${(fluxoCaixaMensal[5].saldo / 1000).toFixed(0)}k`} subtitle="Líquido" icon={<Wallet className="h-5 w-5" />} variant="cif" trend="up" trendValue="+12%" />
-        <KPICard title="Projeção 30d" value={`R$ ${(38000 / 1000).toFixed(0)}k`} subtitle="Estimado" icon={<Brain className="h-5 w-5" />} variant="cif" />
+        <KPICard title="Faturamento" value={fmt(data!.faturamento)} subtitle="Receita total" icon={<TrendingUp className="h-5 w-5" />} variant="cif" />
+        <KPICard title="Custos" value={fmt(data!.custoTotal + data!.custoFixo)} subtitle="Total" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
+        <KPICard title="EBITDA" value={fmt(data!.ebitda)} subtitle="Resultado" icon={<Wallet className="h-5 w-5" />} variant="cif" trend={data!.ebitda > 0 ? 'up' : 'down'} trendValue={data!.ebitda > 0 ? 'Positivo' : 'Negativo'} />
+        <KPICard title="Pedidos" value={data!.pedidosTotal} subtitle={`${data!.pedidosFaturados} faturados`} icon={<Brain className="h-5 w-5" />} variant="cif" />
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="Fluxo de Caixa Mensal" variant="cif">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={fluxoCaixaMensal}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                <Legend />
-                <Bar dataKey="entradas" fill={CHART_COLORS.verde} name="Entradas" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="saidas" fill={CHART_COLORS.vermelho} name="Saídas" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-        <ModuleCard title="Saldo Acumulado" variant="cif">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={fluxoCaixaMensal}>
-                <defs>
-                  <linearGradient id="colorSaldoCIF" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_COLORS.verdeEscuro} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={CHART_COLORS.verdeEscuro} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Saldo']} />
-                <Area type="monotone" dataKey="saldo" stroke={CHART_COLORS.verdeEscuro} strokeWidth={2} fill="url(#colorSaldoCIF)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-      </div>
-      <ModuleCard title="Fluxo de Caixa Semanal" variant="cif">
+      <ModuleCard title="Fluxo de Caixa por Período" variant="cif">
         <div className="h-72">
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData.fluxoCaixa}>
+            <BarChart data={data!.receitaMensal}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="semana" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+              <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
               <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
               <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
               <Legend />
-              <Bar dataKey="entradas" fill={CHART_COLORS.verde} name="Entradas" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="saidas" fill={CHART_COLORS.vermelho} name="Saídas" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="receita" fill={CHART_COLORS.verde} name="Entradas" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="custo" fill={CHART_COLORS.vermelho} name="Saídas" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -264,32 +182,37 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     </div>
   );
 
-  // === CUSTOS & ORÇAMENTO ===
-  const renderCustos = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard title="Custo Fixo" value={`R$ ${(custoFixoTotal / 1000).toFixed(0)}k`} subtitle="Mensal" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
-        <KPICard title="Custo Variável" value="R$ 91k" subtitle="Este mês" icon={<Activity className="h-5 w-5" />} variant="cif" trend="up" trendValue="+2.4%" />
-        <KPICard title="CPV" value="R$ 145k" subtitle="Custo Prod. Vendida" icon={<Target className="h-5 w-5" />} variant="cif" />
-        <KPICard title="Margem Contribuição" value={`${margemContribuicaoPercent}%`} subtitle="Média" icon={<TrendingUp className="h-5 w-5" />} variant="cif" />
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  const renderCustos = () => {
+    const custoCategories = [
+      { categoria: 'Matéria Prima', valor: data!.custoMateriais * 0.3, color: CHART_COLORS.vermelho },
+      { categoria: 'Mão de Obra', valor: data!.custoMaoDeObra, color: CHART_COLORS.laranja },
+      { categoria: 'Fixos', valor: data!.custoFixo, color: CHART_COLORS.azulMarinho },
+    ];
+    const total = custoCategories.reduce((s, c) => s + c.valor, 0);
+    const withPercent = custoCategories.map(c => ({ ...c, percentual: total > 0 ? ((c.valor / total) * 100).toFixed(1) : '0' }));
+
+    return (
+      <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <KPICard title="Custo Fixo" value={fmt(data!.custoFixo)} subtitle="Mensal" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
+          <KPICard title="Custo MOB" value={fmt(data!.custoMaoDeObra)} subtitle="Variável" icon={<Activity className="h-5 w-5" />} variant="cif" />
+          <KPICard title="Custo Material" value={fmt(data!.custoMateriais * 0.3)} subtitle="Consumido" icon={<Target className="h-5 w-5" />} variant="cif" />
+          <KPICard title="Margem Contrib." value={`${((data!.faturamento - data!.custoTotal) / Math.max(1, data!.faturamento) * 100).toFixed(0)}%`} subtitle="Média" icon={<TrendingUp className="h-5 w-5" />} variant="cif" />
+        </div>
         <ModuleCard title="Composição de Custos" variant="cif">
           <div className="h-64 flex items-center">
             <div className="w-1/2 h-full">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
-                  <Pie data={custosPorCategoria} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="valor">
-                    {custosPorCategoria.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
+                  <Pie data={withPercent} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="valor">
+                    {withPercent.map((entry, index) => <Cell key={index} fill={entry.color} />)}
                   </Pie>
                   <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
             <div className="w-1/2 space-y-2">
-              {custosPorCategoria.map((item, index) => (
+              {withPercent.map((item, index) => (
                 <div key={index} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
@@ -301,53 +224,24 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
             </div>
           </div>
         </ModuleCard>
-        <ModuleCard title="Custo Fixo vs Variável" variant="cif">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={custoFixoVariavel}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                <Legend />
-                <Bar dataKey="fixo" fill={CHART_COLORS.azulMarinho} name="Fixo" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="variavel" fill={CHART_COLORS.laranja} name="Variável" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
       </div>
-      <ModuleCard title="Evolução da Margem" variant="cif">
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={receitaCusto}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-              <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${v}%`} domain={[15, 30]} />
-              <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`${value.toFixed(1)}%`, 'Margem']} />
-              <Line type="monotone" dataKey="margem" stroke={CHART_COLORS.verdeEscuro} strokeWidth={3} dot={{ fill: CHART_COLORS.verdeEscuro, strokeWidth: 2, r: 5 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </ModuleCard>
-    </div>
-  );
+    );
+  };
 
-  // === PONTO DE EQUILÍBRIO ===
   const renderEquilibrio = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-card border border-border/30">
           <p className="text-xs text-muted-foreground">Ponto de Equilíbrio (R$)</p>
-          <p className="text-2xl font-bold text-foreground mt-1">R$ {(pontoEquilibrio / 1000).toFixed(0)}k</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.pontoEquilibrio)}</p>
         </div>
         <div className="p-4 rounded-xl bg-card border border-border/30">
           <p className="text-xs text-muted-foreground">Custo Fixo Total</p>
-          <p className="text-2xl font-bold text-foreground mt-1">R$ {(custoFixoTotal / 1000).toFixed(0)}k</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.custoFixo)}</p>
         </div>
         <div className="p-4 rounded-xl bg-card border border-border/30">
-          <p className="text-xs text-muted-foreground">Margem Contribuição</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{margemContribuicaoPercent}%</p>
+          <p className="text-xs text-muted-foreground">Faturamento Atual</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.faturamento)}</p>
         </div>
         <div className={cn(
           "p-4 rounded-xl border-2",
@@ -357,21 +251,16 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         )}>
           <p className="text-xs text-muted-foreground">Status da Fábrica</p>
           <p className={cn("text-xl font-bold mt-1",
-            statusEquilibrio === 'acima' ? "text-success" :
-            statusEquilibrio === 'empate' ? "text-warning" : "text-destructive"
+            statusEquilibrio === 'acima' ? "text-success" : statusEquilibrio === 'empate' ? "text-warning" : "text-destructive"
           )}>
             {statusEquilibrio === 'acima' ? '🟢 ACIMA' : statusEquilibrio === 'empate' ? '🟡 EMPATE' : '🔴 ABAIXO'}
           </p>
-          <p className="text-xs text-muted-foreground mt-1">
-            Fábrica operando {percentualAcima}% {statusEquilibrio === 'acima' ? 'acima' : 'abaixo'} do ponto de equilíbrio
-          </p>
         </div>
       </div>
-
       <ModuleCard title="Faturamento x Ponto de Equilíbrio" variant="cif">
         <div className="h-80">
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={receitaCusto.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: pontoEquilibrio }))}>
+            <ComposedChart data={data!.receitaMensal.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: data!.pontoEquilibrio }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
               <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
               <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
@@ -383,8 +272,6 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
           </ResponsiveContainer>
         </div>
       </ModuleCard>
-
-      {/* Gauge visual simples */}
       <div className="p-6 rounded-xl bg-card border border-border/30 text-center">
         <Gauge className="h-12 w-12 mx-auto mb-3 text-cif" />
         <p className="text-lg font-bold text-foreground">Status Operacional</p>
@@ -400,13 +287,12 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     </div>
   );
 
-  // === RENTABILIDADE & PRICING ===
   const renderRentabilidade = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
       <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cif">Rentabilidade & Pricing</strong> — Margem por SKU, simulação de preço e impacto no EBITDA.</p>
+        <p className="text-sm text-muted-foreground"><strong className="text-cif">Rentabilidade & Pricing</strong> — Margem por SKU calculada a partir de dados reais de produção.</p>
       </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden" style={{ height: '400px' }}>
+      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden" style={{ maxHeight: '400px' }}>
         <ScrollArea className="h-full">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
@@ -414,11 +300,11 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
               <th className="text-right py-3 px-4 text-muted-foreground font-medium">Preço Venda</th>
               <th className="text-right py-3 px-4 text-muted-foreground font-medium">Custo</th>
               <th className="text-center py-3 px-4 text-muted-foreground font-medium">Margem %</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Vol. Mês</th>
+              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Vol.</th>
               <th className="text-right py-3 px-4 text-muted-foreground font-medium">Receita Total</th>
             </tr></thead>
             <tbody>
-              {rentabilidadeSKU.map((s, i) => (
+              {data!.rentabilidadeSKU.map((s, i) => (
                 <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
                   <td className="py-3 px-4 font-medium text-foreground">{s.sku}</td>
                   <td className="py-3 px-4 text-right">R$ {s.preco.toLocaleString('pt-BR')}</td>
@@ -436,54 +322,53 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
           </table>
         </ScrollArea>
       </div>
-      <ModuleCard title="Margem por Produto" variant="cif">
-        <div className="h-64">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={rentabilidadeSKU}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="sku" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
-              <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
-              <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`${value}%`, 'Margem']} />
-              <Bar dataKey="margem" radius={[4, 4, 0, 0]}>
-                {rentabilidadeSKU.map((s, i) => (
-                  <Cell key={i} fill={s.margem >= 35 ? CHART_COLORS.verde : s.margem >= 25 ? CHART_COLORS.amarelo : CHART_COLORS.vermelho} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </ModuleCard>
+      {data!.rentabilidadeSKU.length > 0 && (
+        <ModuleCard title="Margem por Produto" variant="cif">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data!.rentabilidadeSKU}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="sku" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`${value}%`, 'Margem']} />
+                <Bar dataKey="margem" radius={[4, 4, 0, 0]}>
+                  {data!.rentabilidadeSKU.map((s, i) => (
+                    <Cell key={i} fill={s.margem >= 35 ? CHART_COLORS.verde : s.margem >= 25 ? CHART_COLORS.amarelo : CHART_COLORS.vermelho} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ModuleCard>
+      )}
     </div>
   );
 
-  // === AUDITORIA & COMPLIANCE ===
   const renderAuditoria = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
       <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria & Compliance</strong> — NF-e, conciliação, anomalias e alertas fiscais. Logs imutáveis.</p>
+        <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria & Compliance</strong> — Logs de ações do sistema. Registros imutáveis.</p>
       </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden" style={{ height: '400px' }}>
+      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden" style={{ maxHeight: '500px' }}>
         <ScrollArea className="h-full">
           <table className="w-full text-sm">
             <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
               <th className="text-left py-3 px-4 text-muted-foreground font-medium">Data</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Tipo</th>
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Descrição</th>
+              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ação</th>
+              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Entidade</th>
               <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
             </tr></thead>
             <tbody>
-              {auditoriaLogs.map((log, i) => (
+              {auditLogs.length === 0 ? (
+                <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Nenhum log registrado.</td></tr>
+              ) : auditLogs.map((log, i) => (
                 <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
-                  <td className="py-3 px-4 text-muted-foreground">{new Date(log.data).toLocaleDateString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-center"><Badge variant="outline">{log.tipo}</Badge></td>
-                  <td className="py-3 px-4 text-foreground">{log.descricao}</td>
+                  <td className="py-3 px-4 text-muted-foreground">{new Date(log.created_at).toLocaleString('pt-BR')}</td>
+                  <td className="py-3 px-4 text-center"><Badge variant="outline">{log.action}</Badge></td>
+                  <td className="py-3 px-4 text-foreground">{log.entity}</td>
                   <td className="py-3 px-4 text-center">
-                    <Badge className={cn(
-                      log.status === 'ok' ? 'bg-success/20 text-success' :
-                      log.status === 'alerta' ? 'bg-warning/20 text-warning' :
-                      'bg-destructive/20 text-destructive'
-                    )}>
-                      {log.status === 'ok' ? 'OK' : log.status === 'alerta' ? 'Alerta' : 'Crítico'}
+                    <Badge className={cn(log.status === 'success' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive')}>
+                      {log.status === 'success' ? 'OK' : 'Erro'}
                     </Badge>
                   </td>
                 </tr>
@@ -495,14 +380,13 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     </div>
   );
 
-  // === ANALYTICS ===
   const renderAnalytics = () => (
-    <div className="space-y-6">
+    <div className="space-y-6 max-h-[calc(100vh-8rem)] overflow-y-auto pr-2">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ModuleCard title="Resultado por Período" variant="cif">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={fluxoCaixaMensal.map(f => ({ mes: f.mes, resultado: f.saldo }))}>
+              <AreaChart data={data!.receitaMensal.map(r => ({ mes: r.mes, resultado: r.receita - r.custo }))}>
                 <defs>
                   <linearGradient id="colorResultadoCIF" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor={CHART_COLORS.verdeEscuro} stopOpacity={0.4} />
@@ -522,7 +406,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         <ModuleCard title="Receita vs Custo (Tendência)" variant="cif">
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={receitaCusto}>
+              <LineChart data={data!.receitaMensal}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
                 <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
@@ -531,43 +415,6 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
                 <Line type="monotone" dataKey="receita" stroke={CHART_COLORS.verde} strokeWidth={2} name="Receita" dot={{ r: 4 }} />
                 <Line type="monotone" dataKey="custo" stroke={CHART_COLORS.vermelho} strokeWidth={2} name="Custo" dot={{ r: 4 }} />
               </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-
-        <ModuleCard title="Pareto de Custos" variant="cif">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={custosPorCategoria} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="categoria" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} width={100} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Valor']} />
-                <Bar dataKey="valor" radius={[0, 4, 4, 0]}>
-                  {custosPorCategoria.map((c, i) => <Cell key={i} fill={c.color} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-
-        <ModuleCard title="Metas x Realizado" variant="cif">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[
-                { item: 'Faturamento', realizado: 185, meta: 200 },
-                { item: 'EBITDA', realizado: 40, meta: 50 },
-                { item: 'Margem', realizado: 21.6, meta: 25 },
-                { item: 'Custos', realizado: 145, meta: 140 },
-              ]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="item" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                <Legend />
-                <Bar dataKey="realizado" fill={CHART_COLORS.verde} name="Realizado" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="meta" fill={CHART_COLORS.azulMarinho} name="Meta" radius={[4, 4, 0, 0]} />
-              </BarChart>
             </ResponsiveContainer>
           </div>
         </ModuleCard>
@@ -590,21 +437,15 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
           </div>
         )}
       </div>
-
-      {/* HOME */}
       <div className={cn("mb-2 pb-2 border-b border-border/30", isCollapsed && "pb-1 mb-1")}>
         <button
           onClick={() => { onGoHome?.(); }}
-          className={cn(
-            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all font-medium',
-            isCollapsed && 'justify-center px-2'
-          )}
+          className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all font-medium', isCollapsed && 'justify-center px-2')}
         >
           <Home className="h-4 w-4 flex-shrink-0" />
           {!isCollapsed && <span>HOME</span>}
         </button>
       </div>
-
       <nav className="space-y-1">
         {menuItems.map((item) => (
           <button
@@ -613,9 +454,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
             title={isCollapsed ? item.label : undefined}
             className={cn(
               'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all',
-              activeTab === item.id
-                ? 'bg-cif/20 text-cif font-medium'
-                : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
+              activeTab === item.id ? 'bg-cif/20 text-cif font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
               isCollapsed && 'justify-center px-2'
             )}
           >
@@ -628,21 +467,16 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   return (
-    <div className="flex animate-fade-in min-h-screen">
-      {/* Mobile Header */}
+    <div className="flex animate-fade-in h-[calc(100vh-3rem)]">
       {isMobile && (
         <div className="fixed top-12 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
           <div className="flex items-center justify-between">
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
               <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-10 w-10">
-                  <Menu className="h-6 w-6" />
-                </Button>
+                <Button variant="ghost" size="icon" className="h-10 w-10"><Menu className="h-6 w-6" /></Button>
               </SheetTrigger>
               <SheetContent side="left" className="w-72 p-4 overflow-y-auto">
-                <SheetClose className="absolute right-4 top-4">
-                  <X className="h-5 w-5" />
-                </SheetClose>
+                <SheetClose className="absolute right-4 top-4"><X className="h-5 w-5" /></SheetClose>
                 <SidebarContent />
               </SheetContent>
             </Sheet>
@@ -655,10 +489,9 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         </div>
       )}
 
-      {/* Desktop Sidebar */}
       {!isMobile && (
         <aside className={cn(
-          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative',
+          'h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
           sidebarCollapsed ? 'w-16' : 'w-56'
         )}>
           <button
@@ -671,13 +504,12 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         </aside>
       )}
 
-      {/* Content */}
       <main className={cn(
-        'flex-1 space-y-6 overflow-x-hidden',
+        'flex-1 overflow-hidden',
         isMobile ? 'pt-28 px-3 pb-4' : 'p-4 lg:p-6'
       )}>
         {!isMobile && (
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div>
               <h2 className="font-display text-2xl lg:text-3xl font-bold text-foreground flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-cif/20 flex items-center justify-center">
@@ -687,9 +519,9 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
               </h2>
               <p className="text-muted-foreground mt-1 ml-13">CIF CONTROL – Central de Inteligência Financeira</p>
             </div>
+            <Button variant="ghost" size="sm" onClick={loadData}><RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} />Atualizar</Button>
           </div>
         )}
-
         {renderContent()}
       </main>
     </div>
