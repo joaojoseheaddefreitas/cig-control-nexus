@@ -467,7 +467,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   return (
-    <div className="flex animate-fade-in h-[calc(100vh-3rem)]">
+    <div className="flex animate-fade-in min-h-screen">
       {isMobile && (
         <div className="fixed top-12 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
           <div className="flex items-center justify-between">
