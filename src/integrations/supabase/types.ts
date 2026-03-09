@@ -44,6 +44,51 @@ export type Database = {
         }
         Relationships: []
       }
+      bom_produto: {
+        Row: {
+          created_at: string
+          id: string
+          material_id: string
+          produto_id: string
+          quantidade_por_unidade: number
+          unidade: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          material_id: string
+          produto_id: string
+          quantidade_por_unidade?: number
+          unidade?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          material_id?: string
+          produto_id?: string
+          quantidade_por_unidade?: number
+          unidade?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bom_produto_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bom_produto_produto_id_fkey"
+            columns: ["produto_id"]
+            isOneToOne: false
+            referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cargas: {
         Row: {
           created_at: string
@@ -52,6 +97,7 @@ export type Database = {
           modo: string
           observacoes: string | null
           status: string
+          turno: string
           updated_at: string
         }
         Insert: {
@@ -61,6 +107,7 @@ export type Database = {
           modo?: string
           observacoes?: string | null
           status?: string
+          turno?: string
           updated_at?: string
         }
         Update: {
@@ -70,6 +117,7 @@ export type Database = {
           modo?: string
           observacoes?: string | null
           status?: string
+          turno?: string
           updated_at?: string
         }
         Relationships: []
@@ -396,6 +444,83 @@ export type Database = {
         }
         Relationships: []
       }
+      materiais: {
+        Row: {
+          ativo: boolean
+          categoria: string
+          codigo: string
+          consumo_medio_diario: number
+          created_at: string
+          estoque_atual: number
+          estoque_maximo: number
+          estoque_minimo: number
+          estoque_seguranca: number
+          fornecedor_id: string | null
+          fornecedor_nome: string | null
+          id: string
+          lead_time_dias: number
+          lote_economico: number
+          nome: string
+          ponto_pedido: number
+          ultima_entrada: string | null
+          unidade: string
+          updated_at: string
+          valor_unitario: number
+        }
+        Insert: {
+          ativo?: boolean
+          categoria?: string
+          codigo: string
+          consumo_medio_diario?: number
+          created_at?: string
+          estoque_atual?: number
+          estoque_maximo?: number
+          estoque_minimo?: number
+          estoque_seguranca?: number
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          lead_time_dias?: number
+          lote_economico?: number
+          nome: string
+          ponto_pedido?: number
+          ultima_entrada?: string | null
+          unidade?: string
+          updated_at?: string
+          valor_unitario?: number
+        }
+        Update: {
+          ativo?: boolean
+          categoria?: string
+          codigo?: string
+          consumo_medio_diario?: number
+          created_at?: string
+          estoque_atual?: number
+          estoque_maximo?: number
+          estoque_minimo?: number
+          estoque_seguranca?: number
+          fornecedor_id?: string | null
+          fornecedor_nome?: string | null
+          id?: string
+          lead_time_dias?: number
+          lote_economico?: number
+          nome?: string
+          ponto_pedido?: number
+          ultima_entrada?: string | null
+          unidade?: string
+          updated_at?: string
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "materiais_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       movimentacoes_estoque: {
         Row: {
           created_at: string
@@ -433,6 +558,60 @@ export type Database = {
             columns: ["produto_id"]
             isOneToOne: false
             referencedRelation: "produtos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      movimentacoes_materiais: {
+        Row: {
+          created_at: string
+          id: string
+          material_id: string
+          motivo: string | null
+          nota_fiscal: string | null
+          op_id: string | null
+          quantidade: number
+          tipo: string
+          usuario: string | null
+          valor_total: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          material_id: string
+          motivo?: string | null
+          nota_fiscal?: string | null
+          op_id?: string | null
+          quantidade: number
+          tipo: string
+          usuario?: string | null
+          valor_total?: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          material_id?: string
+          motivo?: string | null
+          nota_fiscal?: string | null
+          op_id?: string | null
+          quantidade?: number
+          tipo?: string
+          usuario?: string | null
+          valor_total?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "movimentacoes_materiais_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "movimentacoes_materiais_op_id_fkey"
+            columns: ["op_id"]
+            isOneToOne: false
+            referencedRelation: "ops"
             referencedColumns: ["id"]
           },
         ]
