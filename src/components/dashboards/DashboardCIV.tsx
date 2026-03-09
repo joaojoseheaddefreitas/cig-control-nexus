@@ -169,7 +169,7 @@ export function DashboardCIV({ onGoHome }: DashboardCIVProps) {
     <div className="flex animate-fade-in min-h-screen">
       {/* Mobile Header */}
       {isMobile && (
-        <div className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3 safe-area-top">
+        <div className="fixed top-13 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3 safe-area-top">
           <div className="flex items-center justify-between">
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
               <SheetTrigger asChild>
