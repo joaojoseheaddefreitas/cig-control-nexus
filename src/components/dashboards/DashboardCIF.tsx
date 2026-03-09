@@ -467,7 +467,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   );
 
   return (
-    <div className="flex animate-fade-in min-h-screen">
+    <div className="flex animate-fade-in h-full overflow-hidden">
       {isMobile && (
         <div className="fixed top-12 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
           <div className="flex items-center justify-between">
@@ -491,7 +491,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
 
       {!isMobile && (
         <aside className={cn(
-          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
+          'h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
           sidebarCollapsed ? 'w-16' : 'w-56'
         )}>
           <button
@@ -505,7 +505,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
       )}
 
       <main className={cn(
-        'flex-1',
+        'flex-1 overflow-y-auto',
         isMobile ? 'pt-28 px-3 pb-4' : 'p-4 lg:p-6'
       )}>
         {!isMobile && (

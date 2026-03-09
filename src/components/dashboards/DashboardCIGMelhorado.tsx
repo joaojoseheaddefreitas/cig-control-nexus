@@ -156,7 +156,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const cargaPercentual = kpis.capacidadeDiaria > 0 ? Math.round((kpis.horasCarteira / (kpis.capacidadeDiaria * 22)) * 100) : 0;
 
   return (
-    <div className="p-4 md:p-6 space-y-6 animate-fade-in">
+    <div className="p-4 md:p-6 space-y-6 animate-fade-in h-full overflow-y-auto">
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>

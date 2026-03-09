@@ -129,7 +129,7 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
   );
 
   return (
-    <div className="flex animate-fade-in min-h-screen">
+    <div className="flex animate-fade-in h-full overflow-hidden">
       {/* Mobile Header */}
       {isMobile && (
         <div className="fixed top-13 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3 safe-area-top">
@@ -168,7 +168,7 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
       {/* Desktop Sidebar */}
       {!isMobile && (
         <aside className={cn(
-          'min-h-[calc(100vh-4rem)] border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative',
+          'h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
           sidebarCollapsed ? 'w-16' : 'w-60'
         )}>
           <button
@@ -183,7 +183,7 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
 
       {/* Content */}
       <main className={cn(
-        'flex-1 overflow-x-hidden',
+        'flex-1 overflow-y-auto overflow-x-hidden',
         isMobile ? 'pt-24 px-3 pb-4' : 'p-4 lg:p-6'
       )}>
         {!isMobile && (
