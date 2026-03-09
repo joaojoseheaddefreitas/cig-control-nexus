@@ -33,10 +33,10 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-screen bg-background flex flex-col overflow-hidden">
       <TopModuleTabs activeModule={activeModule} onModuleChange={setActiveModule} />
-      <main className="flex-1 pt-12">
-        <div className="animate-fade-in">
+      <main className="flex-1 pt-12 overflow-hidden">
+        <div className="h-full animate-fade-in">
           {renderDashboard()}
         </div>
       </main>
