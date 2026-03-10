@@ -1,165 +1,140 @@
+import { useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  LineChart, Line, PieChart, Pie, Cell, AreaChart, Area, Legend, ComposedChart,
+  PieChart, Pie, Cell,
 } from 'recharts';
-import { civKPIs, civChartData } from '@/data/civData';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
-import { DollarSign, ShoppingCart, Target, TrendingUp, Percent } from 'lucide-react';
+import { DollarSign, ShoppingCart, Target, TrendingUp, Percent, RefreshCw, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
-const COLORS = ['#22c55e', '#3b82f6', '#f97316', '#8b5cf6', '#14b8a6'];
-
-const pedidosStatus = [
-  { status: 'Aprovados', quantidade: 245, color: '#22c55e' },
-  { status: 'Pendentes', quantidade: 87, color: '#f59e0b' },
-  { status: 'Em Produção', quantidade: 156, color: '#3b82f6' },
-  { status: 'Entregues', quantidade: 412, color: '#14b8a6' },
-];
+const STATUS_COLORS: Record<string, string> = {
+  aguardando: 'hsl(45, 95%, 50%)',
+  aprovado: 'hsl(145, 70%, 42%)',
+  programado: 'hsl(215, 75%, 48%)',
+  em_producao: 'hsl(30, 90%, 50%)',
+  finalizado: 'hsl(170, 70%, 42%)',
+  cancelado: 'hsl(0, 72%, 51%)',
+};
 
 export function CIVDashboard() {
+  const [loading, setLoading] = useState(true);
+  const [pedidos, setPedidos] = useState<any[]>([]);
+  const [leads, setLeads] = useState<any[]>([]);
+
+  useEffect(() => { loadData(); }, []);
+
+  const loadData = async () => {
+    setLoading(true);
+    const [pedRes, leadRes] = await Promise.all([
+      supabase.from('pedidos').select('id, status, status_producao, valor_total, canal').neq('status', 'cancelado').order('created_at', { ascending: false }),
+      supabase.from('leads').select('id, status'),
+    ]);
+    setPedidos(pedRes.data || []);
+    setLeads(leadRes.data || []);
+    setLoading(false);
+  };
+
+  const totalVendido = pedidos.reduce((s, p) => s + Number(p.valor_total || 0), 0);
+  const pedidosAberto = pedidos.filter(p => !['finalizado', 'cancelado'].includes(p.status)).length;
+  const ticketMedio = pedidos.length > 0 ? Math.round(totalVendido / pedidos.length) : 0;
+  const leadsAtivos = leads.filter(l => !['convertido', 'perdido'].includes(l.status)).length;
+
+  // Status grouping
+  const statusMap: Record<string, number> = {};
+  pedidos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
+  const statusLabels: Record<string, string> = {
+    aguardando: 'Aguardando', aprovado: 'Aprovado', programado: 'Programado',
+    em_producao: 'Em Produção', finalizado: 'Finalizado',
+  };
+  const pedidosPorStatus = Object.entries(statusMap).map(([status, count]) => ({
+    status: statusLabels[status] || status, count, color: STATUS_COLORS[status] || 'hsl(var(--muted))',
+  }));
+
+  // Canal grouping
+  const canalMap: Record<string, number> = {};
+  pedidos.forEach(p => { canalMap[p.canal || 'Outros'] = (canalMap[p.canal || 'Outros'] || 0) + Number(p.valor_total || 0); });
+  const canalColors = ['hsl(145, 70%, 42%)', 'hsl(215, 75%, 48%)', 'hsl(30, 90%, 50%)', 'hsl(270, 60%, 55%)', 'hsl(170, 70%, 42%)', 'hsl(45, 95%, 50%)'];
+  const pedidosPorCanal = Object.entries(canalMap)
+    .map(([canal, valor], i) => ({ canal, valor, color: canalColors[i % canalColors.length] }))
+    .sort((a, b) => b.valor - a.valor);
+
+  const temDados = pedidos.length > 0;
+
   return (
     <div className="space-y-6 animate-fade-in">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-success/10 border border-success/30">
+          <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
+          <span className="text-xs text-success font-medium">Dados Reais</span>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadData} disabled={loading} className="gap-2">
+          <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} /> Atualizar
+        </Button>
+      </div>
+
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        <KPICard
-          title="Total Vendido"
-          value={`R$ ${(civKPIs.totalVendido / 1000).toFixed(1)}k`}
-          subtitle="Este mês"
-          icon={<DollarSign className="h-5 w-5" />}
-          trend="up"
-          trendValue="+12.5%"
-          variant="civ"
-        />
-        <KPICard
-          title="Faturamento"
-          value={`R$ ${(civKPIs.faturamento / 1000).toFixed(1)}k`}
-          subtitle="Realizado"
-          icon={<TrendingUp className="h-5 w-5" />}
-          trend="up"
-          trendValue="+8.3%"
-          variant="civ"
-        />
-        <KPICard
-          title="Pedidos Aberto"
-          value={civKPIs.pedidosAberto}
-          subtitle="Em carteira"
-          icon={<ShoppingCart className="h-5 w-5" />}
-          trend="up"
-          trendValue="+28"
-          variant="civ"
-        />
-        <KPICard
-          title="Ticket Médio"
-          value={`R$ ${civKPIs.ticketMedio}`}
-          subtitle="Por pedido"
-          icon={<Target className="h-5 w-5" />}
-          trend="up"
-          trendValue="+3.8%"
-          variant="civ"
-        />
-        <KPICard
-          title="Margem Média"
-          value={`${civKPIs.margemMedia}%`}
-          subtitle="Sobre vendas"
-          icon={<Percent className="h-5 w-5" />}
-          trend="down"
-          trendValue="-0.5%"
-          variant="civ"
-        />
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <KPICard title="Total Vendido" value={`R$ ${(totalVendido / 1000).toFixed(0)}k`} subtitle={`${pedidos.length} pedidos`} icon={<DollarSign className="h-5 w-5" />} variant="civ" />
+        <KPICard title="Pedidos Abertos" value={pedidosAberto} subtitle="Em carteira" icon={<ShoppingCart className="h-5 w-5" />} variant="civ" />
+        <KPICard title="Ticket Médio" value={`R$ ${ticketMedio.toLocaleString('pt-BR')}`} subtitle="Por pedido" icon={<Target className="h-5 w-5" />} variant="civ" />
+        <KPICard title="Leads Ativos" value={leadsAtivos} subtitle={`de ${leads.length} total`} icon={<TrendingUp className="h-5 w-5" />} variant="civ" />
+        <KPICard title="Finalizados" value={pedidos.filter(p => p.status === 'finalizado').length} subtitle="Entregues" icon={<Percent className="h-5 w-5" />} variant="civ" />
       </div>
 
-      {/* Charts Row 1 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Vendas por Período */}
-        <ModuleCard title="Vendas por Período" variant="civ">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={civChartData.vendasPeriodo}>
-                <defs>
-                  <linearGradient id="colorVendasCiv" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.4} />
-                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                <Area type="monotone" dataKey="vendas" stroke="#22c55e" strokeWidth={2} fill="url(#colorVendasCiv)" name="Vendas" />
-                <Line type="monotone" dataKey="meta" stroke="#6b7280" strokeDasharray="5 5" strokeWidth={1.5} dot={false} name="Meta" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
+      {!temDados && !loading && (
+        <div className="py-8 text-center text-muted-foreground border-2 border-dashed border-border/50 rounded-xl">
+          Sem dados cadastrados – insira dados para iniciar o monitoramento.
+        </div>
+      )}
 
-        {/* Faturamento por Canal */}
-        <ModuleCard title="Faturamento por Canal" variant="civ">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={civChartData.faturamentoPorCanal} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={true} vertical={false} />
-                <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <YAxis type="category" dataKey="canal" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={{ stroke: '#333' }} width={100} />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Valor']} />
-                <Bar dataKey="valor" radius={[0, 4, 4, 0]} barSize={18}>
-                  {civChartData.faturamentoPorCanal.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-      </div>
+      {temDados && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <ModuleCard title="Pedidos por Status" variant="civ">
+            <div className="h-72 flex items-center">
+              <div className="w-1/2 h-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={pedidosPorStatus} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="count">
+                      {pedidosPorStatus.map((e, i) => <Cell key={i} fill={e.color} />)}
+                    </Pie>
+                    <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="w-1/2 space-y-3">
+                {pedidosPorStatus.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                      <span className="text-sm text-muted-foreground">{item.status}</span>
+                    </div>
+                    <span className="text-sm font-semibold text-foreground">{item.count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </ModuleCard>
 
-      {/* Charts Row 2 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pedidos por Status */}
-        <ModuleCard title="Pedidos por Status" variant="civ">
-          <div className="h-72 flex items-center">
-            <div className="w-1/2">
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie data={pedidosStatus} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="quantidade">
-                    {pedidosStatus.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: '8px' }} />
-                </PieChart>
+          <ModuleCard title="Faturamento por Canal" variant="civ">
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={pedidosPorCanal} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                  <YAxis type="category" dataKey="canal" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} width={100} />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Valor']} />
+                  <Bar dataKey="valor" radius={[0, 4, 4, 0]} barSize={18}>
+                    {pedidosPorCanal.map((e, i) => <Cell key={i} fill={e.color} />)}
+                  </Bar>
+                </BarChart>
               </ResponsiveContainer>
             </div>
-            <div className="w-1/2 space-y-3">
-              {pedidosStatus.map((item, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-sm text-muted-foreground">{item.status}</span>
-                  </div>
-                  <span className="text-sm font-semibold text-foreground">{item.quantidade}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </ModuleCard>
-
-        {/* Demanda x Capacidade */}
-        <ModuleCard title="Demanda x Capacidade (CIP)" variant="civ">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={civChartData.demandaVsCapacidade}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: '8px' }} />
-                <Legend />
-                <Bar dataKey="demanda" fill="#22c55e" name="Demanda" radius={[4, 4, 0, 0]} />
-                <Line type="monotone" dataKey="capacidade" stroke="#f97316" strokeWidth={2} dot={{ fill: '#f97316' }} name="Capacidade" />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-      </div>
+          </ModuleCard>
+        </div>
+      )}
     </div>
   );
 }
