@@ -1,15 +1,18 @@
 import { useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, ComposedChart, Line, Legend,
 } from 'recharts';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import {
   LayoutDashboard, TrendingUp, Factory, DollarSign, Clock,
-  AlertTriangle, Activity, RefreshCw
+  AlertTriangle, Activity, RefreshCw, ShoppingCart, Warehouse, Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
+import { fetchMateriais, type Material } from '@/services/materiaisService';
+import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
 
 const CHART_COLORS = {
   azulMarinho: 'hsl(215, 75%, 48%)',
@@ -33,8 +36,12 @@ interface KPIData {
   capacidadeDiaria: number;
   pedidosPorStatus: { status: string; count: number }[];
   pedidosPorCanal: { canal: string; valor: number }[];
-  setoresProducao: { nome: string; opsAtivas: number }[];
+  setoresProducao: { nome: string; opsAtivas: number; capacidade: number; carga: number }[];
   alertas: string[];
+  materiaisCriticos: Material[];
+  valorEstoque: number;
+  totalPropostaCompra: number;
+  cifData: CIFDashboardData | null;
 }
 
 interface DashboardCIGMelhoradoProps {
@@ -47,6 +54,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     valorCarteiraTotal: 0, horasCarteira: 0, totalOPs: 0, opsEmProducao: 0,
     totalSetores: 0, capacidadeDiaria: 8,
     pedidosPorStatus: [], pedidosPorCanal: [], setoresProducao: [], alertas: [],
+    materiaisCriticos: [], valorEstoque: 0, totalPropostaCompra: 0, cifData: null,
   });
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
@@ -60,12 +68,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes] = await Promise.all([
+      const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes, materiais, cifData, routeStepsRes] = await Promise.all([
         supabase.from('pedidos').select('id, status, status_producao, valor_total, canal').order('created_at', { ascending: false }),
-        supabase.from('ops').select('id, status_producao, current_sector').neq('status_producao', 'cancelado'),
+        supabase.from('ops').select('id, status_producao, current_sector, tempo_total').neq('status_producao', 'cancelado'),
         supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle(),
-        supabase.from('setores_produtivos').select('id, nome, ativo').eq('ativo', true).order('ordem'),
+        supabase.from('setores_produtivos').select('*').eq('ativo', true).order('ordem'),
         supabase.from('configuracoes_capacidade').select('capacidade_produtiva_diaria').limit(1).maybeSingle(),
+        fetchMateriais(),
+        fetchCIFData(),
+        supabase.from('op_route_steps').select('op_id, setor_id, tempo_estimado'),
       ]);
 
       const pedidos = pedidosRes.data || [];
@@ -73,19 +84,18 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       const horasCarteira = carteiraRes.data ? Number(carteiraRes.data.total_horas_acumuladas) : 0;
       const setores = setoresRes.data || [];
       const capacidadeDiaria = configRes.data ? Number(configRes.data.capacidade_produtiva_diaria) : 8;
+      const routeSteps = routeStepsRes.data || [];
 
-      // Status grouping
       const statusMap: Record<string, number> = {};
       pedidos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
       const statusLabels: Record<string, string> = {
         aguardando: 'Aguardando', programado: 'Programado', em_producao: 'Em Produção',
-        finalizado: 'Finalizado', cancelado: 'Cancelado',
+        finalizado: 'Finalizado', cancelado: 'Cancelado', aprovado: 'Aprovado',
       };
       const pedidosPorStatus = Object.entries(statusMap)
         .filter(([s]) => s !== 'cancelado')
         .map(([status, count]) => ({ status: statusLabels[status] || status, count }));
 
-      // Canal grouping
       const canalMap: Record<string, number> = {};
       pedidos.filter(p => p.status !== 'cancelado').forEach(p => {
         const canal = p.canal || 'Outros';
@@ -95,21 +105,40 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         .map(([canal, valor]) => ({ canal, valor }))
         .sort((a, b) => b.valor - a.valor);
 
-      // OPs por setor
-      const setorOpsMap: Record<string, number> = {};
-      ops.forEach(op => {
-        if (op.current_sector) {
-          setorOpsMap[op.current_sector] = (setorOpsMap[op.current_sector] || 0) + 1;
+      // Calculate per-sector load from route steps of active (non-finalized) OPs
+      const activeOpIds = new Set(ops.filter(o => o.status_producao !== 'Producao Finalizada').map(o => o.id));
+      const setorCargaMap: Record<string, number> = {};
+      (routeSteps as any[]).forEach((step: any) => {
+        if (activeOpIds.has(step.op_id)) {
+          setorCargaMap[step.setor_id] = (setorCargaMap[step.setor_id] || 0) + Number(step.tempo_estimado || 0);
         }
       });
-      const setoresProducaoData = setores.map(s => ({
-        nome: s.nome, opsAtivas: setorOpsMap[s.nome] || 0,
-      }));
+
+      const setoresProducaoData = setores.map((s: any) => {
+        const cap = (s.mao_de_obra + s.maquinas_automaticas) * s.horas_turno * s.eficiencia;
+        return {
+          nome: s.nome.replace(' / ', '/').substring(0, 16),
+          opsAtivas: 0,
+          capacidade: cap,
+          carga: setorCargaMap[s.id] || 0,
+        };
+      });
+
+      // OPs por setor (current_sector)
+      ops.forEach(op => {
+        if (op.current_sector) {
+          const found = setoresProducaoData.find(s => op.current_sector?.includes(s.nome.substring(0, 8)));
+          if (found) found.opsAtivas++;
+        }
+      });
+
+      const materiaisCriticos = materiais.filter(m => m.status === 'critico');
+      const valorEstoque = materiais.reduce((s, m) => s + (m.valor_estoque || 0), 0);
+      const totalPropostaCompra = materiais.reduce((s, m) => s + (m.proposta_compra || 0) * m.valor_unitario, 0);
 
       // Alertas inteligentes
       const alertas: string[] = [];
       const pedidosAtivos = pedidos.filter(p => p.status !== 'cancelado' && p.status !== 'finalizado');
-      const opsAtivas = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'aguardando');
       const diasCarteira = capacidadeDiaria > 0 ? Math.ceil(horasCarteira / capacidadeDiaria) : 0;
 
       if (diasCarteira > 15) alertas.push(`🔴 Sobrecarga: ${diasCarteira} dias de carteira (>15 dias)`);
@@ -119,16 +148,17 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       if (aguardando > 3) alertas.push(`🔴 ${aguardando} pedidos aguardando programação`);
       else if (aguardando > 0) alertas.push(`🟡 ${aguardando} pedido(s) aguardando programação`);
 
-      // Check sector bottleneck
-      const maxOps = Math.max(...setoresProducaoData.map(s => s.opsAtivas), 0);
-      if (maxOps > 5) {
-        const gargalo = setoresProducaoData.find(s => s.opsAtivas === maxOps);
-        if (gargalo) alertas.push(`🔴 Gargalo: ${gargalo.nome} com ${maxOps} OPs`);
-      }
+      if (materiaisCriticos.length > 3) alertas.push(`🔴 ${materiaisCriticos.length} materiais em nível CRÍTICO`);
+      else if (materiaisCriticos.length > 0) alertas.push(`🟡 ${materiaisCriticos.length} material(is) em nível crítico`);
 
-      if (alertas.length === 0 && pedidosAtivos.length > 0) {
-        alertas.push('✅ Operação normal — sem alertas críticos');
-      }
+      // Sector overload
+      const overloaded = setoresProducaoData.filter(s => s.capacidade > 0 && (s.carga / s.capacidade) > 0.9);
+      if (overloaded.length > 0) alertas.push(`🟡 ${overloaded.length} setor(es) com carga >90%`);
+
+      if (cifData.margemLiquida < 0) alertas.push(`🔴 EBITDA negativo: margem ${cifData.margemLiquida.toFixed(1)}%`);
+      else if (cifData.margemLiquida < 15) alertas.push(`🟡 Margem abaixo de 15%: ${cifData.margemLiquida.toFixed(1)}%`);
+
+      if (alertas.length === 0) alertas.push('✅ Operação normal — sem alertas críticos');
 
       setKpis({
         totalPedidos: pedidos.filter(p => p.status !== 'cancelado').length,
@@ -136,13 +166,11 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         pedidosAguardando: aguardando,
         pedidosFinalizados: pedidos.filter(p => p.status === 'finalizado').length,
         valorCarteiraTotal: pedidosAtivos.reduce((s, p) => s + Number(p.valor_total || 0), 0),
-        horasCarteira,
-        totalOPs: ops.length,
-        opsEmProducao: opsAtivas.length,
-        totalSetores: setores.length,
-        capacidadeDiaria,
+        horasCarteira, totalOPs: ops.length,
+        opsEmProducao: ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'aguardando').length,
+        totalSetores: setores.length, capacidadeDiaria,
         pedidosPorStatus, pedidosPorCanal, setoresProducao: setoresProducaoData,
-        alertas,
+        alertas, materiaisCriticos, valorEstoque, totalPropostaCompra, cifData,
       });
       setLastUpdate(new Date());
     } catch (e) {
@@ -154,6 +182,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const temDados = kpis.totalPedidos > 0;
   const diasCarteira = kpis.capacidadeDiaria > 0 ? Math.ceil(kpis.horasCarteira / kpis.capacidadeDiaria) : 0;
   const cargaPercentual = kpis.capacidadeDiaria > 0 ? Math.round((kpis.horasCarteira / (kpis.capacidadeDiaria * 22)) * 100) : 0;
+  const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : `R$ ${(v / 1000).toFixed(0)}k`;
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in h-full overflow-y-auto">
@@ -185,12 +214,11 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       {!temDados && !loading && (
         <div className="p-6 rounded-xl border-2 border-warning/30 bg-warning/10 text-center">
           <AlertTriangle className="h-8 w-8 text-warning mx-auto mb-2" />
-          <p className="font-medium text-foreground">Nenhum dado encontrado</p>
-          <p className="text-sm text-muted-foreground mt-1">Cadastre pedidos no CIV para ver os dados aqui.</p>
+          <p className="font-medium text-foreground">Sem dados cadastrados – insira dados para iniciar o monitoramento.</p>
         </div>
       )}
 
-      {/* Alertas Inteligentes */}
+      {/* Alertas */}
       {kpis.alertas.length > 0 && (
         <div className="space-y-2">
           {kpis.alertas.map((alerta, i) => (
@@ -206,8 +234,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       )}
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+      {/* KPIs Row 1 - Vendas & Produção */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-4 rounded-xl bg-gradient-to-br from-civ/20 to-civ/5 border border-civ/30">
           <div className="flex items-center justify-between mb-2">
             <TrendingUp className="h-5 w-5 text-civ" />
@@ -224,8 +252,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <span className="text-xs text-muted-foreground">CIP</span>
           </div>
           <p className="text-3xl font-bold text-foreground">{kpis.pedidosEmProducao}</p>
-          <p className="text-xs text-muted-foreground mt-1">Em Produção/Prog.</p>
-          <p className="text-xs text-cip mt-1">{kpis.totalOPs} OPs | {kpis.opsEmProducao} em curso</p>
+          <p className="text-xs text-muted-foreground mt-1">Em Produção</p>
+          <p className="text-xs text-cip mt-1">{kpis.totalOPs} OPs | {kpis.opsEmProducao} ativas</p>
         </div>
 
         <div className="p-4 rounded-xl bg-gradient-to-br from-success/20 to-success/5 border border-success/30">
@@ -233,11 +261,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <DollarSign className="h-5 w-5 text-success" />
             <span className="text-xs text-muted-foreground">CARTEIRA</span>
           </div>
-          <p className="text-2xl font-bold text-foreground">
-            R$ {kpis.valorCarteiraTotal >= 1000000
-              ? `${(kpis.valorCarteiraTotal / 1000000).toFixed(1)}M`
-              : `${(kpis.valorCarteiraTotal / 1000).toFixed(0)}k`}
-          </p>
+          <p className="text-2xl font-bold text-foreground">{fmt(kpis.valorCarteiraTotal)}</p>
           <p className="text-xs text-muted-foreground mt-1">Valor em Aberto</p>
           <p className="text-xs text-success mt-1">{kpis.pedidosFinalizados} finalizados</p>
         </div>
@@ -252,30 +276,67 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-xs text-warning mt-1">≈ {diasCarteira} dias úteis</p>
         </div>
 
-        <div className="p-4 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/30">
+        <div className="p-4 rounded-xl bg-gradient-to-br from-cic/20 to-cic/5 border border-cic/30">
           <div className="flex items-center justify-between mb-2">
-            <Activity className="h-5 w-5 text-primary" />
-            <span className="text-xs text-muted-foreground">CAPACIDADE</span>
+            <Warehouse className="h-5 w-5 text-cic" />
+            <span className="text-xs text-muted-foreground">CIC</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{kpis.capacidadeDiaria}h</p>
-          <p className="text-xs text-muted-foreground mt-1">Capacidade/Dia</p>
-          <p className={cn('text-xs mt-1', cargaPercentual > 100 ? 'text-destructive' : cargaPercentual > 80 ? 'text-warning' : 'text-success')}>
-            {cargaPercentual}% carga mensal
+          <p className="text-2xl font-bold text-foreground">{fmt(kpis.valorEstoque)}</p>
+          <p className="text-xs text-muted-foreground mt-1">Estoque Total</p>
+          <p className={cn('text-xs mt-1', kpis.materiaisCriticos.length > 0 ? 'text-destructive' : 'text-success')}>
+            {kpis.materiaisCriticos.length} material(is) crítico(s)
           </p>
         </div>
 
-        <div className="p-4 rounded-xl bg-gradient-to-br from-accent/20 to-accent/5 border border-accent/30">
+        <div className="p-4 rounded-xl bg-gradient-to-br from-cif/20 to-cif/5 border border-cif/30">
           <div className="flex items-center justify-between mb-2">
-            <Factory className="h-5 w-5 text-accent-foreground" />
-            <span className="text-xs text-muted-foreground">SETORES</span>
+            <DollarSign className="h-5 w-5 text-cif" />
+            <span className="text-xs text-muted-foreground">CIF</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{kpis.totalSetores}</p>
-          <p className="text-xs text-muted-foreground mt-1">Setores Produtivos</p>
-          <p className="text-xs text-primary mt-1">Sequencial ativo</p>
+          <p className="text-2xl font-bold text-foreground">{fmt(kpis.cifData?.faturamento || 0)}</p>
+          <p className="text-xs text-muted-foreground mt-1">Faturamento</p>
+          <p className={cn('text-xs mt-1', (kpis.cifData?.ebitda || 0) > 0 ? 'text-success' : 'text-destructive')}>
+            EBITDA: {fmt(kpis.cifData?.ebitda || 0)}
+          </p>
         </div>
       </div>
 
-      {/* Charts */}
+      {/* KPIs Row 2 - Financeiro */}
+      {kpis.cifData && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3 rounded-xl bg-card border border-border/30">
+            <p className="text-xs text-muted-foreground">Ponto de Equilíbrio</p>
+            <p className="text-xl font-bold text-foreground">{fmt(kpis.cifData.pontoEquilibrio)}</p>
+            <p className={cn('text-xs mt-1', kpis.cifData.faturamento > kpis.cifData.pontoEquilibrio ? 'text-success' : 'text-destructive')}>
+              {kpis.cifData.faturamento > kpis.cifData.pontoEquilibrio ? '🟢 ACIMA' : '🔴 ABAIXO'}
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-card border border-border/30">
+            <p className="text-xs text-muted-foreground">Margem Líquida</p>
+            <p className="text-xl font-bold text-foreground">{kpis.cifData.margemLiquida.toFixed(1)}%</p>
+            <p className={cn('text-xs mt-1', kpis.cifData.margemLiquida >= 15 ? 'text-success' : 'text-warning')}>
+              {kpis.cifData.margemLiquida >= 15 ? 'Meta atingida' : 'Abaixo da meta (15%)'}
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-card border border-border/30">
+            <p className="text-xs text-muted-foreground">Capacidade × Carga</p>
+            <p className={cn('text-xl font-bold', cargaPercentual > 100 ? 'text-destructive' : cargaPercentual > 80 ? 'text-warning' : 'text-success')}>
+              {cargaPercentual}%
+            </p>
+            <div className="w-full h-2 rounded-full bg-secondary mt-2 overflow-hidden">
+              <div className={cn('h-full rounded-full', cargaPercentual > 100 ? 'bg-destructive' : cargaPercentual > 80 ? 'bg-warning' : 'bg-success')}
+                style={{ width: `${Math.min(cargaPercentual, 100)}%` }} />
+            </div>
+          </div>
+          <div className="p-3 rounded-xl bg-card border border-border/30">
+            <p className="text-xs text-muted-foreground">Proposta Compras</p>
+            <p className="text-xl font-bold text-foreground">{fmt(kpis.totalPropostaCompra)}</p>
+            <p className="text-xs text-cic mt-1">{kpis.materiaisCriticos.length} material(is) crítico(s)</p>
+          </div>
+        </div>
+      )}
+
+      {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <ModuleCard title="Pedidos por Status" variant="civ">
           <div className="h-64">
@@ -283,15 +344,13 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={kpis.pedidosPorStatus}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="status" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} axisLine={{ stroke: 'hsl(var(--border))' }} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={{ stroke: 'hsl(var(--border))' }} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [value, 'Pedidos']} />
+                  <XAxis dataKey="status" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
                   <Bar dataKey="count" fill={CHART_COLORS.verde} radius={[4, 4, 0, 0]} name="Pedidos" />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Nenhum pedido</div>
-            )}
+            ) : <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Sem dados</div>}
           </div>
         </ModuleCard>
 
@@ -301,73 +360,89 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={kpis.pedidosPorCanal}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="canal" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={{ stroke: 'hsl(var(--border))' }} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={{ stroke: 'hsl(var(--border))' }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                  <XAxis dataKey="canal" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                   <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Valor']} />
                   <Bar dataKey="valor" fill={CHART_COLORS.azulMarinho} radius={[4, 4, 0, 0]} name="Valor" />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Nenhum pedido</div>
-            )}
+            ) : <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Sem dados</div>}
           </div>
         </ModuleCard>
+      </div>
 
-        <ModuleCard title="OPs Ativas por Setor" variant="cip">
+      {/* Charts Row 2 - Produção & Financeiro */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ModuleCard title="Carga por Setor (horas)" variant="cip">
           <div className="h-64">
             {kpis.setoresProducao.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={kpis.setoresProducao} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={{ stroke: 'hsl(var(--border))' }} />
-                  <YAxis type="category" dataKey="nome" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} axisLine={{ stroke: 'hsl(var(--border))' }} width={140} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [value, 'OPs']} />
-                  <Bar dataKey="opsAtivas" fill={CHART_COLORS.laranja} radius={[0, 4, 4, 0]} name="OPs Ativas" />
+                  <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                  <YAxis type="category" dataKey="nome" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} width={110} />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`${value.toFixed(1)}h`, '']} />
+                  <Legend />
+                  <Bar dataKey="carga" fill={CHART_COLORS.laranja} radius={[0, 4, 4, 0]} name="Carga Programada" />
+                  <Bar dataKey="capacidade" fill={CHART_COLORS.azulClaro} radius={[0, 4, 4, 0]} name="Capacidade" opacity={0.4} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Nenhum setor</div>
-            )}
+            ) : <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Sem dados</div>}
           </div>
         </ModuleCard>
 
-        <ModuleCard title="Capacidade × Carga" variant="cig">
-          <div className="space-y-4 p-2">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-xs text-muted-foreground">Capacidade Diária</p>
-                <p className="text-2xl font-bold text-foreground">{kpis.capacidadeDiaria}h</p>
-                <p className="text-xs text-primary mt-1">{kpis.totalSetores} setores</p>
-              </div>
-              <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-xs text-muted-foreground">Carga em Carteira</p>
-                <p className="text-2xl font-bold text-foreground">{kpis.horasCarteira.toFixed(0)}h</p>
-                <p className={cn('text-xs mt-1', diasCarteira > 15 ? 'text-destructive' : diasCarteira > 10 ? 'text-warning' : 'text-success')}>
-                  ≈ {diasCarteira} dias úteis
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-xs text-muted-foreground">OPs Geradas</p>
-                <p className="text-2xl font-bold text-foreground">{kpis.totalOPs}</p>
-                <p className="text-xs text-cip mt-1">{kpis.opsEmProducao} em curso</p>
-              </div>
-              <div className="p-3 rounded-lg bg-secondary/30">
-                <p className="text-xs text-muted-foreground">Carga vs Capacidade</p>
-                <p className={cn('text-2xl font-bold', cargaPercentual > 100 ? 'text-destructive' : cargaPercentual > 80 ? 'text-warning' : 'text-success')}>
-                  {cargaPercentual}%
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">do mês (22 dias)</p>
-              </div>
+        {kpis.cifData && kpis.cifData.receitaMensal.some(r => r.receita > 0) ? (
+          <ModuleCard title="Receita × Ponto de Equilíbrio" variant="cif">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={kpis.cifData.receitaMensal.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: kpis.cifData!.pontoEquilibrio }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
+                  <Legend />
+                  <Bar dataKey="faturamento" fill={CHART_COLORS.verde} name="Faturamento" radius={[4, 4, 0, 0]} />
+                  <Line type="monotone" dataKey="equilibrio" stroke={CHART_COLORS.vermelho} strokeWidth={2} strokeDasharray="5 5" name="Ponto Equilíbrio" dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
-            <div className="w-full h-3 rounded-full bg-secondary overflow-hidden">
-              <div
-                className={cn('h-full rounded-full transition-all', cargaPercentual > 100 ? 'bg-destructive' : cargaPercentual > 80 ? 'bg-warning' : 'bg-success')}
-                style={{ width: `${Math.min(cargaPercentual, 100)}%` }}
-              />
+          </ModuleCard>
+        ) : (
+          <ModuleCard title="Resultado Financeiro" variant="cif">
+            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+              Sem dados cadastrados – insira dados para iniciar o monitoramento.
             </div>
+          </ModuleCard>
+        )}
+      </div>
+
+      {/* Materiais Críticos */}
+      {kpis.materiaisCriticos.length > 0 && (
+        <ModuleCard title="⚠ Materiais em Nível Crítico" variant="cic">
+          <div className="overflow-x-auto max-h-[250px] overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0">
+                <th className="text-left py-2 px-3 text-xs text-muted-foreground">Material</th>
+                <th className="text-center py-2 px-3 text-xs text-muted-foreground">Estoque</th>
+                <th className="text-center py-2 px-3 text-xs text-muted-foreground">Alcance</th>
+                <th className="text-center py-2 px-3 text-xs text-muted-foreground">Pto Pedido</th>
+                <th className="text-right py-2 px-3 text-xs text-muted-foreground">Proposta</th>
+              </tr></thead>
+              <tbody>
+                {kpis.materiaisCriticos.slice(0, 8).map(m => (
+                  <tr key={m.id} className="border-b border-border/30 bg-destructive/5">
+                    <td className="py-2 px-3 font-medium text-foreground text-xs">{m.nome}</td>
+                    <td className="py-2 px-3 text-center text-xs">{m.estoque_atual} {m.unidade}</td>
+                    <td className="py-2 px-3 text-center text-xs text-destructive font-bold">{(m.alcance_estoque || 0).toFixed(1)}d</td>
+                    <td className="py-2 px-3 text-center text-xs text-muted-foreground">{m.ponto_pedido}</td>
+                    <td className="py-2 px-3 text-right text-xs text-warning font-bold">{(m.proposta_compra || 0) > 0 ? `${m.proposta_compra} ${m.unidade}` : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </ModuleCard>
-      </div>
+      )}
     </div>
   );
 }
