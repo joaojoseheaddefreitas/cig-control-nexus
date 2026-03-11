@@ -496,9 +496,9 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         )}>
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-3 top-6 w-6 h-6 bg-card border border-border rounded-full flex items-center justify-center hover:bg-secondary transition-colors z-10"
+            className="absolute -right-4 top-6 w-8 h-8 bg-cif border-2 border-cif/50 rounded-full flex items-center justify-center hover:bg-cif/80 hover:scale-110 transition-all z-10 shadow-lg shadow-cif/30 text-white"
           >
-            {sidebarCollapsed ? <ChevronRight className="h-3 w-3" /> : <ChevronLeft className="h-3 w-3" />}
+            {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
           <SidebarContent isCollapsed={sidebarCollapsed} />
         </aside>
