@@ -230,20 +230,20 @@ export function CIVPipeline() {
             </div>
             <div>
               <label className="text-sm font-medium">Cliente</label>
-              <Select value={editing?.cliente_id || ''} onValueChange={v => setEditing(prev => ({ ...prev, cliente_id: v || null }))}>
+              <Select value={editing?.cliente_id || 'none'} onValueChange={v => setEditing(prev => ({ ...prev, cliente_id: v === 'none' ? null : v }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
             <div>
               <label className="text-sm font-medium">Vendedor</label>
-              <Select value={editing?.vendedor_id || ''} onValueChange={v => setEditing(prev => ({ ...prev, vendedor_id: v || null }))}>
+              <Select value={editing?.vendedor_id || 'none'} onValueChange={v => setEditing(prev => ({ ...prev, vendedor_id: v === 'none' ? null : v }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {vendedores.map(v => <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
