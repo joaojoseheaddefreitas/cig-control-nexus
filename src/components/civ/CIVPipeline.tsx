@@ -230,7 +230,7 @@ export function CIVPipeline() {
             </div>
             <div>
               <label className="text-sm font-medium">Cliente</label>
-              <Select value={editing?.cliente_id || ''} onValueChange={v => setEditing(prev => ({ ...prev, cliente_id: v || null }))}>
+              <Select value={editing?.cliente_id || 'none'} onValueChange={v => setEditing(prev => ({ ...prev, cliente_id: v === 'none' ? null : v }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
