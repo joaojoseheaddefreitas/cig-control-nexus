@@ -233,7 +233,7 @@ export function CIVPipeline() {
               <Select value={editing?.cliente_id || ''} onValueChange={v => setEditing(prev => ({ ...prev, cliente_id: v || null }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {clientes.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
