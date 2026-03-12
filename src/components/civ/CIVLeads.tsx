@@ -269,7 +269,7 @@ export function CIVLeads() {
             </div>
             <div>
               <label className="text-sm font-medium">Responsável (Vendedor)</label>
-              <Select value={editingLead?.vendedor_id || ''} onValueChange={v => setEditingLead(prev => ({ ...prev, vendedor_id: v || null }))}>
+              <Select value={editingLead?.vendedor_id || 'none'} onValueChange={v => setEditingLead(prev => ({ ...prev, vendedor_id: v === 'none' ? null : v }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">Nenhum</SelectItem>
