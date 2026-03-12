@@ -272,7 +272,7 @@ export function CIVLeads() {
               <Select value={editingLead?.vendedor_id || ''} onValueChange={v => setEditingLead(prev => ({ ...prev, vendedor_id: v || null }))}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione..." /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Nenhum</SelectItem>
+                  <SelectItem value="none">Nenhum</SelectItem>
                   {vendedores.map(v => <SelectItem key={v.id} value={v.id}>{v.nome}</SelectItem>)}
                 </SelectContent>
               </Select>
