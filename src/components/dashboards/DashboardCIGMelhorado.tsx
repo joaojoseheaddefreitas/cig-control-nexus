@@ -218,6 +218,20 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       )}
 
+      {/* Alerta Pulsante – Materiais Críticos */}
+      {kpis.materiaisCriticos.length > 0 && (
+        <div className="p-4 rounded-xl border-2 border-destructive/50 bg-destructive/10 animate-pulse flex items-center gap-3">
+          <AlertTriangle className="h-6 w-6 text-destructive flex-shrink-0" />
+          <div>
+            <p className="font-bold text-destructive text-sm">⚠️ AGUARDANDO COMPRAS — {kpis.materiaisCriticos.length} material(is) em nível crítico</p>
+            <p className="text-xs text-destructive/80 mt-0.5">
+              {kpis.materiaisCriticos.slice(0, 5).map(m => m.nome).join(', ')}
+              {kpis.materiaisCriticos.length > 5 && ` e mais ${kpis.materiaisCriticos.length - 5}...`}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Alertas */}
       {kpis.alertas.length > 0 && (
         <div className="space-y-2">

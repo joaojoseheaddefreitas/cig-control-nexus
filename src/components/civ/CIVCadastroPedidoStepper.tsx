@@ -17,7 +17,9 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchConfigCapacidade, calcularDataEntrega, calcularDiasProducao } from '@/services/capacidadeService';
 
-// Step 3 component with real-time prazo calculation
+// Step 3 component with real-time prazo calculation + material check
+interface MaterialFalta { nome: string; necessidade: number; estoque: number; falta: number; leadTime: number }
+
 function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNome, canal, itens, totalOPs, valorTotal, observacoesGerais, getPreviewOPMask }: {
   cargaTotalHoras: number; clienteBloqueado: boolean; codigoManual: string; clienteNome: string; canal: string;
   itens: ItemForm[]; totalOPs: number; valorTotal: number; observacoesGerais: string; getPreviewOPMask: (seq: number) => string;
@@ -25,19 +27,77 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
   const [prazoData, setPrazoData] = useState<string>('Calculando...');
   const [prazoDias, setPrazoDias] = useState<number>(0);
   const [loadingPrazo, setLoadingPrazo] = useState(true);
+  const [materiaisFaltantes, setMateriaisFaltantes] = useState<MaterialFalta[]>([]);
+  const [diasExtras, setDiasExtras] = useState(0);
+
+  // Loss factors
+  const PERDA: Record<string, number> = { 'madeira': 0.18, 'tecido': 0.12, 'espuma': 0.10, 'fibra': 0.05, 'percinta': 0.05 };
+  const getLossFactor = (cat: string) => {
+    const c = cat.toLowerCase();
+    if (c.includes('madeira') || c.includes('pinus')) return PERDA['madeira'];
+    if (c.includes('tecido') || c.includes('suede')) return PERDA['tecido'];
+    if (c.includes('espuma') || c.includes('foam')) return PERDA['espuma'];
+    if (c.includes('fibra') || c.includes('percinta') || c.includes('elástic')) return PERDA['fibra'];
+    return 0.05;
+  };
 
   useEffect(() => {
     const calc = async () => {
       setLoadingPrazo(true);
       try {
         const config = await fetchConfigCapacidade();
-        // Load current wallet hours
         const { data: carteira } = await supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle();
         const horasCarteira = Number(carteira?.total_horas_acumuladas) || 0;
         const totalHoras = horasCarteira + cargaTotalHoras;
         const dias = calcularDiasProducao(totalHoras, config.capacidade_produtiva_diaria);
-        const dataEntrega = calcularDataEntrega(new Date(), dias, config.considerar_sabado);
-        setPrazoDias(dias);
+
+        // BOM material check
+        const produtoIds = itens.filter(i => i.produtoId).map(i => i.produtoId!);
+        let maxLeadExtra = 0;
+        const faltasList: MaterialFalta[] = [];
+
+        if (produtoIds.length > 0) {
+          const [bomRes, matRes] = await Promise.all([
+            supabase.from('bom_produto').select('produto_id, material_id, quantidade_por_unidade').in('produto_id', produtoIds),
+            supabase.from('materiais').select('id, nome, estoque_atual, categoria, lead_time_dias'),
+          ]);
+          const bom = bomRes.data || [];
+          const mats = matRes.data || [];
+          const matMap = new Map(mats.map(m => [m.id, m]));
+
+          // Aggregate needs per material
+          const needs: Record<string, number> = {};
+          itens.forEach(item => {
+            if (!item.produtoId) return;
+            const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
+            const bomEntries = bom.filter(b => b.produto_id === item.produtoId);
+            bomEntries.forEach(b => {
+              const mat = matMap.get(b.material_id);
+              const loss = mat ? getLossFactor(mat.categoria) : 0.05;
+              const need = Number(b.quantidade_por_unidade) * qty * (1 + loss);
+              needs[b.material_id] = (needs[b.material_id] || 0) + need;
+            });
+          });
+
+          Object.entries(needs).forEach(([matId, need]) => {
+            const mat = matMap.get(matId);
+            if (!mat) return;
+            const estoque = Number(mat.estoque_atual) || 0;
+            if (need > estoque) {
+              const falta = need - estoque;
+              const lt = Number(mat.lead_time_dias) || 7;
+              faltasList.push({ nome: mat.nome, necessidade: need, estoque, falta, leadTime: lt });
+              if (lt > maxLeadExtra) maxLeadExtra = lt;
+            }
+          });
+        }
+
+        setMateriaisFaltantes(faltasList);
+        setDiasExtras(maxLeadExtra);
+
+        const diasTotal = dias + maxLeadExtra;
+        const dataEntrega = calcularDataEntrega(new Date(), diasTotal, config.considerar_sabado);
+        setPrazoDias(diasTotal);
         setPrazoData(dataEntrega.toLocaleDateString('pt-BR'));
       } catch {
         setPrazoData('Erro no cálculo');
@@ -45,7 +105,7 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
       setLoadingPrazo(false);
     };
     calc();
-  }, [cargaTotalHoras]);
+  }, [cargaTotalHoras, itens]);
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -61,12 +121,47 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
                 <p className="text-2xl font-bold text-foreground">{prazoData}</p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {prazoDias} dias úteis | Carga deste pedido: {cargaTotalHoras.toFixed(1)}h
+                  {diasExtras > 0 && <span className="text-destructive font-bold"> (+{diasExtras}d compras)</span>}
                 </p>
               </>
             )}
           </div>
         </div>
       </div>
+
+      {/* Material shortage alert */}
+      {materiaisFaltantes.length > 0 && (
+        <div className="p-3 rounded-lg bg-destructive/10 border-2 border-destructive/40 animate-pulse">
+          <div className="flex items-start gap-2 mb-2">
+            <AlertTriangle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+            <p className="text-sm font-bold text-destructive">🔴 MATERIAL INSUFICIENTE — prazo acrescido de {diasExtras} dias</p>
+          </div>
+          <div className="max-h-32 overflow-y-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-destructive/20">
+                  <th className="text-left py-1 text-destructive/80">Material</th>
+                  <th className="text-right py-1 text-destructive/80">Necessário</th>
+                  <th className="text-right py-1 text-destructive/80">Estoque</th>
+                  <th className="text-right py-1 text-destructive/80">Falta</th>
+                  <th className="text-right py-1 text-destructive/80">Lead</th>
+                </tr>
+              </thead>
+              <tbody>
+                {materiaisFaltantes.map((m, i) => (
+                  <tr key={i} className="border-b border-destructive/10">
+                    <td className="py-1 text-foreground">{m.nome}</td>
+                    <td className="py-1 text-right">{m.necessidade.toFixed(2)}</td>
+                    <td className="py-1 text-right">{m.estoque.toFixed(2)}</td>
+                    <td className="py-1 text-right font-bold text-destructive">{m.falta.toFixed(2)}</td>
+                    <td className="py-1 text-right">{m.leadTime}d</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {clienteBloqueado && (
         <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">

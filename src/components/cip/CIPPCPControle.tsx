@@ -9,6 +9,7 @@ import {
   CheckCircle2, Clock, Gauge, Package, Calendar, ArrowRight,
   Search, ChevronUp, ChevronDown, ScanBarcode, Tag, Trash2,
   History, ArrowUpDown, Wand2, FileText, ClipboardList,
+  Eye, Pencil, XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -54,6 +55,7 @@ interface OPRow {
   data_programada: string | null;
   sequencia_programada: number | null;
   pedido_id: string | null;
+  observacoes: string | null;
   rastreamento?: { setor_id: string; status: string; data_entrada: string | null; data_baixa: string | null }[];
 }
 
@@ -97,6 +99,8 @@ export function CIPPCPControle() {
   const [scannerInput, setScannerInput] = useState('');
   const [historyOp, setHistoryOp] = useState<OPRow | null>(null);
   const [gradeFilter, setGradeFilter] = useState<string>('all');
+  const [editOp, setEditOp] = useState<OPRow | null>(null);
+  const [editForm, setEditForm] = useState({ produto_nome: '', quantidade: 1, observacoes: '' });
 
   // ─── Data Loading ──────────────────────────────────────────────────
   const loadData = useCallback(async () => {
@@ -106,7 +110,8 @@ export function CIPPCPControle() {
       fetchCargas(),
       supabase
         .from('ops')
-        .select('id, numero_op, produto_nome, quantidade, tempo_total, tempo_unitario, status_producao, carga_id, sequence_number, total_ops_at_generation, prazo_entrega, current_sector, data_programada, sequencia_programada, pedido_id')
+        .select('id, numero_op, produto_nome, quantidade, tempo_total, tempo_unitario, status_producao, carga_id, sequence_number, total_ops_at_generation, prazo_entrega, current_sector, data_programada, sequencia_programada, pedido_id, observacoes')
+        .neq('status_producao', 'cancelado')
         .order('sequencia_programada', { ascending: true, nullsFirst: true }),
     ]);
 
@@ -184,25 +189,33 @@ export function CIPPCPControle() {
     return setores.map(setor => {
       const capacidadeTotal = setor.mao_de_obra * 8.8;
 
-      // Sum hours from route_steps for OPs programmed/in-production on the filtered date
-      const opsNoFiltro = ops.filter(op => {
+      // Sum hours from ALL non-finalized OPs (programmed + in-production + pending with orders)
+      const opsAtivas = ops.filter(op => {
         if (op.status_producao === 'Producao Finalizada') return false;
-        if (op.status_producao !== 'programada' && op.status_producao !== 'em_producao') return false;
-        if (dataFiltro && op.data_programada !== dataFiltro) return false;
+        if (op.status_producao === 'cancelado') return false;
         return true;
       });
-      const opIdsSet = new Set(opsNoFiltro.map(o => o.id));
+      const opIdsSet = new Set(opsAtivas.map(o => o.id));
 
-      const horasOcupadas = routeSteps
+      // Hours from route_steps
+      const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
         .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
+
+      // Fallback: OPs without route_steps → distribute tempo_total equally across sectors
+      const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
+      const horasFallback = opsAtivas
+        .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
+        .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
+
+      const horasOcupadas = horasFromSteps + horasFallback;
 
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
 
       return { id: setor.id, nome: setor.nome, capacidadeTotal, horasOcupadas, horasLivres, percentual };
     });
-  }, [setores, ops, routeSteps, dataFiltro]);
+  }, [setores, ops, routeSteps]);
 
   // Production tracking chart — 3 states: PENDENTE, EM PRODUÇÃO, PRODUZIDO
   const chartProducao = useMemo(() => {
@@ -458,6 +471,47 @@ export function CIPPCPControle() {
       handleScan(scannerInput.trim());
       setScannerInput('');
     }
+  };
+
+  // ─── Cancel OP ────────────────────────────────────────────────────
+  const handleCancelOp = async (op: OPRow) => {
+    if (op.status_producao === 'em_producao') {
+      toast.error('Não é possível cancelar uma OP em produção');
+      return;
+    }
+    if (op.status_producao === 'Producao Finalizada') {
+      toast.error('OP já finalizada');
+      return;
+    }
+    if (!window.confirm(`Cancelar OP ${op.numero_op}?`)) return;
+    await supabase.from('ops').update({
+      status_producao: 'cancelado',
+      data_programada: null,
+      sequencia_programada: null,
+      carga_id: null,
+    } as any).eq('id', op.id);
+    toast.success(`OP ${op.numero_op} cancelada`);
+    await loadData();
+  };
+
+  // ─── Edit OP ──────────────────────────────────────────────────────
+  const openEditOp = (op: OPRow) => {
+    setEditForm({ produto_nome: op.produto_nome, quantidade: op.quantidade, observacoes: op.observacoes || '' });
+    setEditOp(op);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editOp) return;
+    const tempo_total = editForm.quantidade * editOp.tempo_unitario;
+    await supabase.from('ops').update({
+      produto_nome: editForm.produto_nome,
+      quantidade: editForm.quantidade,
+      tempo_total,
+      observacoes: editForm.observacoes || null,
+    } as any).eq('id', editOp.id);
+    toast.success(`OP ${editOp.numero_op} atualizada`);
+    setEditOp(null);
+    await loadData();
   };
 
   // ─── Print Carga Relation ─────────────────────────────────────────
@@ -773,7 +827,7 @@ export function CIPPCPControle() {
                   <th className="text-left py-2 px-1 font-medium text-muted-foreground">Produto</th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground">Hrs</th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground">Status</th>
-                  <th className="text-center py-2 px-1 font-medium text-muted-foreground w-6"></th>
+                  <th className="text-center py-2 px-1 font-medium text-muted-foreground min-w-[90px]">Ações</th>
                 </tr>
               </thead>
               <tbody>
@@ -807,10 +861,21 @@ export function CIPPCPControle() {
                       <td className="text-center py-1.5 px-1">
                         <Badge variant="outline" className={cn('text-[9px]', st.color)}>{st.label}</Badge>
                       </td>
-                      <td className="text-center py-1 px-0.5">
-                        <button onClick={e => { e.stopPropagation(); imprimirEtiqueta(op); }} className="text-muted-foreground hover:text-foreground" title="Imprimir etiqueta">
-                          <Tag className="h-3 w-3" />
-                        </button>
+                      <td className="text-center py-1 px-0.5" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => setHistoryOp(op)} className="text-muted-foreground hover:text-primary" title="Visualizar">
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => openEditOp(op)} className="text-muted-foreground hover:text-foreground" title="Editar" disabled={op.status_producao === 'em_producao' || op.status_producao === 'Producao Finalizada'}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => imprimirOP(op.id)} className="text-muted-foreground hover:text-foreground" title="Imprimir">
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => handleCancelOp(op)} className="text-muted-foreground hover:text-destructive" title="Cancelar" disabled={op.status_producao === 'em_producao' || op.status_producao === 'Producao Finalizada'}>
+                            <XCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -1026,6 +1091,38 @@ export function CIPPCPControle() {
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ═══════════════════ MODAL – EDITAR OP ═══════════════════ */}
+      <Dialog open={!!editOp} onOpenChange={() => setEditOp(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-cip" />
+              Editar OP – {editOp?.numero_op}
+            </DialogTitle>
+          </DialogHeader>
+          {editOp && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Produto</label>
+                <Input value={editForm.produto_nome} onChange={e => setEditForm(f => ({ ...f, produto_nome: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Quantidade</label>
+                <Input type="number" min={1} value={editForm.quantidade} onChange={e => setEditForm(f => ({ ...f, quantidade: Number(e.target.value) || 1 }))} className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Observações</label>
+                <Input value={editForm.observacoes} onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Tempo total: <span className="font-bold text-cip">{(editForm.quantidade * editOp.tempo_unitario).toFixed(1)}h</span>
+              </div>
+              <Button className="w-full bg-cip hover:bg-cip/90" onClick={handleSaveEdit}>Salvar</Button>
             </div>
           )}
         </DialogContent>
