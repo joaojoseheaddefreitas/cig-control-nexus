@@ -9,6 +9,7 @@ import {
   CheckCircle2, Clock, Gauge, Package, Calendar, ArrowRight,
   Search, ChevronUp, ChevronDown, ScanBarcode, Tag, Trash2,
   History, ArrowUpDown, Wand2, FileText, ClipboardList,
+  Eye, Pencil, XCircle,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
