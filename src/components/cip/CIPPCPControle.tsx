@@ -818,7 +818,7 @@ export function CIPPCPControle() {
                   <th className="text-left py-2 px-1 font-medium text-muted-foreground">Produto</th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground">Hrs</th>
                   <th className="text-center py-2 px-1 font-medium text-muted-foreground">Status</th>
-                  <th className="text-center py-2 px-1 font-medium text-muted-foreground w-6"></th>
+                  <th className="text-center py-2 px-1 font-medium text-muted-foreground min-w-[90px]">Ações</th>
                 </tr>
               </thead>
               <tbody>
