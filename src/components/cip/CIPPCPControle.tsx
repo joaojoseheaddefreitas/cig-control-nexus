@@ -197,9 +197,18 @@ export function CIPPCPControle() {
       });
       const opIdsSet = new Set(opsAtivas.map(o => o.id));
 
-      const horasOcupadas = routeSteps
+      // Hours from route_steps
+      const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
         .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
+
+      // Fallback: OPs without route_steps → distribute tempo_total equally across sectors
+      const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
+      const horasFallback = opsAtivas
+        .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
+        .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
+
+      const horasOcupadas = horasFromSteps + horasFallback;
 
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
