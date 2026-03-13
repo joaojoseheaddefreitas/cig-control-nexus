@@ -206,7 +206,7 @@ export function CIPPCPControle() {
 
       return { id: setor.id, nome: setor.nome, capacidadeTotal, horasOcupadas, horasLivres, percentual };
     });
-  }, [setores, ops, routeSteps, dataFiltro]);
+  }, [setores, ops, routeSteps]);
 
   // Production tracking chart — 3 states: PENDENTE, EM PRODUÇÃO, PRODUZIDO
   const chartProducao = useMemo(() => {
