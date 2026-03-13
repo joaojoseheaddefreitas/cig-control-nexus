@@ -187,14 +187,13 @@ export function CIPPCPControle() {
     return setores.map(setor => {
       const capacidadeTotal = setor.mao_de_obra * 8.8;
 
-      // Sum hours from route_steps for OPs programmed/in-production on the filtered date
-      const opsNoFiltro = ops.filter(op => {
+      // Sum hours from ALL non-finalized OPs (programmed + in-production + pending with orders)
+      const opsAtivas = ops.filter(op => {
         if (op.status_producao === 'Producao Finalizada') return false;
-        if (op.status_producao !== 'programada' && op.status_producao !== 'em_producao') return false;
-        if (dataFiltro && op.data_programada !== dataFiltro) return false;
+        if (op.status_producao === 'cancelado') return false;
         return true;
       });
-      const opIdsSet = new Set(opsNoFiltro.map(o => o.id));
+      const opIdsSet = new Set(opsAtivas.map(o => o.id));
 
       const horasOcupadas = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
