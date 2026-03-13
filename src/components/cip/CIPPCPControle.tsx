@@ -112,6 +112,7 @@ export function CIPPCPControle() {
         .from('ops')
         .select('id, numero_op, produto_nome, quantidade, tempo_total, tempo_unitario, status_producao, carga_id, sequence_number, total_ops_at_generation, prazo_entrega, current_sector, data_programada, sequencia_programada, pedido_id, observacoes')
         .neq('status_producao', 'cancelado')
+        .order('sequencia_programada', { ascending: true, nullsFirst: true }),
     ]);
 
     const setoresData = (setoresResult.data || []) as SetorComCapacidade[];
