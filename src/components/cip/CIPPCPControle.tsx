@@ -1086,6 +1086,38 @@ export function CIPPCPControle() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* ═══════════════════ MODAL – EDITAR OP ═══════════════════ */}
+      <Dialog open={!!editOp} onOpenChange={() => setEditOp(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-4 w-4 text-cip" />
+              Editar OP – {editOp?.numero_op}
+            </DialogTitle>
+          </DialogHeader>
+          {editOp && (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Produto</label>
+                <Input value={editForm.produto_nome} onChange={e => setEditForm(f => ({ ...f, produto_nome: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Quantidade</label>
+                <Input type="number" min={1} value={editForm.quantidade} onChange={e => setEditForm(f => ({ ...f, quantidade: Number(e.target.value) || 1 }))} className="h-8 text-sm" />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground">Observações</label>
+                <Input value={editForm.observacoes} onChange={e => setEditForm(f => ({ ...f, observacoes: e.target.value }))} className="h-8 text-sm" />
+              </div>
+              <div className="text-xs text-muted-foreground">
+                Tempo total: <span className="font-bold text-cip">{(editForm.quantidade * editOp.tempo_unitario).toFixed(1)}h</span>
+              </div>
+              <Button className="w-full bg-cip hover:bg-cip/90" onClick={handleSaveEdit}>Salvar</Button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
