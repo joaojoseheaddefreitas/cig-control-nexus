@@ -462,6 +462,47 @@ export function CIPPCPControle() {
     }
   };
 
+  // ─── Cancel OP ────────────────────────────────────────────────────
+  const handleCancelOp = async (op: OPRow) => {
+    if (op.status_producao === 'em_producao') {
+      toast.error('Não é possível cancelar uma OP em produção');
+      return;
+    }
+    if (op.status_producao === 'Producao Finalizada') {
+      toast.error('OP já finalizada');
+      return;
+    }
+    if (!window.confirm(`Cancelar OP ${op.numero_op}?`)) return;
+    await supabase.from('ops').update({
+      status_producao: 'cancelado',
+      data_programada: null,
+      sequencia_programada: null,
+      carga_id: null,
+    } as any).eq('id', op.id);
+    toast.success(`OP ${op.numero_op} cancelada`);
+    await loadData();
+  };
+
+  // ─── Edit OP ──────────────────────────────────────────────────────
+  const openEditOp = (op: OPRow) => {
+    setEditForm({ produto_nome: op.produto_nome, quantidade: op.quantidade, observacoes: op.observacoes || '' });
+    setEditOp(op);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editOp) return;
+    const tempo_total = editForm.quantidade * editOp.tempo_unitario;
+    await supabase.from('ops').update({
+      produto_nome: editForm.produto_nome,
+      quantidade: editForm.quantidade,
+      tempo_total,
+      observacoes: editForm.observacoes || null,
+    } as any).eq('id', editOp.id);
+    toast.success(`OP ${editOp.numero_op} atualizada`);
+    setEditOp(null);
+    await loadData();
+  };
+
   // ─── Print Carga Relation ─────────────────────────────────────────
   const handlePrintCargaDia = () => {
     if (programmedOps.length === 0) {
