@@ -55,6 +55,7 @@ interface OPRow {
   data_programada: string | null;
   sequencia_programada: number | null;
   pedido_id: string | null;
+  observacoes: string | null;
   rastreamento?: { setor_id: string; status: string; data_entrada: string | null; data_baixa: string | null }[];
 }
 
