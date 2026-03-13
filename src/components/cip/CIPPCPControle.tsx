@@ -217,21 +217,29 @@ export function CIPPCPControle() {
     });
   }, [setores, ops, routeSteps]);
 
-  // Production tracking chart — 3 states: PENDENTE, EM PRODUÇÃO, PRODUZIDO
+  // Production tracking chart — ALL active OPs (carteira inteira)
   const chartProducao = useMemo(() => {
     return setores.map(setor => {
-      const opsProgDay = ops.filter(op => {
-        if (dataFiltro && op.data_programada !== dataFiltro) return false;
-        return op.status_producao === 'programada' || op.status_producao === 'em_producao' || op.status_producao === 'Producao Finalizada';
-      });
-      const opIdsSet = new Set(opsProgDay.map(o => o.id));
+      // ALL non-finalized, non-cancelled OPs
+      const opsAtivas = ops.filter(op =>
+        op.status_producao !== 'Producao Finalizada' && op.status_producao !== 'cancelado'
+      );
+      const opIdsSet = new Set(opsAtivas.map(o => o.id));
 
-      const totalProgramada = routeSteps
+      const totalHoras = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
         .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
 
+      // Fallback for OPs without route_steps
+      const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
+      const fallback = opsAtivas
+        .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
+        .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
+
+      const totalProgramada = totalHoras + fallback;
+
       // Produzido = OPs com baixa neste setor
-      const horasProduzidas = opsProgDay
+      const horasProduzidas = opsAtivas
         .filter(op => op.rastreamento?.find(t => t.setor_id === setor.id)?.status === 'baixa')
         .reduce((sum, op) => {
           const step = routeSteps.find(s => s.op_id === op.id && s.setor_id === setor.id);
@@ -239,7 +247,7 @@ export function CIPPCPControle() {
         }, 0);
 
       // Em Produção = OPs com entrada neste setor
-      const horasEmProducao = opsProgDay
+      const horasEmProducao = opsAtivas
         .filter(op => op.rastreamento?.find(t => t.setor_id === setor.id)?.status === 'entrada')
         .reduce((sum, op) => {
           const step = routeSteps.find(s => s.op_id === op.id && s.setor_id === setor.id);
@@ -255,7 +263,7 @@ export function CIPPCPControle() {
         pendentes: Number(horasPendentes.toFixed(1)),
       };
     });
-  }, [setores, ops, routeSteps, dataFiltro]);
+  }, [setores, ops, routeSteps]);
 
   const isOverCapacity = useCallback(() => {
     return capacidadePorSetor.some(s => s.percentual >= 100);
@@ -281,13 +289,38 @@ export function CIPPCPControle() {
     return capacidadePorSetor.reduce((max, s) => s.percentual > max.percentual ? s : max, capacidadePorSetor[0]);
   }, [capacidadePorSetor]);
 
+  // Montagem de Carga — apenas OPs programadas para HOJE vs capacidade DIÁRIA
   const chartCarga = useMemo(() => {
-    return capacidadePorSetor.map(s => ({
-      setor: s.nome.length > 10 ? s.nome.substring(0, 10) + '…' : s.nome,
-      programada: Number(s.horasOcupadas.toFixed(1)),
-      capacidadeMax: Number(s.capacidadeTotal.toFixed(1)),
-    }));
-  }, [capacidadePorSetor]);
+    const hoje = dataFiltro || new Date().toISOString().split('T')[0];
+    const opsHoje = ops.filter(op =>
+      op.data_programada === hoje &&
+      op.status_producao !== 'Producao Finalizada' &&
+      op.status_producao !== 'cancelado'
+    );
+    const opIdsHoje = new Set(opsHoje.map(o => o.id));
+
+    return setores.map(setor => {
+      const capacidadeDiaria = setor.mao_de_obra * 8.8;
+
+      const horasFromSteps = routeSteps
+        .filter(s => s.setor_id === setor.id && opIdsHoje.has(s.op_id))
+        .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
+
+      // Fallback for OPs without route_steps
+      const opsWithSteps = new Set(routeSteps.filter(s => opIdsHoje.has(s.op_id)).map(s => s.op_id));
+      const fallback = opsHoje
+        .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
+        .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
+
+      const programada = horasFromSteps + fallback;
+
+      return {
+        setor: setor.nome.length > 10 ? setor.nome.substring(0, 10) + '…' : setor.nome,
+        programada: Number(programada.toFixed(1)),
+        capacidadeMax: Number(capacidadeDiaria.toFixed(1)),
+      };
+    });
+  }, [setores, ops, routeSteps, dataFiltro]);
 
   // ─── Validate OP fits capacity per sector ──────────────────────────
   const validateOpCapacity = useCallback((opId: string): { fits: boolean; blocker?: string } => {
