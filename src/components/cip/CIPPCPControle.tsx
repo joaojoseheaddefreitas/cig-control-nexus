@@ -98,6 +98,8 @@ export function CIPPCPControle() {
   const [scannerInput, setScannerInput] = useState('');
   const [historyOp, setHistoryOp] = useState<OPRow | null>(null);
   const [gradeFilter, setGradeFilter] = useState<string>('all');
+  const [editOp, setEditOp] = useState<OPRow | null>(null);
+  const [editForm, setEditForm] = useState({ produto_nome: '', quantidade: 1, observacoes: '' });
 
   // ─── Data Loading ──────────────────────────────────────────────────
   const loadData = useCallback(async () => {
