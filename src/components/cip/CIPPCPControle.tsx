@@ -852,10 +852,21 @@ export function CIPPCPControle() {
                       <td className="text-center py-1.5 px-1">
                         <Badge variant="outline" className={cn('text-[9px]', st.color)}>{st.label}</Badge>
                       </td>
-                      <td className="text-center py-1 px-0.5">
-                        <button onClick={e => { e.stopPropagation(); imprimirEtiqueta(op); }} className="text-muted-foreground hover:text-foreground" title="Imprimir etiqueta">
-                          <Tag className="h-3 w-3" />
-                        </button>
+                      <td className="text-center py-1 px-0.5" onClick={e => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => setHistoryOp(op)} className="text-muted-foreground hover:text-primary" title="Visualizar">
+                            <Eye className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => openEditOp(op)} className="text-muted-foreground hover:text-foreground" title="Editar" disabled={op.status_producao === 'em_producao' || op.status_producao === 'Producao Finalizada'}>
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => imprimirOP(op.id)} className="text-muted-foreground hover:text-foreground" title="Imprimir">
+                            <Printer className="h-3.5 w-3.5" />
+                          </button>
+                          <button onClick={() => handleCancelOp(op)} className="text-muted-foreground hover:text-destructive" title="Cancelar" disabled={op.status_producao === 'em_producao' || op.status_producao === 'Producao Finalizada'}>
+                            <XCircle className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
