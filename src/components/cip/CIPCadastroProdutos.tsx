@@ -3,9 +3,11 @@ import { Search, Filter, Plus, Edit, Trash2, Eye, Package, Database, Truck, Cloc
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import type { Tables } from '@/integrations/supabase/types';
+import { BOMEditor } from './BOMEditor';
 
 type Produto = Tables<'produtos'>;
 type BomProduto = Tables<'bom_produto'>;
