@@ -6,10 +6,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash2, Database, Package } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import type { Tables } from '@/integrations/supabase/types';
 
-type BomProduto = Tables<'bom_produto'>;
-type Material = Tables<'materiais'>;
+interface BomItem {
+  id: string;
+  produto_id: string;
+  material_id: string;
+  quantidade_por_unidade: number;
+  unidade: string;
+  lead_time_dias: number;
+  created_at: string;
+  updated_at: string;
+  material?: {
+    id: string;
+    codigo: string;
+    nome: string;
+    categoria: string;
+    unidade: string;
+    estoque_atual: number;
+    lead_time_dias: number;
+    fornecedor_nome: string | null;
+  };
+}
 
 interface BOMEditorProps {
   produtoId: string;
@@ -17,12 +34,13 @@ interface BOMEditorProps {
 }
 
 export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
-  const [bomItems, setBomItems] = useState<(BomProduto & { material?: Material })[]>([]);
-  const [materiais, setMateriais] = useState<Material[]>([]);
+  const [bomItems, setBomItems] = useState<BomItem[]>([]);
+  const [materiais, setMateriais] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedMaterial, setSelectedMaterial] = useState('');
   const [quantidade, setQuantidade] = useState('');
   const [unidade, setUnidade] = useState('un');
+  const [leadTime, setLeadTime] = useState('7');
 
   const loadBom = async () => {
     setLoading(true);
@@ -32,7 +50,7 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
     ]);
     const mats = matRes.data || [];
     setMateriais(mats);
-    setBomItems((bomRes.data || []).map(b => ({
+    setBomItems((bomRes.data || []).map((b: any) => ({
       ...b,
       material: mats.find(m => m.id === b.material_id),
     })));
@@ -40,6 +58,16 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
   };
 
   useEffect(() => { loadBom(); }, [produtoId]);
+
+  // Auto-fill when material is selected
+  const handleMaterialSelect = (materialId: string) => {
+    setSelectedMaterial(materialId);
+    const mat = materiais.find(m => m.id === materialId);
+    if (mat) {
+      setUnidade(mat.unidade || 'un');
+      setLeadTime(String(mat.lead_time_dias || 7));
+    }
+  };
 
   const handleAdd = async () => {
     if (!selectedMaterial || !quantidade || Number(quantidade) <= 0) {
@@ -56,6 +84,7 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
       material_id: selectedMaterial,
       quantidade_por_unidade: Number(quantidade),
       unidade,
+      lead_time_dias: Number(leadTime) || 7,
     });
     if (error) {
       toast.error(`Erro: ${error.message}`);
@@ -63,6 +92,7 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
       toast.success('Material adicionado à BOM');
       setSelectedMaterial('');
       setQuantidade('');
+      setLeadTime('7');
       await loadBom();
     }
   };
@@ -87,7 +117,16 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
     }
   };
 
-  // Materials not yet in BOM
+  const handleUpdateLeadTime = async (bomId: string, newLt: number) => {
+    if (newLt < 0) return;
+    const { error } = await supabase.from('bom_produto').update({ lead_time_dias: newLt }).eq('id', bomId);
+    if (error) {
+      toast.error(`Erro: ${error.message}`);
+    } else {
+      setBomItems(prev => prev.map(b => b.id === bomId ? { ...b, lead_time_dias: newLt } : b));
+    }
+  };
+
   const availableMateriais = materiais.filter(m => !bomItems.find(b => b.material_id === m.id));
 
   if (loading) return <div className="py-4 text-center text-muted-foreground text-sm">Carregando BOM...</div>;
@@ -101,7 +140,7 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
 
       {/* Add material */}
       <div className="flex flex-col sm:flex-row gap-2 p-3 rounded-lg border border-border/50 bg-secondary/20">
-        <Select value={selectedMaterial} onValueChange={setSelectedMaterial}>
+        <Select value={selectedMaterial} onValueChange={handleMaterialSelect}>
           <SelectTrigger className="flex-1">
             <SelectValue placeholder="Selecione o material..." />
           </SelectTrigger>
@@ -128,6 +167,15 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
           onChange={e => setUnidade(e.target.value)}
           className="w-20"
         />
+        <Input
+          type="number"
+          min="0"
+          placeholder="Lead Time"
+          value={leadTime}
+          onChange={e => setLeadTime(e.target.value)}
+          className="w-24"
+          title="Lead time em dias"
+        />
         <Button onClick={handleAdd} size="sm" className="bg-cip hover:bg-cip/90">
           <Plus className="h-4 w-4 mr-1" /> Adicionar
         </Button>
@@ -144,23 +192,37 @@ export function BOMEditor({ produtoId, produtoNome }: BOMEditorProps) {
                 <div className="flex items-center gap-2">
                   <Package className="h-4 w-4 text-muted-foreground" />
                   <span className="font-medium text-sm">{b.material?.nome || 'N/A'}</span>
+                  <Badge variant="outline" className="text-[10px]">{b.material?.codigo || '-'}</Badge>
                   <Badge variant="outline" className="text-[10px]">{b.material?.categoria || '-'}</Badge>
                 </div>
                 <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
                   <span>Estoque: {Number(b.material?.estoque_atual || 0).toFixed(1)} {b.material?.unidade}</span>
-                  <span>Lead Time: {b.material?.lead_time_dias || 0}d</span>
+                  <span>Lead Time: {b.lead_time_dias}d</span>
                   <span>Fornecedor: {b.material?.fornecedor_nome || 'N/A'}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Input
-                  type="number"
-                  step="0.001"
-                  min="0.001"
-                  value={b.quantidade_por_unidade}
-                  onChange={e => handleUpdateQty(b.id, Number(e.target.value))}
-                  className="w-24 h-8 text-sm"
-                />
+                <div className="flex flex-col items-center">
+                  <span className="text-[9px] text-muted-foreground">Qtd/un</span>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    min="0.001"
+                    value={b.quantidade_por_unidade}
+                    onChange={e => handleUpdateQty(b.id, Number(e.target.value))}
+                    className="w-24 h-8 text-sm"
+                  />
+                </div>
+                <div className="flex flex-col items-center">
+                  <span className="text-[9px] text-muted-foreground">Lead (d)</span>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={b.lead_time_dias}
+                    onChange={e => handleUpdateLeadTime(b.id, Number(e.target.value))}
+                    className="w-20 h-8 text-sm"
+                  />
+                </div>
                 <span className="text-xs text-muted-foreground">{b.unidade}</span>
                 <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleRemove(b.id)}>
                   <Trash2 className="h-4 w-4" />
