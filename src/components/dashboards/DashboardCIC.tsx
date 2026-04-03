@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, ComposedChart, Legend,
 } from 'recharts';
-import { CICEstoqueOperacional } from '@/components/cic/CICEstoqueOperacional';
+import { CICEstoqueMateriais } from '@/components/cic/CICEstoqueMateriais';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -37,7 +37,7 @@ type CICTab = 'dashboard' | 'materiais' | 'estoques' | 'compras' | 'fornecedores
 const menuItems: { id: CICTab; label: string; icon: typeof BarChart2 }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
   { id: 'materiais', label: 'Gestão de Materiais', icon: Package },
-  { id: 'estoques', label: 'Estoque Operacional', icon: Warehouse },
+  { id: 'estoques', label: 'Estoque de Materiais', icon: Warehouse },
   { id: 'compras', label: 'Compras', icon: ShoppingCart },
   { id: 'fornecedores', label: 'Fornecedores', icon: Users },
   { id: 'mrp', label: 'Necessidades (MRP)', icon: ClipboardList },
@@ -93,7 +93,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
     switch (activeTab) {
       case 'dashboard': return renderDashboard();
       case 'materiais': return renderMateriais();
-      case 'estoques': return <CICEstoqueOperacional />;
+      case 'estoques': return <CICEstoqueMateriais />;
       case 'compras': return renderCompras();
       case 'fornecedores': return renderFornecedores();
       case 'mrp': return renderMRP();
