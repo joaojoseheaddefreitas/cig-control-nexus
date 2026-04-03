@@ -3,7 +3,7 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, ComposedChart, Legend,
 } from 'recharts';
-import { CICEstoqueOperacional } from '@/components/cic/CICEstoqueOperacional';
+import { CICEstoqueMateriais } from '@/components/cic/CICEstoqueMateriais';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
