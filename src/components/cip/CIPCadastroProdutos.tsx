@@ -194,89 +194,83 @@ export function CIPCadastroProdutos() {
 
         return (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-background rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto p-6">
+            <div className="bg-background rounded-lg max-w-5xl w-full max-h-[90vh] overflow-y-auto p-6">
               <h2 className="text-xl font-bold mb-4">Editar Produto: {produto.codigo || '-'} - {produto.nome}</h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Dados do Produto */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg">Dados do Produto</h3>
-                  <div>
-                    <label className="text-sm font-medium">Nome</label>
-                    <Input
-                      value={editForm.nome || produto.nome}
-                      onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-medium">Preço Base (R$)</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editForm.preco_base ?? produto.preco_base}
-                        onChange={(e) => setEditForm({ ...editForm, preco_base: parseFloat(e.target.value) || 0 })}
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-sm font-medium">Juros (%)</label>
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={editForm.percentual_juros ?? produto.percentual_juros}
-                        onChange={(e) => setEditForm({ ...editForm, percentual_juros: parseFloat(e.target.value) || 0 })}
-                        className="mt-1"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium">Tempo Unitário (h)</label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      value={editForm.tempo_unitario ?? produto.tempo_unitario}
-                      onChange={(e) => setEditForm({ ...editForm, tempo_unitario: parseFloat(e.target.value) || 0 })}
-                      className="mt-1"
-                    />
-                  </div>
-                  <div className="flex gap-2 pt-4">
-                    <Button onClick={handleSave} className="bg-cip hover:bg-cip/90">Salvar</Button>
-                    <Button variant="outline" onClick={() => setEditingProduto(null)}>Cancelar</Button>
-                  </div>
-                </div>
+              <Tabs defaultValue="dados" className="w-full">
+                <TabsList className="grid w-full grid-cols-3">
+                  <TabsTrigger value="dados">Dados do Produto</TabsTrigger>
+                  <TabsTrigger value="tempos">Tempos por Setor</TabsTrigger>
+                  <TabsTrigger value="bom">Insumos / BOM</TabsTrigger>
+                </TabsList>
 
-                {/* BOM - Materiais Consumidos */}
-                <div className="space-y-4">
-                  <h3 className="font-semibold text-lg flex items-center gap-2">
-                    <Database className="h-5 w-5" />
-                    BOM - Materiais Consumidos
-                  </h3>
-                  {bom.length === 0 ? (
-                    <p className="text-muted-foreground text-sm">Nenhum material cadastrado na BOM para este produto.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {bom.map((b) => (
-                        <div key={b.id} className="p-3 border rounded-lg text-sm">
-                          <div className="flex justify-between items-center">
-                            <span className="font-medium">{b.material?.nome || 'Material não encontrado'}</span>
-                            <Badge variant="outline" className="text-xs">
-                              {b.material?.categoria || '-'}
-                            </Badge>
-                          </div>
-                          <div className="grid grid-cols-2 gap-2 mt-2 text-xs text-muted-foreground">
-                            <div>Consumo: {Number(b.quantidade_por_unidade).toFixed(3)} {b.unidade}</div>
-                            <div>Estoque: {Number(b.material?.estoque_atual || 0).toFixed(2)} {b.material?.unidade}</div>
-                            <div>Lead Time: {b.material?.lead_time_dias || 0} dias</div>
-                            <div>Fornecedor: {b.material?.fornecedor_nome || 'N/A'}</div>
-                          </div>
-                        </div>
-                      ))}
+                <TabsContent value="dados" className="mt-4">
+                  <div className="space-y-4 max-w-md">
+                    <div>
+                      <label className="text-sm font-medium">Nome</label>
+                      <Input
+                        value={editForm.nome || produto.nome}
+                        onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })}
+                        className="mt-1"
+                      />
                     </div>
-                  )}
-                </div>
-              </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium">Preço Base (R$)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editForm.preco_base ?? produto.preco_base}
+                          onChange={(e) => setEditForm({ ...editForm, preco_base: parseFloat(e.target.value) || 0 })}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-sm font-medium">Juros (%)</label>
+                        <Input
+                          type="number"
+                          step="0.01"
+                          value={editForm.percentual_juros ?? produto.percentual_juros}
+                          onChange={(e) => setEditForm({ ...editForm, percentual_juros: parseFloat(e.target.value) || 0 })}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium">Tempo Unitário (h)</label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        value={editForm.tempo_unitario ?? produto.tempo_unitario}
+                        onChange={(e) => setEditForm({ ...editForm, tempo_unitario: parseFloat(e.target.value) || 0 })}
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex gap-2 pt-4">
+                      <Button onClick={handleSave} className="bg-cip hover:bg-cip/90">Salvar</Button>
+                      <Button variant="outline" onClick={() => setEditingProduto(null)}>Cancelar</Button>
+                    </div>
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="tempos" className="mt-4">
+                  <div className="space-y-4">
+                    <h3 className="font-semibold text-lg flex items-center gap-2">
+                      <Clock className="h-5 w-5" />
+                      Tempos por Setor
+                    </h3>
+                    {bom.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">Configuração de tempos setoriais disponível na aba de Setores do CIP.</p>
+                    ) : (
+                      <p className="text-muted-foreground text-sm">Configuração de tempos setoriais disponível na aba de Setores do CIP.</p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="bom" className="mt-4">
+                  <BOMEditor produtoId={produto.id} produtoNome={produto.nome} />
+                </TabsContent>
+              </Tabs>
             </div>
           </div>
         );
