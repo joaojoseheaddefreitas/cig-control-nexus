@@ -75,7 +75,7 @@ export function CIPSetores() {
   const [substituteId, setSubstituteId] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [editDialog, setEditDialog] = useState<SetorComCarga | null>(null);
-  const [editForm, setEditForm] = useState({ nome: '', mao_de_obra: 1, horas_turno: 8.8, eficiencia: 85, maquinas_automaticas: 1 });
+  const [editForm, setEditForm] = useState({ nome: '', mao_de_obra: 1, horas_turno: 8.8, eficiencia: 85, maquinas_automaticas: 1, dias_uteis_mensais: 22, dias_uteis_manual: false });
   const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => { loadSetores(); }, []);
