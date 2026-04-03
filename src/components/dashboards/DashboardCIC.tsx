@@ -37,7 +37,7 @@ type CICTab = 'dashboard' | 'materiais' | 'estoques' | 'compras' | 'fornecedores
 const menuItems: { id: CICTab; label: string; icon: typeof BarChart2 }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2 },
   { id: 'materiais', label: 'Gestão de Materiais', icon: Package },
-  { id: 'estoques', label: 'Estoque Operacional', icon: Warehouse },
+  { id: 'estoques', label: 'Estoque de Materiais', icon: Warehouse },
   { id: 'compras', label: 'Compras', icon: ShoppingCart },
   { id: 'fornecedores', label: 'Fornecedores', icon: Users },
   { id: 'mrp', label: 'Necessidades (MRP)', icon: ClipboardList },
