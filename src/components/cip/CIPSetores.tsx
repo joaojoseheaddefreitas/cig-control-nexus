@@ -434,10 +434,25 @@ export function CIPSetores() {
                 <Input type="number" min={0} max={100} value={editForm.eficiencia} onChange={e => setEditForm({ ...editForm, eficiencia: parseInt(e.target.value) || 0 })} className="mt-1" />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Dias Úteis / Mês</Label>
+                <Input type="number" min={1} max={31} value={editForm.dias_uteis_mensais} onChange={e => setEditForm({ ...editForm, dias_uteis_mensais: parseInt(e.target.value) || 22 })} className="mt-1" disabled={!editForm.dias_uteis_manual} />
+              </div>
+              <div className="flex items-end pb-2">
+                <div className="flex items-center gap-2">
+                  <Switch checked={editForm.dias_uteis_manual} onCheckedChange={checked => setEditForm({ ...editForm, dias_uteis_manual: checked })} />
+                  <Label className="text-xs">Manual</Label>
+                </div>
+              </div>
+            </div>
             <div className="p-3 rounded-lg bg-secondary/30 text-sm">
-              <p className="text-muted-foreground">Horas Disponíveis (mensal):</p>
+              <p className="text-muted-foreground">Capacidade Mensal:</p>
               <p className="text-lg font-bold text-blue-400">
-                {(((editForm.mao_de_obra || 0) + (editForm.maquinas_automaticas || 0)) * (editForm.horas_turno || 0) * ((editForm.eficiencia || 0) / 100) * 22).toFixed(0)}h
+                {(((editForm.mao_de_obra || 0) + (editForm.maquinas_automaticas || 0)) * (editForm.horas_turno || 0) * ((editForm.eficiencia || 0) / 100) * (editForm.dias_uteis_mensais || 22)).toFixed(0)}h
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                ({editForm.mao_de_obra + editForm.maquinas_automaticas} recursos × {editForm.horas_turno}h × {editForm.eficiencia}% × {editForm.dias_uteis_mensais} dias)
               </p>
             </div>
           </div>
