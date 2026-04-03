@@ -110,8 +110,8 @@ export function CIPSetores() {
       const ht = Number(s.horas_turno) || 8.8;
       const eff = Number(s.eficiencia) || 0.85;
       const maq = Number(s.maquinas_automaticas) || 0;
-      // Available = (mao_de_obra + maquinas_automaticas) × horas_turno × eficiencia × 22 (dias úteis/mês)
-      const horasDisponiveis = (mdo + maq) * ht * eff * 22;
+      const diasUteis = Number(s.dias_uteis_mensais) || 22;
+      const horasDisponiveis = (mdo + maq) * ht * eff * diasUteis;
       const cargaPercent = horasDisponiveis > 0 ? Math.min(100, Math.round((horasOcupadas / horasDisponiveis) * 100)) : 0;
 
       return {
