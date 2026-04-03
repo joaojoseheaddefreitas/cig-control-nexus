@@ -182,6 +182,8 @@ export function CIPSetores() {
         horas_turno: editForm.horas_turno,
         eficiencia: editForm.eficiencia / 100,
         maquinas_automaticas: editForm.maquinas_automaticas,
+        dias_uteis_mensais: editForm.dias_uteis_mensais,
+        dias_uteis_manual: editForm.dias_uteis_manual,
       } as any)
       .eq('id', editDialog.id);
     if (error) { toast.error('Erro: ' + error.message); }
