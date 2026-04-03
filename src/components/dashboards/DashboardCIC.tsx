@@ -93,7 +93,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
     switch (activeTab) {
       case 'dashboard': return renderDashboard();
       case 'materiais': return renderMateriais();
-      case 'estoques': return <CICEstoqueOperacional />;
+      case 'estoques': return <CICEstoqueMateriais />;
       case 'compras': return renderCompras();
       case 'fornecedores': return renderFornecedores();
       case 'mrp': return renderMRP();
