@@ -48,6 +48,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          lead_time_dias: number
           material_id: string
           produto_id: string
           quantidade_por_unidade: number
@@ -57,6 +58,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          lead_time_dias?: number
           material_id: string
           produto_id: string
           quantidade_por_unidade?: number
@@ -66,6 +68,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          lead_time_dias?: number
           material_id?: string
           produto_id?: string
           quantidade_por_unidade?: number
@@ -1183,6 +1186,8 @@ export type Database = {
           created_at: string
           descricao: string | null
           id: string
+          lead_time_manual: boolean
+          lead_time_produto: number
           linha: string | null
           modelo: string | null
           nome: string
@@ -1200,6 +1205,8 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          lead_time_manual?: boolean
+          lead_time_produto?: number
           linha?: string | null
           modelo?: string | null
           nome: string
@@ -1217,6 +1224,8 @@ export type Database = {
           created_at?: string
           descricao?: string | null
           id?: string
+          lead_time_manual?: boolean
+          lead_time_produto?: number
           linha?: string | null
           modelo?: string | null
           nome?: string
@@ -1340,6 +1349,8 @@ export type Database = {
         Row: {
           ativo: boolean
           created_at: string
+          dias_uteis_manual: boolean
+          dias_uteis_mensais: number
           eficiencia: number
           horas_turno: number
           id: string
@@ -1351,6 +1362,8 @@ export type Database = {
         Insert: {
           ativo?: boolean
           created_at?: string
+          dias_uteis_manual?: boolean
+          dias_uteis_mensais?: number
           eficiencia?: number
           horas_turno?: number
           id?: string
@@ -1362,6 +1375,8 @@ export type Database = {
         Update: {
           ativo?: boolean
           created_at?: string
+          dias_uteis_manual?: boolean
+          dias_uteis_mensais?: number
           eficiencia?: number
           horas_turno?: number
           id?: string

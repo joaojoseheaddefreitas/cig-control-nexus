@@ -22,6 +22,8 @@ interface SetorDB {
   horas_turno: number;
   eficiencia: number;
   maquinas_automaticas: number;
+  dias_uteis_mensais: number;
+  dias_uteis_manual: boolean;
 }
 
 interface SetorComCarga extends SetorDB {
@@ -73,7 +75,7 @@ export function CIPSetores() {
   const [substituteId, setSubstituteId] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [editDialog, setEditDialog] = useState<SetorComCarga | null>(null);
-  const [editForm, setEditForm] = useState({ nome: '', mao_de_obra: 1, horas_turno: 8.8, eficiencia: 85, maquinas_automaticas: 1 });
+  const [editForm, setEditForm] = useState({ nome: '', mao_de_obra: 1, horas_turno: 8.8, eficiencia: 85, maquinas_automaticas: 1, dias_uteis_mensais: 22, dias_uteis_manual: false });
   const [editSaving, setEditSaving] = useState(false);
 
   useEffect(() => { loadSetores(); }, []);
@@ -108,8 +110,8 @@ export function CIPSetores() {
       const ht = Number(s.horas_turno) || 8.8;
       const eff = Number(s.eficiencia) || 0.85;
       const maq = Number(s.maquinas_automaticas) || 0;
-      // Available = (mao_de_obra + maquinas_automaticas) × horas_turno × eficiencia × 22 (dias úteis/mês)
-      const horasDisponiveis = (mdo + maq) * ht * eff * 22;
+      const diasUteis = Number(s.dias_uteis_mensais) || 22;
+      const horasDisponiveis = (mdo + maq) * ht * eff * diasUteis;
       const cargaPercent = horasDisponiveis > 0 ? Math.min(100, Math.round((horasOcupadas / horasDisponiveis) * 100)) : 0;
 
       return {
@@ -163,6 +165,8 @@ export function CIPSetores() {
       horas_turno: setor.horas_turno,
       eficiencia: Math.round(setor.eficiencia * 100),
       maquinas_automaticas: setor.maquinas_automaticas,
+      dias_uteis_mensais: (setor as any).dias_uteis_mensais || 22,
+      dias_uteis_manual: (setor as any).dias_uteis_manual || false,
     });
   };
 
@@ -178,6 +182,8 @@ export function CIPSetores() {
         horas_turno: editForm.horas_turno,
         eficiencia: editForm.eficiencia / 100,
         maquinas_automaticas: editForm.maquinas_automaticas,
+        dias_uteis_mensais: editForm.dias_uteis_mensais,
+        dias_uteis_manual: editForm.dias_uteis_manual,
       } as any)
       .eq('id', editDialog.id);
     if (error) { toast.error('Erro: ' + error.message); }
@@ -428,10 +434,25 @@ export function CIPSetores() {
                 <Input type="number" min={0} max={100} value={editForm.eficiencia} onChange={e => setEditForm({ ...editForm, eficiencia: parseInt(e.target.value) || 0 })} className="mt-1" />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Dias Úteis / Mês</Label>
+                <Input type="number" min={1} max={31} value={editForm.dias_uteis_mensais} onChange={e => setEditForm({ ...editForm, dias_uteis_mensais: parseInt(e.target.value) || 22 })} className="mt-1" disabled={!editForm.dias_uteis_manual} />
+              </div>
+              <div className="flex items-end pb-2">
+                <div className="flex items-center gap-2">
+                  <Switch checked={editForm.dias_uteis_manual} onCheckedChange={checked => setEditForm({ ...editForm, dias_uteis_manual: checked })} />
+                  <Label className="text-xs">Manual</Label>
+                </div>
+              </div>
+            </div>
             <div className="p-3 rounded-lg bg-secondary/30 text-sm">
-              <p className="text-muted-foreground">Horas Disponíveis (mensal):</p>
+              <p className="text-muted-foreground">Capacidade Mensal:</p>
               <p className="text-lg font-bold text-blue-400">
-                {(((editForm.mao_de_obra || 0) + (editForm.maquinas_automaticas || 0)) * (editForm.horas_turno || 0) * ((editForm.eficiencia || 0) / 100) * 22).toFixed(0)}h
+                {(((editForm.mao_de_obra || 0) + (editForm.maquinas_automaticas || 0)) * (editForm.horas_turno || 0) * ((editForm.eficiencia || 0) / 100) * (editForm.dias_uteis_mensais || 22)).toFixed(0)}h
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                ({editForm.mao_de_obra + editForm.maquinas_automaticas} recursos × {editForm.horas_turno}h × {editForm.eficiencia}% × {editForm.dias_uteis_mensais} dias)
               </p>
             </div>
           </div>
