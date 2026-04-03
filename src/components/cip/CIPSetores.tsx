@@ -165,6 +165,8 @@ export function CIPSetores() {
       horas_turno: setor.horas_turno,
       eficiencia: Math.round(setor.eficiencia * 100),
       maquinas_automaticas: setor.maquinas_automaticas,
+      dias_uteis_mensais: (setor as any).dias_uteis_mensais || 22,
+      dias_uteis_manual: (setor as any).dias_uteis_manual || false,
     });
   };
 
