@@ -22,6 +22,8 @@ interface SetorDB {
   horas_turno: number;
   eficiencia: number;
   maquinas_automaticas: number;
+  dias_uteis_mensais: number;
+  dias_uteis_manual: boolean;
 }
 
 interface SetorComCarga extends SetorDB {
