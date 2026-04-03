@@ -1,33 +1,31 @@
 import { cn } from '@/lib/utils';
-import { Search, Filter, Plus, Edit, Trash2, Eye, Package, Database, Truck, Clock } from 'lucide-react';
+import { Search, Filter, Plus, Edit, Trash2, Eye, Package, Database, Clock } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import type { Tables } from '@/integrations/supabase/types';
+import { toast } from 'sonner';
 import { BOMEditor } from './BOMEditor';
-
-type Produto = Tables<'produtos'>;
-type BomProduto = Tables<'bom_produto'>;
-type Material = Tables<'materiais'>;
-type Fornecedor = Tables<'fornecedores'>;
+import { ConsumoModal } from './ConsumoModal';
 
 const statusConfig = {
   ativo: { label: 'Ativo', color: 'bg-success/20 text-success border-success/30' },
   inativo: { label: 'Inativo', color: 'bg-warning/20 text-warning border-warning/30' },
-  descontinuado: { label: 'Descontinuado', color: 'bg-destructive/20 text-destructive border-destructive/30' },
 };
 
 export function CIPCadastroProdutos() {
   const [search, setSearch] = useState('');
-  const [produtos, setProdutos] = useState<Produto[]>([]);
-  const [bomItems, setBomItems] = useState<(BomProduto & { material?: Material })[]>([]);
-  const [fornecedores, setFornecedores] = useState<Fornecedor[]>([]);
+  const [produtos, setProdutos] = useState<any[]>([]);
+  const [bomItems, setBomItems] = useState<any[]>([]);
+  const [fornecedores, setFornecedores] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingProduto, setEditingProduto] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<Partial<Produto>>({});
+  const [editForm, setEditForm] = useState<any>({});
+  const [consumoModal, setConsumoModal] = useState<{ id: string; nome: string } | null>(null);
 
   useEffect(() => {
     const loadData = async () => {
@@ -42,20 +40,18 @@ export function CIPCadastroProdutos() {
       setProdutos(prodRes.data || []);
       setFornecedores(fornRes.data || []);
 
-      // Enrich BOM with material info
       const materiais = matRes.data || [];
-      const enrichedBom = (bomRes.data || []).map(b => ({
+      const enrichedBom = (bomRes.data || []).map((b: any) => ({
         ...b,
         material: materiais.find(m => m.id === b.material_id),
       }));
       setBomItems(enrichedBom);
-
       setLoading(false);
     };
     loadData();
   }, []);
 
-  const updateProduto = async (produto: Produto) => {
+  const updateProduto = async (produto: any) => {
     const { error } = await supabase
       .from('produtos')
       .update({
@@ -63,11 +59,16 @@ export function CIPCadastroProdutos() {
         preco_base: produto.preco_base,
         percentual_juros: produto.percentual_juros,
         tempo_unitario: produto.tempo_unitario,
+        lead_time_manual: produto.lead_time_manual,
+        lead_time_produto: produto.lead_time_produto,
       })
       .eq('id', produto.id);
     if (!error) {
-      setProdutos(prev => prev.map(p => p.id === produto.id ? produto : p));
+      setProdutos(prev => prev.map(p => p.id === produto.id ? { ...p, ...produto } : p));
       setEditingProduto(null);
+      toast.success('Produto atualizado!');
+    } else {
+      toast.error('Erro: ' + error.message);
     }
   };
 
@@ -78,6 +79,13 @@ export function CIPCadastroProdutos() {
 
   const getBomByProduto = (produtoId: string) => {
     return bomItems.filter(b => b.produto_id === produtoId);
+  };
+
+  // Calculate max lead time from BOM
+  const getMaxLeadTime = (produtoId: string) => {
+    const bom = getBomByProduto(produtoId);
+    if (bom.length === 0) return 0;
+    return Math.max(...bom.map(b => Number(b.lead_time_dias) || Number(b.material?.lead_time_dias) || 0));
   };
 
   if (loading) {
@@ -119,7 +127,8 @@ export function CIPCadastroProdutos() {
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Nome</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Preço Base</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Tempo (h)</th>
-                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Materiais (BOM)</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Lead Time</th>
+                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Consumo</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ações</th>
               </tr>
@@ -127,29 +136,33 @@ export function CIPCadastroProdutos() {
             <tbody>
               {filteredProdutos.map((produto) => {
                 const bom = getBomByProduto(produto.id);
+                const lt = produto.lead_time_manual
+                  ? Number(produto.lead_time_produto || 0)
+                  : getMaxLeadTime(produto.id);
 
                 return (
                   <tr key={produto.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
                     <td className="py-3 px-4 font-medium text-foreground">{produto.codigo || '-'}</td>
                     <td className="py-3 px-4 text-foreground">{produto.nome}</td>
                     <td className="py-3 px-4 text-center">
-                      <span>R$ {Number(produto.preco_base).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      R$ {Number(produto.preco_base).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </td>
                     <td className="py-3 px-4 text-center">{Number(produto.tempo_unitario).toFixed(1)}h</td>
                     <td className="py-3 px-4 text-center">
-                      <div className="flex flex-col items-center gap-1">
-                        {bom.slice(0, 3).map((b) => (
-                          <Badge key={b.id} variant="outline" className="text-xs">
-                            {b.material?.nome || 'Material'}: {Number(b.quantidade_por_unidade).toFixed(3)} {b.unidade}
-                          </Badge>
-                        ))}
-                        {bom.length > 3 && (
-                          <Badge variant="outline" className="text-xs">+{bom.length - 3} mais</Badge>
-                        )}
-                        {bom.length === 0 && (
-                          <span className="text-xs text-muted-foreground">Sem BOM</span>
-                        )}
-                      </div>
+                      <Badge variant="outline" className="text-xs">
+                        {lt}d {produto.lead_time_manual ? '(manual)' : '(auto)'}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-4 text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-cip hover:text-cip/80"
+                        onClick={() => setConsumoModal({ id: produto.id, nome: produto.nome })}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        {bom.length > 0 ? `${bom.length} mat.` : 'Sem BOM'}
+                      </Button>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <Badge className={cn('text-xs', produto.ativo ? statusConfig.ativo.color : statusConfig.inativo.color)}>
@@ -158,15 +171,8 @@ export function CIPCadastroProdutos() {
                     </td>
                     <td className="py-3 px-4">
                       <div className="flex items-center justify-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8"
-                          onClick={() => {
-                            setEditForm(produto);
-                            setEditingProduto(produto.id);
-                          }}
-                        >
+                        <Button variant="ghost" size="icon" className="h-8 w-8"
+                          onClick={() => { setEditForm(produto); setEditingProduto(produto.id); }}>
                           <Edit className="h-4 w-4" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive">
@@ -182,14 +188,24 @@ export function CIPCadastroProdutos() {
         </div>
       </div>
 
-      {/* Modal de Edição de Produto */}
+      {/* Consumo Modal */}
+      {consumoModal && (
+        <ConsumoModal
+          produtoId={consumoModal.id}
+          produtoNome={consumoModal.nome}
+          open={!!consumoModal}
+          onOpenChange={(open) => { if (!open) setConsumoModal(null); }}
+        />
+      )}
+
+      {/* Edit Modal */}
       {editingProduto && (() => {
         const produto = produtos.find(p => p.id === editingProduto);
-        const bom = getBomByProduto(editingProduto);
         if (!produto) return null;
+        const maxLt = getMaxLeadTime(editingProduto);
 
         const handleSave = async () => {
-          await updateProduto({ ...produto, ...editForm } as Produto);
+          await updateProduto({ ...produto, ...editForm });
         };
 
         return (
@@ -207,7 +223,7 @@ export function CIPCadastroProdutos() {
                 <TabsContent value="dados" className="mt-4">
                   <div className="space-y-4 max-w-md">
                     <div>
-                      <label className="text-sm font-medium">Nome</label>
+                      <Label className="text-sm font-medium">Nome</Label>
                       <Input
                         value={editForm.nome || produto.nome}
                         onChange={(e) => setEditForm({ ...editForm, nome: e.target.value })}
@@ -216,7 +232,7 @@ export function CIPCadastroProdutos() {
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="text-sm font-medium">Preço Base (R$)</label>
+                        <Label className="text-sm font-medium">Preço Base (R$)</Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -226,7 +242,7 @@ export function CIPCadastroProdutos() {
                         />
                       </div>
                       <div>
-                        <label className="text-sm font-medium">Juros (%)</label>
+                        <Label className="text-sm font-medium">Juros (%)</Label>
                         <Input
                           type="number"
                           step="0.01"
@@ -237,7 +253,7 @@ export function CIPCadastroProdutos() {
                       </div>
                     </div>
                     <div>
-                      <label className="text-sm font-medium">Tempo Unitário (h)</label>
+                      <Label className="text-sm font-medium">Tempo Unitário (h)</Label>
                       <Input
                         type="number"
                         step="0.1"
@@ -246,6 +262,34 @@ export function CIPCadastroProdutos() {
                         className="mt-1"
                       />
                     </div>
+
+                    {/* Lead Time Control */}
+                    <div className="p-3 rounded-lg border border-border/50 bg-secondary/20 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-sm font-medium">Lead Time do Produto</Label>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground">Manual</span>
+                          <Switch
+                            checked={editForm.lead_time_manual ?? produto.lead_time_manual ?? false}
+                            onCheckedChange={(checked) => setEditForm({ ...editForm, lead_time_manual: checked })}
+                          />
+                        </div>
+                      </div>
+                      {(editForm.lead_time_manual ?? produto.lead_time_manual) ? (
+                        <Input
+                          type="number"
+                          min="0"
+                          value={editForm.lead_time_produto ?? produto.lead_time_produto ?? 0}
+                          onChange={(e) => setEditForm({ ...editForm, lead_time_produto: parseInt(e.target.value) || 0 })}
+                          className="mt-1"
+                        />
+                      ) : (
+                        <p className="text-sm text-muted-foreground">
+                          Automático: <span className="font-bold text-foreground">{maxLt} dias</span> (maior lead time dos materiais)
+                        </p>
+                      )}
+                    </div>
+
                     <div className="flex gap-2 pt-4">
                       <Button onClick={handleSave} className="bg-cip hover:bg-cip/90">Salvar</Button>
                       <Button variant="outline" onClick={() => setEditingProduto(null)}>Cancelar</Button>
@@ -259,11 +303,7 @@ export function CIPCadastroProdutos() {
                       <Clock className="h-5 w-5" />
                       Tempos por Setor
                     </h3>
-                    {bom.length === 0 ? (
-                      <p className="text-muted-foreground text-sm">Configuração de tempos setoriais disponível na aba de Setores do CIP.</p>
-                    ) : (
-                      <p className="text-muted-foreground text-sm">Configuração de tempos setoriais disponível na aba de Setores do CIP.</p>
-                    )}
+                    <p className="text-muted-foreground text-sm">Configuração de tempos setoriais disponível na aba de Setores do CIP.</p>
                   </div>
                 </TabsContent>
 
@@ -307,15 +347,12 @@ export function CIPCadastroProdutos() {
                 </div>
               </div>
               <div className="flex gap-2 mt-3">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="flex-1"
-                  onClick={() => {
-                    setEditForm(produto);
-                    setEditingProduto(produto.id);
-                  }}
-                >
+                <Button variant="outline" size="sm" className="flex-1"
+                  onClick={() => setConsumoModal({ id: produto.id, nome: produto.nome })}>
+                  <Eye className="h-4 w-4 mr-1" /> Consumo
+                </Button>
+                <Button variant="outline" size="sm" className="flex-1"
+                  onClick={() => { setEditForm(produto); setEditingProduto(produto.id); }}>
                   <Edit className="h-4 w-4 mr-1" /> Editar
                 </Button>
               </div>
