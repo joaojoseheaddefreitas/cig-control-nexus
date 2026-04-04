@@ -689,6 +689,7 @@ export function CIPCadastroProdutosCompleto() {
                       })}
                     </div>
                   </div>
+                )}
                 {detailProduct.observacoes && (
                   <div>
                     <p className="text-xs text-muted-foreground">Observações</p>
