@@ -670,6 +670,25 @@ export function CIPCadastroProdutosCompleto() {
                     </div>
                   </div>
                 )}
+                {/* Consumo de materiais */}
+                {detailBom.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">CONSUMO DE MATERIAIS</h4>
+                    <div className="space-y-1">
+                      {detailBom.map((b, i) => {
+                        const sit = getSituacaoEstoque(b);
+                        return (
+                          <div key={i} className="flex justify-between items-center text-sm px-2 py-1 rounded bg-secondary/30">
+                            <span>{b.material_codigo} - {b.material_nome}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs">{b.quantidade_por_unidade} {b.unidade}</span>
+                              <Badge className={cn('text-[10px]', sit.color)}>{sit.label}</Badge>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                 {detailProduct.observacoes && (
                   <div>
                     <p className="text-xs text-muted-foreground">Observações</p>
