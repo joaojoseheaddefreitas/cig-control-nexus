@@ -236,6 +236,21 @@ export function CIPCadastroProdutosCompleto() {
         const { error } = await supabase.from('produto_setor_tempos').insert(rows);
         if (error) { toast.error('Erro ao salvar tempos: ' + error.message); }
       }
+      // Save BOM items
+      await supabase.from('bom_produto').delete().eq('produto_id', produtoId);
+      const bomRows = form.bomItems
+        .filter(b => b.material_id || b.material_nome.trim())
+        .map(b => ({
+          produto_id: produtoId!,
+          material_id: b.material_id,
+          quantidade_por_unidade: b.quantidade_por_unidade,
+          unidade: b.unidade,
+          lead_time_dias: b.lead_time_dias,
+        }));
+      if (bomRows.length > 0) {
+        const { error } = await supabase.from('bom_produto').insert(bomRows);
+        if (error) { toast.error('Erro ao salvar consumo: ' + error.message); }
+      }
     }
 
     toast.success(editingId ? 'Produto atualizado!' : 'Produto cadastrado!');
