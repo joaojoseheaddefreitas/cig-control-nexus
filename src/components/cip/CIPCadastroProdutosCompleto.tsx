@@ -437,6 +437,117 @@ export function CIPCadastroProdutosCompleto() {
                   <p className="text-[10px] text-muted-foreground mt-1">RTC = soma automática dos tempos por setor. Não pode ser editado manualmente.</p>
                 </div>
 
+                {/* CONSUMO DE MATERIAIS */}
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">CONSUMO DE MATERIAIS</h4>
+                  <div className="rounded-lg border border-border/30 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-secondary/50 border-b border-border/30">
+                          <th className="text-left py-2 px-3 font-medium text-muted-foreground">Nome do Material</th>
+                          <th className="text-left py-2 px-3 font-medium text-muted-foreground">Código</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Qtd/Un</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Unidade</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Lead Time</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Situação</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {form.bomItems.map((item, idx) => {
+                          const situacao = getSituacaoEstoque(item);
+                          return (
+                            <tr key={idx} className="border-b border-border/20 hover:bg-secondary/20">
+                              <td className="py-2 px-3">
+                                <Select
+                                  value={item.material_id || '__manual__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__manual__') return;
+                                    const mat = materiais.find(m => m.id === val);
+                                    if (mat) {
+                                      const updated = [...form.bomItems];
+                                      updated[idx] = {
+                                        ...updated[idx],
+                                        material_id: mat.id,
+                                        material_nome: mat.nome,
+                                        material_codigo: mat.codigo,
+                                        unidade: mat.unidade,
+                                        lead_time_dias: mat.lead_time_dias,
+                                        estoque_atual: Number(mat.estoque_atual),
+                                        estoque_minimo: Number(mat.estoque_minimo),
+                                        estoque_maximo: Number(mat.estoque_maximo),
+                                      };
+                                      setForm({ ...form, bomItems: updated });
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 text-xs">
+                                    <SelectValue placeholder="Selecionar material" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {materiais.map(m => (
+                                      <SelectItem key={m.id} value={m.id}>
+                                        {m.codigo} - {m.nome}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="py-2 px-3 font-mono text-muted-foreground">{item.material_codigo || '—'}</td>
+                              <td className="py-2 px-3">
+                                <Input type="number" step="0.01" min="0" className="h-7 text-xs text-center w-20 mx-auto"
+                                  value={item.quantidade_por_unidade || ''}
+                                  onChange={(e) => {
+                                    const updated = [...form.bomItems];
+                                    updated[idx] = { ...updated[idx], quantidade_por_unidade: Number(e.target.value) || 0 };
+                                    setForm({ ...form, bomItems: updated });
+                                  }}
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-center">{item.unidade}</td>
+                              <td className="py-2 px-3">
+                                <Input type="number" min="0" className="h-7 text-xs text-center w-16 mx-auto"
+                                  value={item.lead_time_dias || ''}
+                                  onChange={(e) => {
+                                    const updated = [...form.bomItems];
+                                    updated[idx] = { ...updated[idx], lead_time_dias: Number(e.target.value) || 0 };
+                                    setForm({ ...form, bomItems: updated });
+                                  }}
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <Badge className={cn('text-[10px]', situacao.color)}>{situacao.label}</Badge>
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive"
+                                  onClick={() => {
+                                    const updated = form.bomItems.filter((_, i) => i !== idx);
+                                    setForm({ ...form, bomItems: updated });
+                                  }}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {form.bomItems.length === 0 && (
+                          <tr><td colSpan={7} className="py-4 text-center text-muted-foreground text-xs">Nenhum material adicionado</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Button variant="outline" size="sm" className="mt-2"
+                    onClick={() => setForm({
+                      ...form,
+                      bomItems: [...form.bomItems, {
+                        material_id: '', material_nome: '', material_codigo: '',
+                        quantidade_por_unidade: 1, unidade: 'un', lead_time_dias: 7,
+                      }]
+                    })}>
+                    <Plus className="h-3 w-3 mr-1" /> Adicionar Material
+                  </Button>
+                </div>
+
                 {/* Dados Comerciais */}
                 <div>
                   <h4 className="text-sm font-semibold text-muted-foreground mb-3">DADOS COMERCIAIS</h4>
