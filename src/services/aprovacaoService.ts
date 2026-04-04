@@ -9,6 +9,7 @@ import {
   adicionarHorasCarteira,
   subtrairHorasCarteira,
 } from "./carteiraService";
+import { verificarMateriaisPedido } from "./pedidoBomService";
 
 interface ItemPedido {
   id?: string;
