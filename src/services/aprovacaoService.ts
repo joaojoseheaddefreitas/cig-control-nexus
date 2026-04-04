@@ -324,7 +324,7 @@ export async function aprovarPedido(
         status: "programado",
         status_producao: "programado",
         prazo_entrega: prazoEntregaStr,
-        prazo_calculado_dias: diasProducao,
+        prazo_calculado_dias: prazoTotalDias,
         op: codigoPedido,
         data_aprovacao: new Date().toISOString(),
       } as any)
