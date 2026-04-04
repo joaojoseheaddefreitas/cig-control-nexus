@@ -76,9 +76,26 @@ export async function handleSetorClick(
     }
 
     if (!existing || existing.status === "pendente") {
+      // Material check: only on FIRST sector (production start)
+      if (setorIndex === 0) {
+        const matCheck = await verificarMateriaisOP(opId);
+        if (!matCheck.disponivel) {
+          // Block production, set OP to "aguardando_material"
+          await supabase.from("ops").update({
+            status_producao: "aguardando_material",
+          }).eq("id", opId);
+
+          const faltantes = matCheck.materiais
+            .filter(m => m.deficit > 0)
+            .map(m => `${m.material_nome}: falta ${m.deficit.toFixed(1)} ${m.unidade} (Lead: ${m.lead_time_dias}d)`)
+            .join("; ");
+
+          return { error: `⚠️ Materiais insuficientes — Produção bloqueada.\n${faltantes}` };
+        }
+      }
+
       // First click: register Entrada (or upgrade from pre-created "pendente")
       if (existing) {
-        // Update pre-created entry from approval
         const { error } = await supabase
           .from("setor_rastreamento")
           .update({
@@ -88,7 +105,6 @@ export async function handleSetorClick(
           .eq("id", existing.id);
         if (error) return { error: error.message };
       } else {
-        // Create new entry (shouldn't happen normally, but safe fallback)
         const { error } = await supabase.from("setor_rastreamento").insert({
           op_id: opId,
           setor_id: setorId,
