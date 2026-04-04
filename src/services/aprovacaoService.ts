@@ -60,10 +60,40 @@ export async function aprovarPedido(
       return sum + (isNaN(tempo) ? 0 : tempo);
     }, 0);
 
-    // 3. Calculate deadline: prazo = ceil((carteira + nova_carga) / capacidade_diaria)
+    // 3. Calculate deadline: prazo = ceil((carteira + nova_carga) / capacidade_diaria) + lead time materiais
     const cargaTotal = horasCarteira + cargaNovoPedido;
     const diasProducao = calcularDiasProducao(cargaTotal, config.capacidade_produtiva_diaria);
-    const dataEntrega = calcularDataEntrega(new Date(), diasProducao, config.considerar_sabado);
+
+    // 3b. Get max lead time from BOM materials for all items
+    let maiorLeadTimeMateriais = 0;
+    for (const item of itens) {
+      if (item.produto_nome) {
+        const checkMat = await verificarMateriaisPedido(item.produto_nome, item.quantidade);
+        if (checkMat.maiorLeadTime > maiorLeadTimeMateriais) {
+          maiorLeadTimeMateriais = checkMat.maiorLeadTime;
+        }
+      }
+    }
+
+    // Also check product-level lead_time_produto
+    const produtoNomes = [...new Set(itens.map(i => i.produto_nome))];
+    if (produtoNomes.length > 0) {
+      const { data: produtosLT } = await supabase
+        .from("produtos")
+        .select("nome, lead_time_produto, lead_time_manual")
+        .in("nome", produtoNomes);
+      if (produtosLT) {
+        for (const p of produtosLT) {
+          const lt = Number(p.lead_time_produto) || 0;
+          if (lt > maiorLeadTimeMateriais) {
+            maiorLeadTimeMateriais = lt;
+          }
+        }
+      }
+    }
+
+    const prazoTotalDias = diasProducao + maiorLeadTimeMateriais;
+    const dataEntrega = calcularDataEntrega(new Date(), prazoTotalDias, config.considerar_sabado);
     const prazoEntregaStr = dataEntrega.toISOString().split("T")[0];
 
     // 4. Ensure itens_pedido exist in DB (never send tempo_total)
