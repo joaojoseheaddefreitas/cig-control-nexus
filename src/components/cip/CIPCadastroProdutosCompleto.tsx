@@ -268,10 +268,36 @@ export function CIPCadastroProdutosCompleto() {
     else { toast.success('Produto excluído'); await loadAll(); }
   };
 
+  const getSituacaoEstoque = (item: BomItem): { label: string; color: string } => {
+    if (item.estoque_atual === undefined) return { label: '—', color: 'bg-secondary text-muted-foreground' };
+    const atual = Number(item.estoque_atual);
+    const min = Number(item.estoque_minimo || 0);
+    const max = Number(item.estoque_maximo || 0);
+    if (atual === 0) return { label: 'Falta', color: 'bg-red-500/20 text-red-400' };
+    if (atual <= min) return { label: 'Pouco', color: 'bg-orange-500/20 text-orange-400' };
+    if (max > 0 && atual > max) return { label: 'Elevado', color: 'bg-blue-500/20 text-blue-400' };
+    return { label: 'Normal', color: 'bg-green-500/20 text-green-400' };
+  };
+
   const handleViewDetail = async (p: ProdutoDB) => {
     setDetailProduct(p);
-    const { data } = await supabase.from('produto_setor_tempos').select('setor_id, tempo_horas').eq('produto_id', p.id);
-    setDetailSetorTempos((data || []).map((d: any) => ({ setor_id: d.setor_id, tempo_horas: Number(d.tempo_horas) })));
+    const [{ data: temposData }, { data: bomData }] = await Promise.all([
+      supabase.from('produto_setor_tempos').select('setor_id, tempo_horas').eq('produto_id', p.id),
+      supabase.from('bom_produto').select('id, material_id, quantidade_por_unidade, unidade, lead_time_dias').eq('produto_id', p.id),
+    ]);
+    setDetailSetorTempos((temposData || []).map((d: any) => ({ setor_id: d.setor_id, tempo_horas: Number(d.tempo_horas) })));
+    setDetailBom((bomData || []).map((b: any) => {
+      const mat = materiais.find(m => m.id === b.material_id);
+      return {
+        id: b.id, material_id: b.material_id,
+        material_nome: mat?.nome || '', material_codigo: mat?.codigo || '',
+        quantidade_por_unidade: Number(b.quantidade_por_unidade), unidade: b.unidade,
+        lead_time_dias: b.lead_time_dias,
+        estoque_atual: mat ? Number(mat.estoque_atual) : undefined,
+        estoque_minimo: mat ? Number(mat.estoque_minimo) : undefined,
+        estoque_maximo: mat ? Number(mat.estoque_maximo) : undefined,
+      };
+    }));
   };
 
   return (
