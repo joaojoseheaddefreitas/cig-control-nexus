@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Search, Plus, Edit, Trash2, Eye, Package, 
-  Clock, DollarSign, Layers, Save, X, Loader2
+  Clock, DollarSign, Layers, Save, X, Loader2, AlertCircle
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -46,6 +47,31 @@ interface ProdutoDB {
   created_at: string;
 }
 
+interface BomItem {
+  id?: string;
+  material_id: string;
+  material_nome: string;
+  material_codigo: string;
+  quantidade_por_unidade: number;
+  unidade: string;
+  lead_time_dias: number;
+  // From materiais table (read-only display)
+  estoque_atual?: number;
+  estoque_minimo?: number;
+  estoque_maximo?: number;
+}
+
+interface MaterialDB {
+  id: string;
+  nome: string;
+  codigo: string;
+  unidade: string;
+  lead_time_dias: number;
+  estoque_atual: number;
+  estoque_minimo: number;
+  estoque_maximo: number;
+}
+
 interface ProdutoForm {
   codigo: string;
   modelo: string;
@@ -59,12 +85,13 @@ interface ProdutoForm {
   observacoes: string;
   unidade: string;
   setorTempos: Record<string, number>;
+  bomItems: BomItem[];
 }
 
 const emptyForm = (): ProdutoForm => ({
   codigo: '', modelo: '', linha: '', nome: '', descricao: '', categoria: 'sofa',
   preco_base: '', percentual_juros: 0, ativo: true, observacoes: '', unidade: 'un',
-  setorTempos: {},
+  setorTempos: {}, bomItems: [],
 });
 
 const categoriaConfig: Record<string, { label: string; color: string }> = {
@@ -88,16 +115,21 @@ export function CIPCadastroProdutosCompleto() {
   const [detailProduct, setDetailProduct] = useState<ProdutoDB | null>(null);
   const [detailSetorTempos, setDetailSetorTempos] = useState<SetorTempo[]>([]);
 
+  const [detailBom, setDetailBom] = useState<BomItem[]>([]);
+  const [materiais, setMateriais] = useState<MaterialDB[]>([]);
+
   useEffect(() => { loadAll(); }, []);
 
   const loadAll = async () => {
     setLoading(true);
-    const [prodRes, setorRes] = await Promise.all([
+    const [prodRes, setorRes, matRes] = await Promise.all([
       supabase.from('produtos').select('*').order('created_at', { ascending: false }),
       supabase.from('setores_produtivos').select('id, nome, ordem, eficiencia').eq('ativo', true).order('ordem'),
+      supabase.from('materiais').select('id, nome, codigo, unidade, lead_time_dias, estoque_atual, estoque_minimo, estoque_maximo').eq('ativo', true),
     ]);
     if (prodRes.data) setProdutos(prodRes.data.map((d: any) => ({ ...d, percentual_juros: Number(d.percentual_juros) || 0 })));
     if (setorRes.data) setSetores(setorRes.data.map((s: any) => ({ ...s, eficiencia: Number(s.eficiencia) || 0.85 })));
+    if (matRes.data) setMateriais(matRes.data as any);
     setLoading(false);
   };
 
@@ -121,27 +153,35 @@ export function CIPCadastroProdutosCompleto() {
 
   const handleEdit = async (p: ProdutoDB) => {
     setEditingId(p.id);
-    // Load sector times
-    const { data: temposDB } = await supabase
-      .from('produto_setor_tempos')
-      .select('setor_id, tempo_horas')
-      .eq('produto_id', p.id);
+    const [{ data: temposDB }, { data: bomDB }] = await Promise.all([
+      supabase.from('produto_setor_tempos').select('setor_id, tempo_horas').eq('produto_id', p.id),
+      supabase.from('bom_produto').select('id, material_id, quantidade_por_unidade, unidade, lead_time_dias').eq('produto_id', p.id),
+    ]);
     const temposMap: Record<string, number> = {};
     (temposDB || []).forEach((t: any) => { temposMap[t.setor_id] = Number(t.tempo_horas); });
 
+    const bomItems: BomItem[] = (bomDB || []).map((b: any) => {
+      const mat = materiais.find(m => m.id === b.material_id);
+      return {
+        id: b.id,
+        material_id: b.material_id,
+        material_nome: mat?.nome || '',
+        material_codigo: mat?.codigo || '',
+        quantidade_por_unidade: Number(b.quantidade_por_unidade),
+        unidade: b.unidade,
+        lead_time_dias: b.lead_time_dias,
+        estoque_atual: mat ? Number(mat.estoque_atual) : undefined,
+        estoque_minimo: mat ? Number(mat.estoque_minimo) : undefined,
+        estoque_maximo: mat ? Number(mat.estoque_maximo) : undefined,
+      };
+    });
+
     setForm({
-      codigo: p.codigo || '',
-      modelo: p.modelo || '',
-      linha: p.linha || '',
-      nome: p.nome,
-      descricao: p.descricao || '',
-      categoria: p.categoria,
-      preco_base: Number(p.preco_base),
-      percentual_juros: Number(p.percentual_juros),
-      ativo: p.ativo,
-      observacoes: p.observacoes || '',
-      unidade: p.unidade,
-      setorTempos: temposMap,
+      codigo: p.codigo || '', modelo: p.modelo || '', linha: p.linha || '',
+      nome: p.nome, descricao: p.descricao || '', categoria: p.categoria,
+      preco_base: Number(p.preco_base), percentual_juros: Number(p.percentual_juros),
+      ativo: p.ativo, observacoes: p.observacoes || '', unidade: p.unidade,
+      setorTempos: temposMap, bomItems,
     });
     setActiveTab('novo');
   };
@@ -196,6 +236,21 @@ export function CIPCadastroProdutosCompleto() {
         const { error } = await supabase.from('produto_setor_tempos').insert(rows);
         if (error) { toast.error('Erro ao salvar tempos: ' + error.message); }
       }
+      // Save BOM items
+      await supabase.from('bom_produto').delete().eq('produto_id', produtoId);
+      const bomRows = form.bomItems
+        .filter(b => b.material_id || b.material_nome.trim())
+        .map(b => ({
+          produto_id: produtoId!,
+          material_id: b.material_id,
+          quantidade_por_unidade: b.quantidade_por_unidade,
+          unidade: b.unidade,
+          lead_time_dias: b.lead_time_dias,
+        }));
+      if (bomRows.length > 0) {
+        const { error } = await supabase.from('bom_produto').insert(bomRows);
+        if (error) { toast.error('Erro ao salvar consumo: ' + error.message); }
+      }
     }
 
     toast.success(editingId ? 'Produto atualizado!' : 'Produto cadastrado!');
@@ -213,10 +268,36 @@ export function CIPCadastroProdutosCompleto() {
     else { toast.success('Produto excluído'); await loadAll(); }
   };
 
+  const getSituacaoEstoque = (item: BomItem): { label: string; color: string } => {
+    if (item.estoque_atual === undefined) return { label: '—', color: 'bg-secondary text-muted-foreground' };
+    const atual = Number(item.estoque_atual);
+    const min = Number(item.estoque_minimo || 0);
+    const max = Number(item.estoque_maximo || 0);
+    if (atual === 0) return { label: 'Falta', color: 'bg-red-500/20 text-red-400' };
+    if (atual <= min) return { label: 'Pouco', color: 'bg-orange-500/20 text-orange-400' };
+    if (max > 0 && atual > max) return { label: 'Elevado', color: 'bg-blue-500/20 text-blue-400' };
+    return { label: 'Normal', color: 'bg-green-500/20 text-green-400' };
+  };
+
   const handleViewDetail = async (p: ProdutoDB) => {
     setDetailProduct(p);
-    const { data } = await supabase.from('produto_setor_tempos').select('setor_id, tempo_horas').eq('produto_id', p.id);
-    setDetailSetorTempos((data || []).map((d: any) => ({ setor_id: d.setor_id, tempo_horas: Number(d.tempo_horas) })));
+    const [{ data: temposData }, { data: bomData }] = await Promise.all([
+      supabase.from('produto_setor_tempos').select('setor_id, tempo_horas').eq('produto_id', p.id),
+      supabase.from('bom_produto').select('id, material_id, quantidade_por_unidade, unidade, lead_time_dias').eq('produto_id', p.id),
+    ]);
+    setDetailSetorTempos((temposData || []).map((d: any) => ({ setor_id: d.setor_id, tempo_horas: Number(d.tempo_horas) })));
+    setDetailBom((bomData || []).map((b: any) => {
+      const mat = materiais.find(m => m.id === b.material_id);
+      return {
+        id: b.id, material_id: b.material_id,
+        material_nome: mat?.nome || '', material_codigo: mat?.codigo || '',
+        quantidade_por_unidade: Number(b.quantidade_por_unidade), unidade: b.unidade,
+        lead_time_dias: b.lead_time_dias,
+        estoque_atual: mat ? Number(mat.estoque_atual) : undefined,
+        estoque_minimo: mat ? Number(mat.estoque_minimo) : undefined,
+        estoque_maximo: mat ? Number(mat.estoque_maximo) : undefined,
+      };
+    }));
   };
 
   return (
@@ -382,6 +463,117 @@ export function CIPCadastroProdutosCompleto() {
                   <p className="text-[10px] text-muted-foreground mt-1">RTC = soma automática dos tempos por setor. Não pode ser editado manualmente.</p>
                 </div>
 
+                {/* CONSUMO DE MATERIAIS */}
+                <div>
+                  <h4 className="text-sm font-semibold text-muted-foreground mb-3">CONSUMO DE MATERIAIS</h4>
+                  <div className="rounded-lg border border-border/30 overflow-hidden">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="bg-secondary/50 border-b border-border/30">
+                          <th className="text-left py-2 px-3 font-medium text-muted-foreground">Nome do Material</th>
+                          <th className="text-left py-2 px-3 font-medium text-muted-foreground">Código</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Qtd/Un</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Unidade</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Lead Time</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Situação</th>
+                          <th className="text-center py-2 px-3 font-medium text-muted-foreground">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {form.bomItems.map((item, idx) => {
+                          const situacao = getSituacaoEstoque(item);
+                          return (
+                            <tr key={idx} className="border-b border-border/20 hover:bg-secondary/20">
+                              <td className="py-2 px-3">
+                                <Select
+                                  value={item.material_id || '__manual__'}
+                                  onValueChange={(val) => {
+                                    if (val === '__manual__') return;
+                                    const mat = materiais.find(m => m.id === val);
+                                    if (mat) {
+                                      const updated = [...form.bomItems];
+                                      updated[idx] = {
+                                        ...updated[idx],
+                                        material_id: mat.id,
+                                        material_nome: mat.nome,
+                                        material_codigo: mat.codigo,
+                                        unidade: mat.unidade,
+                                        lead_time_dias: mat.lead_time_dias,
+                                        estoque_atual: Number(mat.estoque_atual),
+                                        estoque_minimo: Number(mat.estoque_minimo),
+                                        estoque_maximo: Number(mat.estoque_maximo),
+                                      };
+                                      setForm({ ...form, bomItems: updated });
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="h-7 text-xs">
+                                    <SelectValue placeholder="Selecionar material" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {materiais.map(m => (
+                                      <SelectItem key={m.id} value={m.id}>
+                                        {m.codigo} - {m.nome}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </td>
+                              <td className="py-2 px-3 font-mono text-muted-foreground">{item.material_codigo || '—'}</td>
+                              <td className="py-2 px-3">
+                                <Input type="number" step="0.01" min="0" className="h-7 text-xs text-center w-20 mx-auto"
+                                  value={item.quantidade_por_unidade || ''}
+                                  onChange={(e) => {
+                                    const updated = [...form.bomItems];
+                                    updated[idx] = { ...updated[idx], quantidade_por_unidade: Number(e.target.value) || 0 };
+                                    setForm({ ...form, bomItems: updated });
+                                  }}
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-center">{item.unidade}</td>
+                              <td className="py-2 px-3">
+                                <Input type="number" min="0" className="h-7 text-xs text-center w-16 mx-auto"
+                                  value={item.lead_time_dias || ''}
+                                  onChange={(e) => {
+                                    const updated = [...form.bomItems];
+                                    updated[idx] = { ...updated[idx], lead_time_dias: Number(e.target.value) || 0 };
+                                    setForm({ ...form, bomItems: updated });
+                                  }}
+                                />
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <Badge className={cn('text-[10px]', situacao.color)}>{situacao.label}</Badge>
+                              </td>
+                              <td className="py-2 px-3 text-center">
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive"
+                                  onClick={() => {
+                                    const updated = form.bomItems.filter((_, i) => i !== idx);
+                                    setForm({ ...form, bomItems: updated });
+                                  }}>
+                                  <Trash2 className="h-3 w-3" />
+                                </Button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {form.bomItems.length === 0 && (
+                          <tr><td colSpan={7} className="py-4 text-center text-muted-foreground text-xs">Nenhum material adicionado</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Button variant="outline" size="sm" className="mt-2"
+                    onClick={() => setForm({
+                      ...form,
+                      bomItems: [...form.bomItems, {
+                        material_id: '', material_nome: '', material_codigo: '',
+                        quantidade_por_unidade: 1, unidade: 'un', lead_time_dias: 7,
+                      }]
+                    })}>
+                    <Plus className="h-3 w-3 mr-1" /> Adicionar Material
+                  </Button>
+                </div>
+
                 {/* Dados Comerciais */}
                 <div>
                   <h4 className="text-sm font-semibold text-muted-foreground mb-3">DADOS COMERCIAIS</h4>
@@ -472,6 +664,26 @@ export function CIPCadastroProdutosCompleto() {
                           <div key={s.id} className="flex justify-between text-sm px-2 py-1 rounded bg-secondary/30">
                             <span>{s.nome}</span>
                             <span className="font-mono font-bold">{t.tempo_horas.toFixed(2)}h</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {/* Consumo de materiais */}
+                {detailBom.length > 0 && (
+                  <div>
+                    <h4 className="text-xs font-semibold text-muted-foreground mb-2">CONSUMO DE MATERIAIS</h4>
+                    <div className="space-y-1">
+                      {detailBom.map((b, i) => {
+                        const sit = getSituacaoEstoque(b);
+                        return (
+                          <div key={i} className="flex justify-between items-center text-sm px-2 py-1 rounded bg-secondary/30">
+                            <span>{b.material_codigo} - {b.material_nome}</span>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono text-xs">{b.quantidade_por_unidade} {b.unidade}</span>
+                              <Badge className={cn('text-[10px]', sit.color)}>{sit.label}</Badge>
+                            </div>
                           </div>
                         );
                       })}
