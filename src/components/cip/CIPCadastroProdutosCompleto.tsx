@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Search, Plus, Edit, Trash2, Eye, Package, 
-  Clock, DollarSign, Layers, Save, X, Loader2
+  Clock, DollarSign, Layers, Save, X, Loader2, AlertCircle
 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
