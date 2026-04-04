@@ -115,16 +115,21 @@ export function CIPCadastroProdutosCompleto() {
   const [detailProduct, setDetailProduct] = useState<ProdutoDB | null>(null);
   const [detailSetorTempos, setDetailSetorTempos] = useState<SetorTempo[]>([]);
 
+  const [detailBom, setDetailBom] = useState<BomItem[]>([]);
+  const [materiais, setMateriais] = useState<MaterialDB[]>([]);
+
   useEffect(() => { loadAll(); }, []);
 
   const loadAll = async () => {
     setLoading(true);
-    const [prodRes, setorRes] = await Promise.all([
+    const [prodRes, setorRes, matRes] = await Promise.all([
       supabase.from('produtos').select('*').order('created_at', { ascending: false }),
       supabase.from('setores_produtivos').select('id, nome, ordem, eficiencia').eq('ativo', true).order('ordem'),
+      supabase.from('materiais').select('id, nome, codigo, unidade, lead_time_dias, estoque_atual, estoque_minimo, estoque_maximo').eq('ativo', true),
     ]);
     if (prodRes.data) setProdutos(prodRes.data.map((d: any) => ({ ...d, percentual_juros: Number(d.percentual_juros) || 0 })));
     if (setorRes.data) setSetores(setorRes.data.map((s: any) => ({ ...s, eficiencia: Number(s.eficiencia) || 0.85 })));
+    if (matRes.data) setMateriais(matRes.data as any);
     setLoading(false);
   };
 
