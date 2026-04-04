@@ -153,27 +153,35 @@ export function CIPCadastroProdutosCompleto() {
 
   const handleEdit = async (p: ProdutoDB) => {
     setEditingId(p.id);
-    // Load sector times
-    const { data: temposDB } = await supabase
-      .from('produto_setor_tempos')
-      .select('setor_id, tempo_horas')
-      .eq('produto_id', p.id);
+    const [{ data: temposDB }, { data: bomDB }] = await Promise.all([
+      supabase.from('produto_setor_tempos').select('setor_id, tempo_horas').eq('produto_id', p.id),
+      supabase.from('bom_produto').select('id, material_id, quantidade_por_unidade, unidade, lead_time_dias').eq('produto_id', p.id),
+    ]);
     const temposMap: Record<string, number> = {};
     (temposDB || []).forEach((t: any) => { temposMap[t.setor_id] = Number(t.tempo_horas); });
 
+    const bomItems: BomItem[] = (bomDB || []).map((b: any) => {
+      const mat = materiais.find(m => m.id === b.material_id);
+      return {
+        id: b.id,
+        material_id: b.material_id,
+        material_nome: mat?.nome || '',
+        material_codigo: mat?.codigo || '',
+        quantidade_por_unidade: Number(b.quantidade_por_unidade),
+        unidade: b.unidade,
+        lead_time_dias: b.lead_time_dias,
+        estoque_atual: mat ? Number(mat.estoque_atual) : undefined,
+        estoque_minimo: mat ? Number(mat.estoque_minimo) : undefined,
+        estoque_maximo: mat ? Number(mat.estoque_maximo) : undefined,
+      };
+    });
+
     setForm({
-      codigo: p.codigo || '',
-      modelo: p.modelo || '',
-      linha: p.linha || '',
-      nome: p.nome,
-      descricao: p.descricao || '',
-      categoria: p.categoria,
-      preco_base: Number(p.preco_base),
-      percentual_juros: Number(p.percentual_juros),
-      ativo: p.ativo,
-      observacoes: p.observacoes || '',
-      unidade: p.unidade,
-      setorTempos: temposMap,
+      codigo: p.codigo || '', modelo: p.modelo || '', linha: p.linha || '',
+      nome: p.nome, descricao: p.descricao || '', categoria: p.categoria,
+      preco_base: Number(p.preco_base), percentual_juros: Number(p.percentual_juros),
+      ativo: p.ativo, observacoes: p.observacoes || '', unidade: p.unidade,
+      setorTempos: temposMap, bomItems,
     });
     setActiveTab('novo');
   };
