@@ -47,6 +47,31 @@ interface ProdutoDB {
   created_at: string;
 }
 
+interface BomItem {
+  id?: string;
+  material_id: string;
+  material_nome: string;
+  material_codigo: string;
+  quantidade_por_unidade: number;
+  unidade: string;
+  lead_time_dias: number;
+  // From materiais table (read-only display)
+  estoque_atual?: number;
+  estoque_minimo?: number;
+  estoque_maximo?: number;
+}
+
+interface MaterialDB {
+  id: string;
+  nome: string;
+  codigo: string;
+  unidade: string;
+  lead_time_dias: number;
+  estoque_atual: number;
+  estoque_minimo: number;
+  estoque_maximo: number;
+}
+
 interface ProdutoForm {
   codigo: string;
   modelo: string;
@@ -60,12 +85,13 @@ interface ProdutoForm {
   observacoes: string;
   unidade: string;
   setorTempos: Record<string, number>;
+  bomItems: BomItem[];
 }
 
 const emptyForm = (): ProdutoForm => ({
   codigo: '', modelo: '', linha: '', nome: '', descricao: '', categoria: 'sofa',
   preco_base: '', percentual_juros: 0, ativo: true, observacoes: '', unidade: 'un',
-  setorTempos: {},
+  setorTempos: {}, bomItems: [],
 });
 
 const categoriaConfig: Record<string, { label: string; color: string }> = {
