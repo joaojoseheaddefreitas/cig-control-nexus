@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import { verificarFechamentoPedido } from "./aprovacaoService";
 import { atualizarStatusCarga } from "./cargaService";
+import { verificarMateriaisOP } from "./materialCheckService";
 
 export interface SetorProdutivo {
   id: string;
