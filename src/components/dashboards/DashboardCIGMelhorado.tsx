@@ -70,7 +70,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes, materiais, cifData, routeStepsRes] = await Promise.all([
+      const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes, materiais, cifData, routeStepsRes, capFabrica] = await Promise.all([
         supabase.from('pedidos').select('id, status, status_producao, valor_total, canal').order('created_at', { ascending: false }),
         supabase.from('ops').select('id, status_producao, current_sector, tempo_total').neq('status_producao', 'cancelado'),
         supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle(),
@@ -79,6 +79,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         fetchMateriais(),
         fetchCIFData(),
         supabase.from('op_route_steps').select('op_id, setor_id, tempo_estimado'),
+        calcularCapacidadeFabrica(),
       ]);
 
       const pedidos = pedidosRes.data || [];
