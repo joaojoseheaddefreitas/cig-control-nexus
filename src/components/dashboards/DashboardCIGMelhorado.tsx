@@ -185,8 +185,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   };
 
   const temDados = kpis.totalPedidos > 0;
-  const diasCarteira = kpis.capacidadeDiaria > 0 ? Math.ceil(kpis.horasCarteira / kpis.capacidadeDiaria) : 0;
-  const cargaPercentual = kpis.capacidadeDiaria > 0 ? Math.round((kpis.horasCarteira / (kpis.capacidadeDiaria * 22)) * 100) : 0;
+  const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
+  const cargaPercentual = capacidade ? capacidade.percentualOcupacao : 0;
   const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : `R$ ${(v / 1000).toFixed(0)}k`;
 
   return (
