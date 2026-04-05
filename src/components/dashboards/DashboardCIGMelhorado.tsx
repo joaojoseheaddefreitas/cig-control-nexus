@@ -291,8 +291,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <span className="text-xs text-muted-foreground">HORAS</span>
           </div>
           <p className="text-3xl font-bold text-foreground">{kpis.horasCarteira.toFixed(0)}h</p>
-          <p className="text-xs text-muted-foreground mt-1">Carteira Acumulada</p>
-          <p className="text-xs text-warning mt-1">≈ {diasCarteira} dias úteis</p>
+          <p className="text-xs text-muted-foreground mt-1">Horas Necessárias</p>
+          <p className="text-xs text-warning mt-1">≈ {diasCarteira} dias | Cap: {capacidade?.capacidadeFabrica.toFixed(0) || 0}h</p>
         </div>
 
         <div className="p-4 rounded-xl bg-gradient-to-br from-cic/20 to-cic/5 border border-cic/30">
