@@ -1,101 +1,136 @@
+import { useState, useEffect } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
-  LineChart, Line, ComposedChart, Area, Legend,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend,
 } from 'recharts';
-import { cipKPIs, setoresProducao, capacidadeDiaria, FOLGA_PRODUCAO, calcularDiasEquivalentes } from '@/data/cipData';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { Badge } from '@/components/ui/badge';
-import { Clock, Activity, Calendar, TrendingUp, AlertTriangle, CheckCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Clock, Activity, Calendar, TrendingUp, AlertTriangle, CheckCircle, Factory, RefreshCw, Loader2 } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { calcularCapacidadeFabrica, type CapacidadeFabrica } from '@/services/capacidadeIndustrialService';
 
 export function CIPCapacidade() {
-  const capacidadeLiquida = cipKPIs.capacidadeTotal * (1 - FOLGA_PRODUCAO);
-  const horasDisponiveis = capacidadeLiquida - cipKPIs.capacidadeUtilizada;
-  const diasDisponiveis = calcularDiasEquivalentes(horasDisponiveis);
-  
-  const chartCapacidadeDia = capacidadeDiaria.map(d => ({
-    dia: new Date(d.data).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit' }),
-    programado: d.horasProgramadas,
-    disponivel: d.horasDisponiveis * (1 - FOLGA_PRODUCAO),
-    ocupacao: d.ocupacaoPercentual,
-    status: d.status,
-  }));
+  const [data, setData] = useState<CapacidadeFabrica | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const chartCapacidadeSetor = setoresProducao
-    .filter(s => s.lotacao > 0)
-    .slice(0, 10)
+  const loadData = async () => {
+    setLoading(true);
+    const result = await calcularCapacidadeFabrica();
+    setData(result);
+    setLoading(false);
+  };
+
+  useEffect(() => { loadData(); }, []);
+
+  if (loading || !data) {
+    return (
+      <div className="flex items-center justify-center h-64 gap-2 text-muted-foreground">
+        <Loader2 className="h-6 w-6 animate-spin" /> Calculando capacidade...
+      </div>
+    );
+  }
+
+  const chartSetores = data.setores
+    .filter(s => s.horas_disponiveis_mensal > 0)
+    .sort((a, b) => a.horas_disponiveis_mensal - b.horas_disponiveis_mensal)
     .map(s => ({
-      setor: s.nome.substring(0, 10),
-      disponivel: s.horasDisponiveis * (1 - FOLGA_PRODUCAO),
-      utilizado: s.horasUtilizadas,
-      livre: Math.max(0, (s.horasDisponiveis * (1 - FOLGA_PRODUCAO)) - s.horasUtilizadas),
+      setor: s.nome.substring(0, 14),
+      disponivel: Number(s.horas_disponiveis_mensal.toFixed(1)),
+      ocupado: Number(s.horas_ocupadas.toFixed(1)),
+      livre: Number(Math.max(0, s.horas_disponiveis_mensal - s.horas_ocupadas).toFixed(1)),
+      carga: s.carga_percent,
     }));
+
+  const statusOcupacao = data.percentualOcupacao >= 85 ? 'vermelho' : data.percentualOcupacao >= 60 ? 'amarelo' : 'verde';
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Painel Principal de Capacidade */}
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Factory className="h-6 w-6 text-cip" />
+          <div>
+            <h2 className="text-2xl font-bold text-foreground">Capacidade Produtiva</h2>
+            <p className="text-sm text-muted-foreground">Dados reais do banco — Setor gargalo define a capacidade</p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={loadData} disabled={loading}>
+          <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} /> Atualizar
+        </Button>
+      </div>
+
+      {/* Painel Principal */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="col-span-2 p-6 bg-card/50 border border-border/50 rounded-lg">
-          <h3 className="text-lg font-bold text-foreground mb-4">Visão Geral de Capacidade</h3>
-          <div className="grid grid-cols-3 gap-6">
+          <h3 className="text-lg font-bold text-foreground mb-4">Visão Geral — Gargalo: {data.setorGargalo}</h3>
+          <div className="grid grid-cols-3 gap-4">
             <div className="text-center p-4 bg-secondary/30 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-1">CAPACIDADE BRUTA</p>
-              <p className="text-3xl font-bold text-foreground">{cipKPIs.capacidadeTotal.toFixed(0)}h</p>
-              <p className="text-sm text-muted-foreground">{calcularDiasEquivalentes(cipKPIs.capacidadeTotal)} dias</p>
+              <p className="text-xs text-muted-foreground mb-1">CAPACIDADE FÁBRICA</p>
+              <p className="text-3xl font-bold text-foreground">{data.capacidadeFabrica.toFixed(0)}h</p>
+              <p className="text-sm text-muted-foreground">Mensal (gargalo)</p>
             </div>
             <div className="text-center p-4 bg-cip/10 border border-cip/30 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-1">CAPACIDADE LÍQUIDA</p>
-              <p className="text-3xl font-bold text-cip">{capacidadeLiquida.toFixed(0)}h</p>
-              <p className="text-sm text-cip">(-{(FOLGA_PRODUCAO * 100).toFixed(0)}% folga)</p>
+              <p className="text-xs text-muted-foreground mb-1">HORAS NECESSÁRIAS</p>
+              <p className="text-3xl font-bold text-cip">{data.horasNecessarias.toFixed(0)}h</p>
+              <p className="text-sm text-cip">Carteira aberta</p>
             </div>
-            <div className="text-center p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-1">DISPONÍVEL</p>
-              <p className="text-3xl font-bold text-green-500">{horasDisponiveis.toFixed(0)}h</p>
-              <p className="text-sm text-green-500">{diasDisponiveis} dias livres</p>
+            <div className={cn("text-center p-4 rounded-lg border",
+              data.saldoHoras >= 0 ? "bg-success/10 border-success/30" : "bg-destructive/10 border-destructive/30"
+            )}>
+              <p className="text-xs text-muted-foreground mb-1">SALDO</p>
+              <p className={cn("text-3xl font-bold", data.saldoHoras >= 0 ? "text-success" : "text-destructive")}>
+                {data.saldoHoras.toFixed(0)}h
+              </p>
+              <p className={cn("text-sm", data.saldoHoras >= 0 ? "text-success" : "text-destructive")}>
+                {data.saldoHoras >= 0 ? 'Folga' : 'Déficit'}
+              </p>
             </div>
           </div>
-          
-          {/* Barra de Progresso */}
+
+          {/* Progress bar */}
           <div className="mt-6">
             <div className="flex justify-between text-sm mb-2">
-              <span className="text-muted-foreground">Utilização atual</span>
-              <span className="font-semibold text-foreground">{cipKPIs.ocupacaoPercentual}%</span>
+              <span className="text-muted-foreground">Ocupação da Fábrica</span>
+              <span className={cn("font-semibold",
+                statusOcupacao === 'vermelho' ? 'text-destructive' :
+                statusOcupacao === 'amarelo' ? 'text-warning' : 'text-success'
+              )}>{data.percentualOcupacao}%</span>
             </div>
-            <div className="h-6 bg-secondary rounded-full overflow-hidden flex">
-              <div 
-                className="h-full bg-cip transition-all"
-                style={{ width: `${cipKPIs.ocupacaoPercentual}%` }}
-              />
-              <div 
-                className="h-full bg-cip/30"
-                style={{ width: `${FOLGA_PRODUCAO * 100}%` }}
-              />
+            <div className="h-6 bg-secondary rounded-full overflow-hidden">
+              <div className={cn("h-full transition-all rounded-full",
+                statusOcupacao === 'vermelho' ? 'bg-destructive' :
+                statusOcupacao === 'amarelo' ? 'bg-warning' : 'bg-cip'
+              )} style={{ width: `${Math.min(data.percentualOcupacao, 100)}%` }} />
             </div>
             <div className="flex justify-between text-xs mt-1 text-muted-foreground">
-              <span>Utilizado: {cipKPIs.capacidadeUtilizada.toFixed(0)}h</span>
-              <span>Folga: {(cipKPIs.capacidadeTotal * FOLGA_PRODUCAO).toFixed(0)}h</span>
-              <span>Livre: {horasDisponiveis.toFixed(0)}h</span>
+              <span>Necessário: {data.horasNecessarias.toFixed(0)}h</span>
+              <span>Capacidade: {data.capacidadeFabrica.toFixed(0)}h</span>
             </div>
           </div>
         </div>
 
-        {/* Indicadores Rápidos */}
+        {/* Side indicators */}
         <div className="space-y-4">
-          <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+          <div className={cn("p-4 rounded-lg border",
+            data.saldoHoras >= 0 ? "bg-success/10 border-success/30" : "bg-destructive/10 border-destructive/30"
+          )}>
             <div className="flex items-center gap-3">
-              <CheckCircle className="h-8 w-8 text-green-500" />
+              {data.saldoHoras >= 0 ? <CheckCircle className="h-8 w-8 text-success" /> : <AlertTriangle className="h-8 w-8 text-destructive" />}
               <div>
-                <p className="text-sm text-muted-foreground">Aceita novos pedidos</p>
-                <p className="text-xl font-bold text-green-500">{diasDisponiveis} dias</p>
+                <p className="text-sm text-muted-foreground">{data.saldoHoras >= 0 ? 'Aceita novos pedidos' : 'Capacidade excedida'}</p>
+                <p className={cn("text-xl font-bold", data.saldoHoras >= 0 ? "text-success" : "text-destructive")}>
+                  {Math.abs(data.saldoHoras).toFixed(0)}h {data.saldoHoras >= 0 ? 'livres' : 'excedentes'}
+                </p>
               </div>
             </div>
           </div>
-          <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+          <div className="p-4 bg-warning/10 border border-warning/30 rounded-lg">
             <div className="flex items-center gap-3">
-              <AlertTriangle className="h-8 w-8 text-amber-500" />
+              <AlertTriangle className="h-8 w-8 text-warning" />
               <div>
-                <p className="text-sm text-muted-foreground">Próximo gargalo em</p>
-                <p className="text-xl font-bold text-amber-500">2 dias</p>
+                <p className="text-sm text-muted-foreground">Gargalo</p>
+                <p className="text-lg font-bold text-warning">{data.setorGargalo}</p>
               </div>
             </div>
           </div>
@@ -103,8 +138,9 @@ export function CIPCapacidade() {
             <div className="flex items-center gap-3">
               <Calendar className="h-8 w-8 text-muted-foreground" />
               <div>
-                <p className="text-sm text-muted-foreground">Dias programados</p>
-                <p className="text-xl font-bold text-foreground">{cipKPIs.diasProgramados}</p>
+                <p className="text-sm text-muted-foreground">Dias Necessários</p>
+                <p className="text-xl font-bold text-foreground">{data.diasNecessarios} dias</p>
+                <p className="text-xs text-muted-foreground">{data.capacidadeDiaria.toFixed(1)}h/dia</p>
               </div>
             </div>
           </div>
@@ -112,123 +148,84 @@ export function CIPCapacidade() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KPICard
-          title="Horas/Dia"
-          value={`${cipKPIs.horasParaDias}h`}
-          subtitle="Conversão padrão"
-          icon={<Clock className="h-5 w-5" />}
-          variant="cip"
-        />
-        <KPICard
-          title="Turnos Ativos"
-          value={cipKPIs.turnosAtivos}
-          subtitle="Em operação"
-          icon={<Activity className="h-5 w-5" />}
-          variant="cip"
-        />
-        <KPICard
-          title="Eficiência"
-          value={`${cipKPIs.eficienciaMedia}%`}
-          subtitle="Média geral"
-          icon={<TrendingUp className="h-5 w-5" />}
-          trend="up"
-          trendValue="+2%"
-          variant="cip"
-        />
-        <KPICard
-          title="Folga Fixa"
-          value={`${(FOLGA_PRODUCAO * 100).toFixed(0)}%`}
-          subtitle="Não editável"
-          icon={<AlertTriangle className="h-5 w-5" />}
-          variant="cip"
-        />
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <KPICard title="Horas Necessárias" value={`${data.horasNecessarias.toFixed(0)}h`} subtitle="Carteira aberta" icon={<Clock className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Horas Disponíveis" value={`${data.capacidadeFabrica.toFixed(0)}h`} subtitle={`Gargalo: ${data.setorGargalo}`} icon={<Activity className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Saldo" value={`${data.saldoHoras.toFixed(0)}h`} subtitle={data.saldoHoras >= 0 ? 'Folga' : 'Déficit'} icon={<TrendingUp className="h-5 w-5" />} variant="cip" trend={data.saldoHoras >= 0 ? 'up' : 'down'} trendValue={data.saldoHoras >= 0 ? 'OK' : 'Crítico'} />
+        <KPICard title="Ocupação" value={`${data.percentualOcupacao}%`} subtitle="% da capacidade" icon={<Factory className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Dias Necessários" value={`${data.diasNecessarios}d`} subtitle={`${data.diasUteis} dias úteis/mês`} icon={<Calendar className="h-5 w-5" />} variant="cip" />
       </div>
 
-      {/* Charts */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Capacidade por Dia */}
-        <ModuleCard title="Capacidade vs Programado por Dia" variant="cip">
-          <div className="h-72">
+      {/* Chart: Capacity by Sector */}
+      <ModuleCard title="Capacidade por Setor — Menor = Gargalo" variant="cip">
+        <div className="h-80">
+          {chartSetores.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={chartCapacidadeDia}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                <XAxis dataKey="dia" tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: '8px' }} />
+              <BarChart data={chartSetores} layout="vertical">
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={true} vertical={false} />
+                <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
+                <YAxis type="category" dataKey="setor" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} width={110} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`${value}h`, '']} />
                 <Legend />
-                <Bar dataKey="programado" fill="#f97316" name="Programado" radius={[4, 4, 0, 0]} />
-                <Line type="monotone" dataKey="disponivel" stroke="#22c55e" strokeWidth={2} name="Cap. Líquida" dot={{ fill: '#22c55e' }} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-
-        {/* Capacidade por Setor */}
-        <ModuleCard title="Utilização por Setor (horas)" variant="cip">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartCapacidadeSetor} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="#333" horizontal={true} vertical={false} />
-                <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} axisLine={{ stroke: '#333' }} />
-                <YAxis type="category" dataKey="setor" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={{ stroke: '#333' }} width={80} />
-                <Tooltip contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: '8px' }} />
-                <Legend />
-                <Bar dataKey="utilizado" stackId="a" fill="#f97316" name="Utilizado" />
-                <Bar dataKey="livre" stackId="a" fill="#22c55e" name="Livre" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="ocupado" stackId="a" fill="hsl(var(--warning))" name="Ocupado" />
+                <Bar dataKey="livre" stackId="a" fill="hsl(var(--success))" name="Livre" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-      </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
+              Sem dados cadastrados – insira setores para iniciar o monitoramento.
+            </div>
+          )}
+        </div>
+      </ModuleCard>
 
-      {/* Tabela de Capacidade Diária */}
-      <ModuleCard title="Capacidade Programada por Dia" variant="cip">
+      {/* Tabela detalhada */}
+      <ModuleCard title="Detalhamento por Setor" variant="cip">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-border/50">
-                <th className="text-left py-3 px-4 text-muted-foreground font-medium">Data</th>
-                <th className="text-right py-3 px-4 text-muted-foreground font-medium">H. Disponíveis</th>
-                <th className="text-right py-3 px-4 text-muted-foreground font-medium">H. Programadas</th>
-                <th className="text-right py-3 px-4 text-muted-foreground font-medium">H. Realizadas</th>
-                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ocupação (%)</th>
-                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Folga (%)</th>
-                <th className="text-right py-3 px-4 text-muted-foreground font-medium">Dias Equiv.</th>
-                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
+              <tr className="border-b border-border/50 bg-secondary/30">
+                <th className="text-left py-3 px-3 text-xs text-muted-foreground">Setor</th>
+                <th className="text-center py-3 px-2 text-xs text-muted-foreground">Equipe</th>
+                <th className="text-center py-3 px-2 text-xs text-muted-foreground">Máq.</th>
+                <th className="text-center py-3 px-2 text-xs text-muted-foreground">H/Dia</th>
+                <th className="text-center py-3 px-2 text-xs text-muted-foreground">Efic.</th>
+                <th className="text-center py-3 px-2 text-xs text-muted-foreground">Dias Úteis</th>
+                <th className="text-right py-3 px-2 text-xs text-muted-foreground">Cap. Mensal</th>
+                <th className="text-right py-3 px-2 text-xs text-muted-foreground">Ocupado</th>
+                <th className="text-center py-3 px-2 text-xs text-muted-foreground">Carga</th>
+                <th className="text-center py-3 px-2 text-xs text-muted-foreground">Status</th>
               </tr>
             </thead>
             <tbody>
-              {capacidadeDiaria.map((dia, index) => (
-                <tr key={index} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
-                  <td className="py-3 px-4 font-medium text-foreground">
-                    {new Date(dia.data).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })}
-                  </td>
-                  <td className="py-3 px-4 text-right text-foreground">{dia.horasDisponiveis.toFixed(1)}h</td>
-                  <td className="py-3 px-4 text-right text-cip font-semibold">{dia.horasProgramadas.toFixed(1)}h</td>
-                  <td className="py-3 px-4 text-right text-muted-foreground">{dia.horasRealizadas.toFixed(1)}h</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`font-bold ${
-                      dia.status === 'verde' ? 'text-green-500' :
-                      dia.status === 'amarelo' ? 'text-amber-500' :
-                      'text-red-500'
-                    }`}>
-                      {dia.ocupacaoPercentual}%
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-center text-muted-foreground">{dia.folga}%</td>
-                  <td className="py-3 px-4 text-right font-bold text-cip">{dia.diasEquivalentes}d</td>
-                  <td className="py-3 px-4 text-center">
-                    <span className={`text-2xl ${
-                      dia.status === 'verde' ? '' :
-                      dia.status === 'amarelo' ? '' :
-                      ''
-                    }`}>
-                      {dia.status === 'verde' ? '🟢' : dia.status === 'amarelo' ? '🟡' : '🔴'}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {data.setores.map(s => {
+                const isGargalo = s.nome === data.setorGargalo;
+                return (
+                  <tr key={s.id} className={cn("border-b border-border/30 hover:bg-secondary/30",
+                    isGargalo && "bg-warning/5 border-l-2 border-l-warning"
+                  )}>
+                    <td className="py-2 px-3 font-medium text-foreground text-xs">
+                      {s.nome} {isGargalo && <Badge className="ml-1 bg-warning/20 text-warning text-[9px]">GARGALO</Badge>}
+                    </td>
+                    <td className="py-2 px-2 text-center text-xs">{s.mao_de_obra}</td>
+                    <td className="py-2 px-2 text-center text-xs">{s.maquinas_automaticas}</td>
+                    <td className="py-2 px-2 text-center text-xs">{s.horas_turno}h</td>
+                    <td className="py-2 px-2 text-center text-xs">{Math.round(s.eficiencia * 100)}%</td>
+                    <td className="py-2 px-2 text-center text-xs">{s.dias_uteis_mensais}d</td>
+                    <td className="py-2 px-2 text-right font-semibold text-xs text-cip">{s.horas_disponiveis_mensal.toFixed(0)}h</td>
+                    <td className="py-2 px-2 text-right text-xs">{s.horas_ocupadas.toFixed(1)}h</td>
+                    <td className="py-2 px-2 text-center">
+                      <span className={cn("font-bold text-xs",
+                        s.carga_percent >= 80 ? "text-destructive" :
+                        s.carga_percent >= 60 ? "text-warning" : "text-success"
+                      )}>{s.carga_percent}%</span>
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      {s.carga_percent >= 80 ? '🔴' : s.carga_percent >= 60 ? '🟡' : '🟢'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -237,9 +234,9 @@ export function CIPCapacidade() {
       {/* Info */}
       <div className="p-4 bg-cip/10 border border-cip/30 rounded-lg">
         <p className="text-sm text-cip">
-          ℹ️ A capacidade líquida já considera a folga fixa de {(FOLGA_PRODUCAO * 100).toFixed(0)}%. 
-          Conversão: {cipKPIs.horasParaDias}h = 1 dia de produção. 
-          Status: 🟢 Normal (&lt;70%) | 🟡 Atenção (70-85%) | 🔴 Crítico (&gt;85%)
+          ℹ️ A capacidade da fábrica é definida pelo setor de menor capacidade (gargalo: <strong>{data.setorGargalo}</strong>).
+          Fórmula: (Equipe + Máquinas) × Horas/Dia × Eficiência × Dias Úteis.
+          Ocupação = Horas Necessárias ÷ Capacidade Gargalo × 100.
         </p>
       </div>
     </div>
