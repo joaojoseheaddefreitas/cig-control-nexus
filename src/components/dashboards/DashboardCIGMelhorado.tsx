@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { calcularCapacidadeFabrica, type CapacidadeFabrica } from '@/services/capacidadeIndustrialService';
 import { Button } from '@/components/ui/button';
 import { fetchMateriais, type Material } from '@/services/materiaisService';
 import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
