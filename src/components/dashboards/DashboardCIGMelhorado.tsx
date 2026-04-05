@@ -84,10 +84,12 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
 
       const pedidos = pedidosRes.data || [];
       const ops = opsRes.data || [];
-      const horasCarteira = carteiraRes.data ? Number(carteiraRes.data.total_horas_acumuladas) : 0;
+      // Use bottleneck capacity for hours
+      const horasCarteira = capFabrica.horasNecessarias;
       const setores = setoresRes.data || [];
-      const capacidadeDiaria = configRes.data ? Number(configRes.data.capacidade_produtiva_diaria) : 8;
+      const capacidadeDiaria = capFabrica.capacidadeDiaria > 0 ? capFabrica.capacidadeDiaria : (configRes.data ? Number(configRes.data.capacidade_produtiva_diaria) : 8);
       const routeSteps = routeStepsRes.data || [];
+      setCapacidade(capFabrica);
 
       const statusMap: Record<string, number> = {};
       pedidos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
