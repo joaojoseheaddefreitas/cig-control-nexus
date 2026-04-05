@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
+import { calcularCapacidadeFabrica, type CapacidadeFabrica } from '@/services/capacidadeIndustrialService';
 import { Button } from '@/components/ui/button';
 import { fetchMateriais, type Material } from '@/services/materiaisService';
 import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
@@ -56,6 +57,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     pedidosPorStatus: [], pedidosPorCanal: [], setoresProducao: [], alertas: [],
     materiaisCriticos: [], valorEstoque: 0, totalPropostaCompra: 0, cifData: null,
   });
+  const [capacidade, setCapacidade] = useState<CapacidadeFabrica | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
@@ -68,7 +70,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes, materiais, cifData, routeStepsRes] = await Promise.all([
+      const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes, materiais, cifData, routeStepsRes, capFabrica] = await Promise.all([
         supabase.from('pedidos').select('id, status, status_producao, valor_total, canal').order('created_at', { ascending: false }),
         supabase.from('ops').select('id, status_producao, current_sector, tempo_total').neq('status_producao', 'cancelado'),
         supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle(),
@@ -77,14 +79,17 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         fetchMateriais(),
         fetchCIFData(),
         supabase.from('op_route_steps').select('op_id, setor_id, tempo_estimado'),
+        calcularCapacidadeFabrica(),
       ]);
 
       const pedidos = pedidosRes.data || [];
       const ops = opsRes.data || [];
-      const horasCarteira = carteiraRes.data ? Number(carteiraRes.data.total_horas_acumuladas) : 0;
+      // Use bottleneck capacity for hours
+      const horasCarteira = capFabrica.horasNecessarias;
       const setores = setoresRes.data || [];
-      const capacidadeDiaria = configRes.data ? Number(configRes.data.capacidade_produtiva_diaria) : 8;
+      const capacidadeDiaria = capFabrica.capacidadeDiaria > 0 ? capFabrica.capacidadeDiaria : (configRes.data ? Number(configRes.data.capacidade_produtiva_diaria) : 8);
       const routeSteps = routeStepsRes.data || [];
+      setCapacidade(capFabrica);
 
       const statusMap: Record<string, number> = {};
       pedidos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
@@ -180,8 +185,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   };
 
   const temDados = kpis.totalPedidos > 0;
-  const diasCarteira = kpis.capacidadeDiaria > 0 ? Math.ceil(kpis.horasCarteira / kpis.capacidadeDiaria) : 0;
-  const cargaPercentual = kpis.capacidadeDiaria > 0 ? Math.round((kpis.horasCarteira / (kpis.capacidadeDiaria * 22)) * 100) : 0;
+  const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
+  const cargaPercentual = capacidade ? capacidade.percentualOcupacao : 0;
   const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : `R$ ${(v / 1000).toFixed(0)}k`;
 
   return (
@@ -286,8 +291,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <span className="text-xs text-muted-foreground">HORAS</span>
           </div>
           <p className="text-3xl font-bold text-foreground">{kpis.horasCarteira.toFixed(0)}h</p>
-          <p className="text-xs text-muted-foreground mt-1">Carteira Acumulada</p>
-          <p className="text-xs text-warning mt-1">≈ {diasCarteira} dias úteis</p>
+          <p className="text-xs text-muted-foreground mt-1">Horas Necessárias</p>
+          <p className="text-xs text-warning mt-1">≈ {diasCarteira} dias | Cap: {capacidade?.capacidadeFabrica.toFixed(0) || 0}h</p>
         </div>
 
         <div className="p-4 rounded-xl bg-gradient-to-br from-cic/20 to-cic/5 border border-cic/30">
