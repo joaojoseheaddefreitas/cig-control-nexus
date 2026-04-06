@@ -48,6 +48,8 @@ export function DashboardCIP({ onGoHome }: DashboardCIPProps) {
     switch (activeTab) {
       case 'dashboard': return <CIPDashboardNew />;
       case 'pcp': return <CIPPCPControle />;
+      case 'capacidade': return <CIPCapacidade />;
+      case 'diagnostico': return <CIPDiagnosticoCapacidade />;
       case 'setores': return <CIPSetores />;
       case 'cadastro_produtos': return <CIPCadastroProdutosCompleto />;
       case 'rastreamento': return <CIPRastreamento />;
