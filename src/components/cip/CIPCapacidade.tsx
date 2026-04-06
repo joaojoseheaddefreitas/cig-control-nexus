@@ -64,25 +64,30 @@ export function CIPCapacidade() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="col-span-2 p-6 bg-card/50 border border-border/50 rounded-lg">
           <h3 className="text-lg font-bold text-foreground mb-4">Visão Geral — Gargalo: {data.setorGargalo}</h3>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center p-4 bg-secondary/30 rounded-lg">
-              <p className="text-xs text-muted-foreground mb-1">CAPACIDADE FÁBRICA</p>
-              <p className="text-3xl font-bold text-foreground">{data.capacidadeFabrica.toFixed(0)}h</p>
-              <p className="text-sm text-muted-foreground">Mensal (gargalo)</p>
+              <p className="text-xs text-muted-foreground mb-1">HORAS PRODUTIVAS TOTAIS</p>
+              <p className="text-2xl font-bold text-foreground">{data.horasProdutivasTotais.toFixed(0)}h</p>
+              <p className="text-xs text-muted-foreground">Soma todos os setores</p>
+            </div>
+            <div className="text-center p-4 bg-secondary/30 rounded-lg">
+              <p className="text-xs text-muted-foreground mb-1">CAP. GARGALO</p>
+              <p className="text-2xl font-bold text-foreground">{data.capacidadeFabrica.toFixed(0)}h</p>
+              <p className="text-xs text-muted-foreground">{data.setorGargalo}</p>
             </div>
             <div className="text-center p-4 bg-cip/10 border border-cip/30 rounded-lg">
               <p className="text-xs text-muted-foreground mb-1">HORAS NECESSÁRIAS</p>
-              <p className="text-3xl font-bold text-cip">{data.horasNecessarias.toFixed(0)}h</p>
-              <p className="text-sm text-cip">Carteira aberta</p>
+              <p className="text-2xl font-bold text-cip">{data.horasNecessarias.toFixed(0)}h</p>
+              <p className="text-xs text-cip">Carteira aberta</p>
             </div>
             <div className={cn("text-center p-4 rounded-lg border",
               data.saldoHoras >= 0 ? "bg-success/10 border-success/30" : "bg-destructive/10 border-destructive/30"
             )}>
               <p className="text-xs text-muted-foreground mb-1">SALDO</p>
-              <p className={cn("text-3xl font-bold", data.saldoHoras >= 0 ? "text-success" : "text-destructive")}>
+              <p className={cn("text-2xl font-bold", data.saldoHoras >= 0 ? "text-success" : "text-destructive")}>
                 {data.saldoHoras.toFixed(0)}h
               </p>
-              <p className={cn("text-sm", data.saldoHoras >= 0 ? "text-success" : "text-destructive")}>
+              <p className={cn("text-xs", data.saldoHoras >= 0 ? "text-success" : "text-destructive")}>
                 {data.saldoHoras >= 0 ? 'Folga' : 'Déficit'}
               </p>
             </div>
@@ -105,8 +110,13 @@ export function CIPCapacidade() {
             </div>
             <div className="flex justify-between text-xs mt-1 text-muted-foreground">
               <span>Necessário: {data.horasNecessarias.toFixed(0)}h</span>
-              <span>Capacidade: {data.capacidadeFabrica.toFixed(0)}h</span>
+              <span>Total Produtivo: {data.horasProdutivasTotais.toFixed(0)}h</span>
             </div>
+            {data.percentualOcupacao > 100 && (
+              <div className="mt-2 p-2 bg-destructive/10 border border-destructive/30 rounded text-destructive text-xs font-semibold text-center">
+                ⚠️ GARGALO — Capacidade excedida em {(data.percentualOcupacao - 100)}%
+              </div>
+            )}
           </div>
         </div>
 
@@ -148,11 +158,12 @@ export function CIPCapacidade() {
       </div>
 
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <KPICard title="Horas Necessárias" value={`${data.horasNecessarias.toFixed(0)}h`} subtitle="Carteira aberta" icon={<Clock className="h-5 w-5" />} variant="cip" />
-        <KPICard title="Horas Disponíveis" value={`${data.capacidadeFabrica.toFixed(0)}h`} subtitle={`Gargalo: ${data.setorGargalo}`} icon={<Activity className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Horas Produtivas" value={`${data.horasProdutivasTotais.toFixed(0)}h`} subtitle="Soma setores" icon={<Activity className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Cap. Gargalo" value={`${data.capacidadeFabrica.toFixed(0)}h`} subtitle={data.setorGargalo} icon={<Factory className="h-5 w-5" />} variant="cip" />
         <KPICard title="Saldo" value={`${data.saldoHoras.toFixed(0)}h`} subtitle={data.saldoHoras >= 0 ? 'Folga' : 'Déficit'} icon={<TrendingUp className="h-5 w-5" />} variant="cip" trend={data.saldoHoras >= 0 ? 'up' : 'down'} trendValue={data.saldoHoras >= 0 ? 'OK' : 'Crítico'} />
-        <KPICard title="Ocupação" value={`${data.percentualOcupacao}%`} subtitle="% da capacidade" icon={<Factory className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Ocupação" value={`${data.percentualOcupacao}%`} subtitle="Nec. / Total" icon={<Factory className="h-5 w-5" />} variant="cip" />
         <KPICard title="Dias Necessários" value={`${data.diasNecessarios}d`} subtitle={`${data.diasUteis} dias úteis/mês`} icon={<Calendar className="h-5 w-5" />} variant="cip" />
       </div>
 
@@ -234,9 +245,10 @@ export function CIPCapacidade() {
       {/* Info */}
       <div className="p-4 bg-cip/10 border border-cip/30 rounded-lg">
         <p className="text-sm text-cip">
-          ℹ️ A capacidade da fábrica é definida pelo setor de menor capacidade (gargalo: <strong>{data.setorGargalo}</strong>).
-          Fórmula: (Equipe + Máquinas) × Horas/Dia × Eficiência × Dias Úteis.
-          Ocupação = Horas Necessárias ÷ Capacidade Gargalo × 100.
+          ℹ️ Ocupação (%) = Horas Necessárias ÷ Horas Produtivas Totais × 100.
+          Horas Produtivas Totais = Soma(Equipe × 8h × 22d) de todos os setores.
+          O gargalo (<strong>{data.setorGargalo}</strong>) define o limite real de capacidade.
+          {data.percentualOcupacao > 100 && ' ⚠️ GARGALO ATIVO — Capacidade insuficiente!'}
         </p>
       </div>
     </div>

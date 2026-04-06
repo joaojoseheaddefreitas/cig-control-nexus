@@ -12,8 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { KPICard } from '@/components/ui/KPICard';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { ArrowUp, ArrowDown, Package, RefreshCw, Warehouse, Clock, AlertTriangle, Trash2, RotateCcw, ShieldAlert } from 'lucide-react';
+import { ArrowUp, ArrowDown, Package, RefreshCw, Warehouse, AlertTriangle, Trash2, RotateCcw, ShieldAlert, Pencil, Check, X, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -47,14 +46,16 @@ export function CICEstoqueMateriais() {
   const [motivo, setMotivo] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<Material | null>(null);
   const [tab, setTab] = useState('estoque');
+  // Inline editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editData, setEditData] = useState<Record<string, any>>({});
 
   const loadData = async () => {
     setLoading(true);
     const [mats, movs] = await Promise.all([
       fetchMateriais(),
-      fetchMovimentacoesMateriais(30),
+      fetchMovimentacoesMateriais(50),
     ]);
-    // Load inactive (lixeira) materials
     const { data: inativos } = await (supabase as any)
       .from('materiais')
       .select('*')
@@ -68,10 +69,49 @@ export function CICEstoqueMateriais() {
 
   useEffect(() => { loadData(); }, []);
 
+  // Inline edit handlers
+  const startEdit = (m: Material) => {
+    setEditingId(m.id);
+    setEditData({
+      estoque_atual: m.estoque_atual,
+      valor_unitario: m.valor_unitario,
+      lead_time_dias: m.lead_time_dias,
+      categoria: m.categoria,
+      fornecedor_nome: m.fornecedor_nome || '',
+      estoque_minimo: m.estoque_minimo,
+      estoque_maximo: m.estoque_maximo,
+    });
+  };
+
+  const cancelEdit = () => { setEditingId(null); setEditData({}); };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    const { error } = await (supabase as any)
+      .from('materiais')
+      .update({
+        estoque_atual: Number(editData.estoque_atual) || 0,
+        valor_unitario: Number(editData.valor_unitario) || 0,
+        lead_time_dias: Number(editData.lead_time_dias) || 0,
+        categoria: editData.categoria || 'geral',
+        fornecedor_nome: editData.fornecedor_nome || null,
+        estoque_minimo: Number(editData.estoque_minimo) || 0,
+        estoque_maximo: Number(editData.estoque_maximo) || 0,
+      })
+      .eq('id', editingId);
+
+    if (error) {
+      toast.error('Erro ao salvar: ' + error.message);
+    } else {
+      toast.success('Material atualizado!');
+      setEditingId(null);
+      setEditData({});
+      await loadData();
+    }
+  };
+
   const handleRegistrar = async () => {
     if (!materialId) { toast.error('Selecione um material'); return; }
-    
-    // Block saída if stock would go negative
     if (tipoMov === 'saida') {
       const mat = materiais.find(m => m.id === materialId);
       if (mat && mat.estoque_atual < quantidade) {
@@ -79,7 +119,6 @@ export function CICEstoqueMateriais() {
         return;
       }
     }
-
     let result: { error: string | null };
     if (tipoMov === 'entrada') {
       result = await registrarEntradaMaterial(materialId, quantidade, valorUnit || 0, notaFiscal, motivo);
@@ -91,100 +130,42 @@ export function CICEstoqueMateriais() {
     } else {
       toast.success(`✅ ${tipoMov === 'entrada' ? 'Entrada' : 'Saída'} registrada`);
       setDialogOpen(false);
-      setMaterialId('');
-      setQuantidade(1);
-      setValorUnit(0);
-      setNotaFiscal('');
-      setMotivo('');
+      setMaterialId(''); setQuantidade(1); setValorUnit(0); setNotaFiscal(''); setMotivo('');
       await loadData();
     }
   };
 
-  const openDialog = (tipo: 'entrada' | 'saida') => {
-    setTipoMov(tipo);
-    setDialogOpen(true);
-  };
+  const openDialog = (tipo: 'entrada' | 'saida') => { setTipoMov(tipo); setDialogOpen(true); };
 
   const handleSoftDelete = async (mat: Material) => {
-    // Check if material is in BOM
-    const { data: bomUsage } = await supabase
-      .from('bom_produto')
-      .select('id')
-      .eq('material_id', mat.id)
-      .limit(1);
-
+    const { data: bomUsage } = await supabase.from('bom_produto').select('id').eq('material_id', mat.id).limit(1);
     if (bomUsage && bomUsage.length > 0) {
       toast.error(`❌ Material "${mat.nome}" está vinculado a produtos (BOM). Remova os vínculos primeiro.`);
       return;
     }
-
-    // Check if in active production
-    const { data: movRecentes } = await (supabase as any)
-      .from('movimentacoes_materiais')
-      .select('id')
-      .eq('material_id', mat.id)
-      .eq('tipo', 'consumo_op')
-      .limit(1);
-
-    // Soft delete: set ativo = false
-    const { error } = await (supabase as any)
-      .from('materiais')
-      .update({ ativo: false })
-      .eq('id', mat.id);
-
-    if (error) {
-      toast.error('Erro: ' + error.message);
-    } else {
+    const { error } = await (supabase as any).from('materiais').update({ ativo: false }).eq('id', mat.id);
+    if (error) { toast.error('Erro: ' + error.message); }
+    else {
       toast.success(`Material "${mat.nome}" movido para a Lixeira.`);
-      await supabase.from('action_logs').insert({
-        action: 'material_lixeira',
-        entity: 'materiais',
-        entity_id: mat.id,
-        status: 'success',
-        details: { nome: mat.nome } as any,
-      });
+      await supabase.from('action_logs').insert({ action: 'material_lixeira', entity: 'materiais', entity_id: mat.id, status: 'success', details: { nome: mat.nome } as any });
     }
     setDeleteConfirm(null);
     await loadData();
   };
 
   const handleRestore = async (mat: any) => {
-    const { error } = await (supabase as any)
-      .from('materiais')
-      .update({ ativo: true })
-      .eq('id', mat.id);
-
-    if (error) {
-      toast.error('Erro: ' + error.message);
-    } else {
-      toast.success(`Material "${mat.nome}" restaurado!`);
-    }
+    const { error } = await (supabase as any).from('materiais').update({ ativo: true }).eq('id', mat.id);
+    if (error) toast.error('Erro: ' + error.message);
+    else toast.success(`Material "${mat.nome}" restaurado!`);
     await loadData();
   };
 
   const handlePermanentDelete = async (mat: any) => {
-    // Check BOM usage
-    const { data: bomUsage } = await supabase
-      .from('bom_produto')
-      .select('id')
-      .eq('material_id', mat.id)
-      .limit(1);
-
-    if (bomUsage && bomUsage.length > 0) {
-      toast.error(`Não é possível excluir: material vinculado a produtos (BOM).`);
-      return;
-    }
-
-    const { error } = await (supabase as any)
-      .from('materiais')
-      .delete()
-      .eq('id', mat.id);
-
-    if (error) {
-      toast.error('Erro: ' + error.message);
-    } else {
-      toast.success(`Material "${mat.nome}" excluído permanentemente.`);
-    }
+    const { data: bomUsage } = await supabase.from('bom_produto').select('id').eq('material_id', mat.id).limit(1);
+    if (bomUsage && bomUsage.length > 0) { toast.error('Não é possível excluir: material vinculado a produtos (BOM).'); return; }
+    const { error } = await (supabase as any).from('materiais').delete().eq('id', mat.id);
+    if (error) toast.error('Erro: ' + error.message);
+    else toast.success(`Material "${mat.nome}" excluído permanentemente.`);
     await loadData();
   };
 
@@ -216,7 +197,7 @@ export function CICEstoqueMateriais() {
         </Button>
       </div>
 
-      {/* Tabs: Estoque / Movimentações / Lixeira */}
+      {/* Tabs */}
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList>
           <TabsTrigger value="estoque">Estoque ({materiais.length})</TabsTrigger>
@@ -225,74 +206,125 @@ export function CICEstoqueMateriais() {
         </TabsList>
 
         <TabsContent value="estoque">
-          <ModuleCard title="Estoque de Materiais — Saldo, Status e Situação" variant="cic">
+          <ModuleCard title="Estoque de Materiais — Editável (clique no lápis para editar)" variant="cic">
             {loading ? (
               <div className="py-8 text-center text-muted-foreground">Carregando...</div>
             ) : materiais.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">Nenhum material cadastrado.</div>
             ) : (
-              <ScrollArea className="max-h-[500px]">
+              <div className="overflow-auto" style={{ maxHeight: '600px' }}>
                 <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-                      <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Código</th>
-                      <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Material</th>
+                  <thead className="sticky top-0 z-10 bg-card">
+                    <tr className="border-b border-border/50 bg-secondary/30">
+                      <th className="text-left py-3 px-2 text-muted-foreground font-medium text-xs">Código</th>
+                      <th className="text-left py-3 px-2 text-muted-foreground font-medium text-xs">Material</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Categoria</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Mín</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Máx</th>
-                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Alcance</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
+                      <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Total</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Lead Time</th>
-                      <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Valor Total</th>
-                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Situação</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Fornecedor</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Status</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
                     {materiais.map(m => {
                       const sit = getSituacaoEstoque(m);
+                      const isEditing = editingId === m.id;
                       return (
                         <tr key={m.id} className={cn("border-b border-border/30 hover:bg-secondary/30",
-                          m.estoque_atual <= 0 && "bg-destructive/5"
+                          m.estoque_atual <= 0 && "bg-destructive/5",
+                          isEditing && "bg-cip/5 ring-1 ring-cip/30"
                         )}>
-                          <td className="py-2 px-3 font-mono text-xs">{m.codigo}</td>
-                          <td className="py-2 px-3 font-medium text-xs">{m.nome}</td>
-                          <td className="py-2 px-2 text-center font-semibold text-xs">{m.estoque_atual} {m.unidade}</td>
-                          <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.estoque_minimo}</td>
-                          <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.estoque_maximo}</td>
-                          <td className="py-2 px-2 text-center text-xs">
-                            <span className={cn("font-bold",
-                              (m.alcance_estoque || 0) < 1 ? "text-destructive" :
-                              (m.alcance_estoque || 0) < 3 ? "text-warning" : "text-success"
-                            )}>
-                              {(m.alcance_estoque || 0).toFixed(1)}d
-                            </span>
+                          <td className="py-1.5 px-2 font-mono text-xs">{m.codigo}</td>
+                          <td className="py-1.5 px-2 font-medium text-xs max-w-[140px] truncate">{m.nome}</td>
+                          <td className="py-1.5 px-2 text-center text-xs">
+                            {isEditing ? (
+                              <Input className="h-7 text-xs w-20" value={editData.categoria}
+                                onChange={e => setEditData({ ...editData, categoria: e.target.value })} />
+                            ) : m.categoria}
                           </td>
-                          <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.lead_time_dias}d</td>
-                          <td className="py-2 px-2 text-right font-semibold text-xs">R$ {((m.valor_estoque || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</td>
-                          <td className="py-2 px-2 text-center">
+                          <td className="py-1.5 px-2 text-center font-semibold text-xs">
+                            {isEditing ? (
+                              <Input type="number" className="h-7 text-xs w-16" value={editData.estoque_atual}
+                                onChange={e => setEditData({ ...editData, estoque_atual: e.target.value })} />
+                            ) : <>{m.estoque_atual} {m.unidade}</>}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs">
+                            {isEditing ? (
+                              <Input type="number" className="h-7 text-xs w-14" value={editData.estoque_minimo}
+                                onChange={e => setEditData({ ...editData, estoque_minimo: e.target.value })} />
+                            ) : m.estoque_minimo}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs">
+                            {isEditing ? (
+                              <Input type="number" className="h-7 text-xs w-14" value={editData.estoque_maximo}
+                                onChange={e => setEditData({ ...editData, estoque_maximo: e.target.value })} />
+                            ) : m.estoque_maximo}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs">
+                            {isEditing ? (
+                              <Input type="number" step="0.01" className="h-7 text-xs w-20" value={editData.valor_unitario}
+                                onChange={e => setEditData({ ...editData, valor_unitario: e.target.value })} />
+                            ) : `R$ ${Number(m.valor_unitario).toFixed(2)}`}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-semibold text-xs">
+                            R$ {((m.valor_estoque || 0)).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs">
+                            {isEditing ? (
+                              <Input type="number" className="h-7 text-xs w-14" value={editData.lead_time_dias}
+                                onChange={e => setEditData({ ...editData, lead_time_dias: e.target.value })} />
+                            ) : <>{m.lead_time_dias}d</>}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs max-w-[100px] truncate">
+                            {isEditing ? (
+                              <Input className="h-7 text-xs w-24" value={editData.fornecedor_nome}
+                                onChange={e => setEditData({ ...editData, fornecedor_nome: e.target.value })} />
+                            ) : (m.fornecedor_nome || '—')}
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
                             <Badge className={cn("text-[10px]", sit.color)}>
                               {sit.emoji} {sit.label}
                             </Badge>
                           </td>
-                          <td className="py-2 px-2 text-center">
-                            <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive"
-                              onClick={() => setDeleteConfirm(m)} title="Mover para lixeira">
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+                          <td className="py-1.5 px-2 text-center">
+                            {isEditing ? (
+                              <div className="flex justify-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-success" onClick={saveEdit} title="Salvar">
+                                  <Check className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={cancelEdit} title="Cancelar">
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            ) : (
+                              <div className="flex justify-center gap-1">
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-cip/70 hover:text-cip" onClick={() => startEdit(m)} title="Editar">
+                                  <Pencil className="h-3.5 w-3.5" />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive/60 hover:text-destructive" onClick={() => setDeleteConfirm(m)} title="Lixeira">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       );
                     })}
                   </tbody>
                 </table>
-              </ScrollArea>
+              </div>
             )}
           </ModuleCard>
         </TabsContent>
 
         <TabsContent value="movimentacoes">
           <ModuleCard title="Últimas Movimentações" variant="cic">
-            <ScrollArea className="max-h-[400px]">
+            <div className="overflow-auto" style={{ maxHeight: '500px' }}>
               {movimentacoes.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</div>
               ) : (
@@ -325,7 +357,7 @@ export function CICEstoqueMateriais() {
                   })}
                 </div>
               )}
-            </ScrollArea>
+            </div>
           </ModuleCard>
         </TabsContent>
 
@@ -334,9 +366,9 @@ export function CICEstoqueMateriais() {
             {lixeira.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">Lixeira vazia.</div>
             ) : (
-              <ScrollArea className="max-h-[400px]">
+              <div className="overflow-auto" style={{ maxHeight: '500px' }}>
                 <table className="w-full text-sm">
-                  <thead>
+                  <thead className="sticky top-0 z-10 bg-card">
                     <tr className="border-b border-border/50 bg-secondary/30">
                       <th className="text-left py-3 px-3 text-xs text-muted-foreground">Código</th>
                       <th className="text-left py-3 px-3 text-xs text-muted-foreground">Material</th>
@@ -364,7 +396,7 @@ export function CICEstoqueMateriais() {
                     ))}
                   </tbody>
                 </table>
-              </ScrollArea>
+              </div>
             )}
           </ModuleCard>
         </TabsContent>
@@ -433,7 +465,7 @@ export function CICEstoqueMateriais() {
               <Trash2 className="h-5 w-5" /> Mover para Lixeira?
             </DialogTitle>
             <DialogDescription>
-              O material <strong>{deleteConfirm?.nome}</strong> será desativado e movido para a lixeira. Você poderá restaurá-lo depois.
+              O material <strong>{deleteConfirm?.nome}</strong> será desativado e movido para a lixeira.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

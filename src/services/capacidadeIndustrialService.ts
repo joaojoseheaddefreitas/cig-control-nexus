@@ -15,12 +15,12 @@ export interface SetorCapacidade {
 }
 
 export interface CapacidadeFabrica {
-  // Bottleneck sector
   setorGargalo: string;
-  capacidadeFabrica: number; // = min horas_disponiveis across sectors
+  capacidadeFabrica: number; // = min horas_disponiveis across sectors (bottleneck)
+  horasProdutivasTotais: number; // SUM(equipe × 8 × 22) all sectors
   horasNecessarias: number; // sum of all open OP hours
   saldoHoras: number;
-  percentualOcupacao: number;
+  percentualOcupacao: number; // horasNecessarias / horasProdutivasTotais × 100
   diasUteis: number;
   capacidadeDiaria: number;
   diasNecessarios: number;
@@ -92,6 +92,12 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
   // Hours needed = sum of tempo_total from all open OPs
   const horasNecessarias = ops.reduce((sum, op) => sum + (Number(op.tempo_total) || 0), 0);
 
+  // Total productive hours = SUM(equipe × 8h × 22d) across ALL sectors
+  const horasProdutivasTotais = setoresDB.reduce((sum: number, s: any) => {
+    const mdo = Number(s.mao_de_obra) || 0;
+    return sum + (mdo * 8 * 22);
+  }, 0);
+
   // Average dias_uteis across sectors
   const diasUteis = setoresComCapacidade.length > 0
     ? Math.round(setoresComCapacidade.reduce((s, sec) => s + sec.dias_uteis_mensais, 0) / setoresComCapacidade.length)
@@ -99,8 +105,9 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
 
   const capacidadeDiaria = diasUteis > 0 ? capacidadeFabrica / diasUteis : 0;
   const saldoHoras = capacidadeFabrica - horasNecessarias;
-  const percentualOcupacao = capacidadeFabrica > 0
-    ? Math.round((horasNecessarias / capacidadeFabrica) * 100)
+  // Percentage uses TOTAL productive hours (sum of all sectors)
+  const percentualOcupacao = horasProdutivasTotais > 0
+    ? Math.round((horasNecessarias / horasProdutivasTotais) * 100)
     : 0;
   const diasNecessarios = capacidadeDiaria > 0
     ? Math.ceil(horasNecessarias / capacidadeDiaria)
@@ -109,6 +116,7 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
   return {
     setorGargalo: setorGargaloObj?.nome || "N/A",
     capacidadeFabrica,
+    horasProdutivasTotais,
     horasNecessarias,
     saldoHoras,
     percentualOcupacao,
