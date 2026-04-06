@@ -245,9 +245,10 @@ export function CIPCapacidade() {
       {/* Info */}
       <div className="p-4 bg-cip/10 border border-cip/30 rounded-lg">
         <p className="text-sm text-cip">
-          ℹ️ A capacidade da fábrica é definida pelo setor de menor capacidade (gargalo: <strong>{data.setorGargalo}</strong>).
-          Fórmula: (Equipe + Máquinas) × Horas/Dia × Eficiência × Dias Úteis.
-          Ocupação = Horas Necessárias ÷ Capacidade Gargalo × 100.
+          ℹ️ Ocupação (%) = Horas Necessárias ÷ Horas Produtivas Totais × 100.
+          Horas Produtivas Totais = Soma(Equipe × 8h × 22d) de todos os setores.
+          O gargalo (<strong>{data.setorGargalo}</strong>) define o limite real de capacidade.
+          {data.percentualOcupacao > 100 && ' ⚠️ GARGALO ATIVO — Capacidade insuficiente!'}
         </p>
       </div>
     </div>
