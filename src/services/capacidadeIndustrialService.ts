@@ -15,12 +15,12 @@ export interface SetorCapacidade {
 }
 
 export interface CapacidadeFabrica {
-  // Bottleneck sector
   setorGargalo: string;
-  capacidadeFabrica: number; // = min horas_disponiveis across sectors
+  capacidadeFabrica: number; // = min horas_disponiveis across sectors (bottleneck)
+  horasProdutivasTotais: number; // SUM(equipe × 8 × 22) all sectors
   horasNecessarias: number; // sum of all open OP hours
   saldoHoras: number;
-  percentualOcupacao: number;
+  percentualOcupacao: number; // horasNecessarias / horasProdutivasTotais × 100
   diasUteis: number;
   capacidadeDiaria: number;
   diasNecessarios: number;
