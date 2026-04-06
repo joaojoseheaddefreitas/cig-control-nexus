@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   BarChart2, Layers, Factory, Package, 
   Brain, LineChart, Menu, X, ChevronLeft, ChevronRight,
-  ArrowDownCircle, ArrowUpCircle, Truck, Home, ClipboardCheck
+  ArrowDownCircle, ArrowUpCircle, Truck, Home, ClipboardCheck, Search, Activity
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
@@ -17,12 +17,16 @@ import { CIPCadastroProdutosCompleto } from '@/components/cip/CIPCadastroProduto
 import { CIPRastreamento } from '@/components/cip/CIPRastreamento';
 import { CIPIA } from '@/components/cip/CIPIA';
 import { CIPAnalytics } from '@/components/cip/CIPAnalytics';
+import { CIPCapacidade } from '@/components/cip/CIPCapacidade';
+import { CIPDiagnosticoCapacidade } from '@/components/cip/CIPDiagnosticoCapacidade';
 
-type TabType = 'dashboard' | 'pcp' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics';
+type TabType = 'dashboard' | 'pcp' | 'setores' | 'cadastro_produtos' | 'rastreamento' | 'ia' | 'analytics' | 'capacidade' | 'diagnostico';
 
 const menuItems = [
   { id: 'dashboard', label: 'Dashboard', icon: BarChart2, tipo: 'visualizacao' },
   { id: 'pcp', label: 'PCP e Controle de Produção', icon: ClipboardCheck, tipo: 'operacional', badge: 'TELA ÚNICA' },
+  { id: 'capacidade', label: 'Capacidade Produtiva', icon: Activity, tipo: 'visualizacao' },
+  { id: 'diagnostico', label: 'Diagnóstico Capacidade', icon: Search, tipo: 'visualizacao', badge: '🔍' },
   { id: 'setores', label: 'Setores Produtivos', icon: Layers, tipo: 'configuracao' },
   { id: 'cadastro_produtos', label: 'Cadastro Produtos', icon: Package, tipo: 'configuracao', badge: 'RTC' },
   { id: 'rastreamento', label: 'Rastreamento OPs', icon: Factory, tipo: 'visualizacao' },
