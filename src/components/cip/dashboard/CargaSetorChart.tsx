@@ -14,10 +14,10 @@ interface CargaSetorChartProps {
 }
 
 const statusColors: Record<string, string> = {
-  verde: '#3b82f6',
-  amarelo: '#f59e0b',
-  vermelho: '#ef4444',
-  azul: '#60a5fa', // Ocioso
+  azul: '#60a5fa',    // Ocioso <70%
+  verde: '#22c55e',   // Ideal 70-95%
+  amarelo: '#f59e0b', // Limite 95-100%
+  vermelho: '#ef4444', // Gargalo >100%
 };
 
 export function CargaSetorChart({ data }: CargaSetorChartProps) {
@@ -30,20 +30,20 @@ export function CargaSetorChart({ data }: CargaSetorChartProps) {
         {/* Legend */}
         <div className="flex items-center gap-4 mt-2">
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-primary" />
-            <span className="text-[10px] text-muted-foreground">&lt;70%</span>
+            <div className="w-2 h-2 rounded-full" style={{ background: '#60a5fa' }} />
+            <span className="text-[10px] text-muted-foreground">&lt;70% Ocioso</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-success" />
-            <span className="text-[10px] text-muted-foreground">70-95%</span>
+            <div className="w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />
+            <span className="text-[10px] text-muted-foreground">70-95% Ideal</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-warning" />
-            <span className="text-[10px] text-muted-foreground">95-100%</span>
+            <div className="w-2 h-2 rounded-full" style={{ background: '#f59e0b' }} />
+            <span className="text-[10px] text-muted-foreground">95-100% Limite</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-2 h-2 rounded-full bg-destructive" />
-            <span className="text-[10px] text-muted-foreground">&gt;100%</span>
+            <div className="w-2 h-2 rounded-full" style={{ background: '#ef4444' }} />
+            <span className="text-[10px] text-muted-foreground">&gt;100% Gargalo</span>
           </div>
         </div>
       </div>
