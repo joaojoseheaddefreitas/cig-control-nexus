@@ -457,14 +457,22 @@ export function CIPSetores() {
                 </div>
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-secondary/30 text-sm">
-              <p className="text-muted-foreground">Capacidade Mensal:</p>
-              <p className="text-lg font-bold text-blue-400">
-                {(((editForm.mao_de_obra || 0) + (editForm.maquinas_automaticas || 0)) * (editForm.horas_turno || 0) * ((editForm.eficiencia || 0) / 100) * (editForm.dias_uteis_mensais || 22)).toFixed(0)}h
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                ({editForm.mao_de_obra + editForm.maquinas_automaticas} recursos × {editForm.horas_turno}h × {editForm.eficiencia}% × {editForm.dias_uteis_mensais} dias)
-              </p>
+            <div className="p-3 rounded-lg bg-secondary/30 text-sm space-y-2">
+              <div>
+                <p className="text-muted-foreground">🔹 Capacidade Mensal (OFERTA):</p>
+                <p className="text-lg font-bold text-blue-400">
+                  {((editForm.mao_de_obra || 0) * Math.max(editForm.maquinas_automaticas || 1, 1) * (editForm.horas_turno || 0) * (editForm.dias_uteis_mensais || 22)).toFixed(0)}h
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ({editForm.mao_de_obra} equipe × {Math.max(editForm.maquinas_automaticas || 1, 1)} multiplicador × {editForm.horas_turno}h × {editForm.dias_uteis_mensais} dias)
+                </p>
+                <p className="text-[10px] text-muted-foreground italic">Eficiência NÃO entra na capacidade</p>
+              </div>
+              <div className="border-t border-border/30 pt-2">
+                <p className="text-muted-foreground">🔹 Eficiência (PRODUÇÃO):</p>
+                <p className="text-sm font-bold text-foreground">{editForm.eficiencia}%</p>
+                <p className="text-[10px] text-muted-foreground">Aplicada nas horas necessárias: tempo_padrão ÷ eficiência</p>
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-2">
