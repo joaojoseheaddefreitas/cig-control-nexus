@@ -184,30 +184,36 @@ export function CIPPCPControle() {
   useBarcodeScanner(handleScan);
 
   // ─── Capacity Calculation ─────────────────────────────────────────
-  // FÓRMULA SOFAS_3: cap = equipe × max(maquinas,1) × horas_turno × dias_uteis
-  // Eficiência 85% = indicador de planejamento, NÃO entra na capacidade
-  // Ocupação: <70% Ocioso, 70-95% Ideal, 95-100% Limite, >100% Gargalo
+  // CAPACIDADE = equipe × multiplicador × horas_turno × dias (SEM eficiência)
+  // HORAS NECESSÁRIAS = tempo_estimado / eficiência (eficiência aumenta demanda)
+  // Status: <50% Ocioso | 50-80% Normal | 80-95% Atenção | 95-100% Limite | >100% Gargalo
   const capacidadePorSetor = useMemo(() => {
     const opsAtivas = ops.filter(op =>
       op.status_producao !== 'Producao Finalizada' && op.status_producao !== 'cancelado'
     );
     const opIdsSet = new Set(opsAtivas.map(o => o.id));
     const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
+    const numSetores = setores.length || 1;
+
+    // Fallback total for OPs without route steps
+    const fallbackTotal = opsAtivas
+      .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
+      .reduce((sum, op) => sum + Number(op.tempo_total || 0), 0);
+    const fallbackPerSetor = fallbackTotal / numSetores;
 
     return setores.map(setor => {
-      const maquinas = Math.max(setor.maquinas_automaticas, 1);
+      const multiplicador = Math.max(setor.maquinas_automaticas, 1);
       const dias = (setor as any).dias_uteis_mensais || 22;
-      const capacidadeTotal = setor.mao_de_obra * maquinas * setor.horas_turno * dias;
+      const eff = setor.eficiencia || 0.85;
+      // OFERTA: sem eficiência
+      const capacidadeTotal = setor.mao_de_obra * multiplicador * setor.horas_turno * dias;
 
       const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
         .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
 
-      const horasFallback = opsAtivas
-        .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
-        .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
-
-      const horasOcupadas = horasFromSteps + horasFallback;
+      // DEMANDA: dividir por eficiência (eficiência < 1 → demanda aumenta)
+      const horasOcupadas = (horasFromSteps + fallbackPerSetor) / eff;
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
 
@@ -267,19 +273,21 @@ export function CIPPCPControle() {
     return capacidadePorSetor.some(s => s.percentual >= 100);
   }, [capacidadePorSetor]);
 
-  // Colors: <70%=AZUL(Ocioso), 70-95%=VERDE(Ideal), 95-100%=AMARELO(Limite), >=100%=VERMELHO(Gargalo)
+  // Colors: <50%=AZUL(Ocioso), 50-80%=VERDE(Normal), 80-95%=AMARELO(Atenção), 95-100%=LARANJA(Limite), >=100%=VERMELHO(Gargalo)
   const getCapacityColor = (pct: number) => {
-    if (pct < 70) return { bg: 'bg-blue-500/20', bar: 'bg-blue-500', text: 'text-blue-400', label: 'OCIOSO' };
-    if (pct < 95) return { bg: 'bg-success/20', bar: 'bg-success', text: 'text-success', label: 'IDEAL' };
-    if (pct < 100) return { bg: 'bg-warning/20', bar: 'bg-warning', text: 'text-warning', label: 'LIMITE' };
-    return { bg: 'bg-destructive/20', bar: 'bg-destructive', text: 'text-destructive', label: 'GARGALO' };
+    if (pct > 100) return { bg: 'bg-destructive/20', bar: 'bg-destructive', text: 'text-destructive', label: 'GARGALO' };
+    if (pct >= 95) return { bg: 'bg-orange-400/20', bar: 'bg-orange-400', text: 'text-orange-400', label: 'NO LIMITE' };
+    if (pct >= 80) return { bg: 'bg-warning/20', bar: 'bg-warning', text: 'text-warning', label: 'ATENÇÃO' };
+    if (pct >= 50) return { bg: 'bg-success/20', bar: 'bg-success', text: 'text-success', label: 'NORMAL' };
+    return { bg: 'bg-blue-500/20', bar: 'bg-blue-500', text: 'text-blue-400', label: 'OCIOSO' };
   };
 
   const getCapacityBarColor = (pct: number) => {
-    if (pct < 70) return 'hsl(210, 100%, 56%)';
-    if (pct < 95) return 'hsl(145, 70%, 42%)';
-    if (pct < 100) return 'hsl(45, 93%, 47%)';
-    return 'hsl(0, 72%, 51%)';
+    if (pct > 100) return 'hsl(0, 72%, 51%)';
+    if (pct >= 95) return 'hsl(25, 95%, 53%)';
+    if (pct >= 80) return 'hsl(45, 93%, 47%)';
+    if (pct >= 50) return 'hsl(145, 70%, 42%)';
+    return 'hsl(210, 100%, 56%)';
   };
 
   const gargaloMax = useMemo(() => {

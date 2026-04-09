@@ -40,7 +40,13 @@ function CircularGauge({ value, size = 140 }: { value: number; size?: number }) 
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(100, Math.max(0, value));
   const offset = circumference - (progress / 100) * circumference * 0.75;
-  const getColor = (val: number) => val >= 80 ? '#ef4444' : val >= 60 ? '#f59e0b' : '#3b82f6';
+  const getColor = (val: number) => {
+    if (val > 100) return '#ef4444';  // Gargalo
+    if (val >= 95) return '#f97316';  // No limite
+    if (val >= 80) return '#f59e0b';  // Atenção
+    if (val >= 50) return '#22c55e';  // Normal
+    return '#3b82f6';                 // Ocioso
+  };
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
@@ -60,9 +66,11 @@ function CircularGauge({ value, size = 140 }: { value: number; size?: number }) 
 }
 
 function getStatusBadge(carga: number) {
-  if (carga >= 80) return <Badge className="bg-red-600 text-white text-[10px]">Gargalo</Badge>;
-  if (carga >= 60) return <Badge className="bg-amber-500 text-white text-[10px]">Atenção</Badge>;
-  return <Badge className="bg-green-600 text-white text-[10px]">Normal</Badge>;
+  if (carga > 100) return <Badge className="bg-red-600 text-white text-[10px]">Gargalo</Badge>;
+  if (carga >= 95) return <Badge className="bg-orange-500 text-white text-[10px]">No Limite</Badge>;
+  if (carga >= 80) return <Badge className="bg-amber-500 text-white text-[10px]">Atenção</Badge>;
+  if (carga >= 50) return <Badge className="bg-green-600 text-white text-[10px]">Normal</Badge>;
+  return <Badge className="bg-blue-500 text-white text-[10px]">Ocioso</Badge>;
 }
 
 export function CIPSetores() {
@@ -109,19 +117,22 @@ export function CIPSetores() {
       const mdo = Number(s.mao_de_obra) || 1;
       const ht = Number(s.horas_turno) || 8.8;
       const eff = Number(s.eficiencia) || 0.85;
-      const maq = Number(s.maquinas_automaticas) || 0;
+      const multiplicador = Math.max(Number(s.maquinas_automaticas) || 1, 1);
       const diasUteis = Number(s.dias_uteis_mensais) || 22;
-      const horasDisponiveis = (mdo + maq) * ht * eff * diasUteis;
-      const cargaPercent = horasDisponiveis > 0 ? Math.min(100, Math.round((horasOcupadas / horasDisponiveis) * 100)) : 0;
+      // CAPACIDADE = equipe × multiplicador × horas_turno × dias (SEM eficiência)
+      const horasDisponiveis = mdo * multiplicador * ht * diasUteis;
+      // DEMANDA ajustada pela eficiência
+      const horasAjustadas = horasOcupadas / eff;
+      const cargaPercent = horasDisponiveis > 0 ? Math.round((horasAjustadas / horasDisponiveis) * 100) : 0;
 
       return {
         ...s,
         mao_de_obra: mdo,
         horas_turno: ht,
         eficiencia: eff,
-        maquinas_automaticas: maq,
+        maquinas_automaticas: multiplicador,
         opsEntrada: cargaMap[s.id]?.ops || 0,
-        horasOcupadas,
+        horasOcupadas: horasAjustadas,
         horasDisponiveis,
         cargaPercent,
       };
@@ -446,14 +457,22 @@ export function CIPSetores() {
                 </div>
               </div>
             </div>
-            <div className="p-3 rounded-lg bg-secondary/30 text-sm">
-              <p className="text-muted-foreground">Capacidade Mensal:</p>
-              <p className="text-lg font-bold text-blue-400">
-                {(((editForm.mao_de_obra || 0) + (editForm.maquinas_automaticas || 0)) * (editForm.horas_turno || 0) * ((editForm.eficiencia || 0) / 100) * (editForm.dias_uteis_mensais || 22)).toFixed(0)}h
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                ({editForm.mao_de_obra + editForm.maquinas_automaticas} recursos × {editForm.horas_turno}h × {editForm.eficiencia}% × {editForm.dias_uteis_mensais} dias)
-              </p>
+            <div className="p-3 rounded-lg bg-secondary/30 text-sm space-y-2">
+              <div>
+                <p className="text-muted-foreground">🔹 Capacidade Mensal (OFERTA):</p>
+                <p className="text-lg font-bold text-blue-400">
+                  {((editForm.mao_de_obra || 0) * Math.max(editForm.maquinas_automaticas || 1, 1) * (editForm.horas_turno || 0) * (editForm.dias_uteis_mensais || 22)).toFixed(0)}h
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  ({editForm.mao_de_obra} equipe × {Math.max(editForm.maquinas_automaticas || 1, 1)} multiplicador × {editForm.horas_turno}h × {editForm.dias_uteis_mensais} dias)
+                </p>
+                <p className="text-[10px] text-muted-foreground italic">Eficiência NÃO entra na capacidade</p>
+              </div>
+              <div className="border-t border-border/30 pt-2">
+                <p className="text-muted-foreground">🔹 Eficiência (PRODUÇÃO):</p>
+                <p className="text-sm font-bold text-foreground">{editForm.eficiencia}%</p>
+                <p className="text-[10px] text-muted-foreground">Aplicada nas horas necessárias: tempo_padrão ÷ eficiência</p>
+              </div>
             </div>
           </div>
           <div className="flex justify-end gap-2">
@@ -503,20 +522,34 @@ export function CIPSetores() {
 
       {/* Legend */}
       <Card className="bg-secondary/30 border-border/50 p-4">
-        <div className="flex flex-wrap items-center gap-6">
-          <span className="text-sm text-muted-foreground font-medium">Indicadores:</span>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="text-sm text-muted-foreground font-medium">Ocupação:</span>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-blue-500" />
-            <span className="text-sm text-muted-foreground">Normal (&lt;60%)</span>
+            <div className="w-3 h-3 rounded bg-blue-500" />
+            <span className="text-xs text-muted-foreground">&lt;50% Ocioso</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-amber-500" />
-            <span className="text-sm text-muted-foreground">Atenção (60-80%)</span>
+            <div className="w-3 h-3 rounded bg-green-500" />
+            <span className="text-xs text-muted-foreground">50-80% Normal</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-red-500" />
-            <span className="text-sm text-muted-foreground">Gargalo (&gt;80%)</span>
+            <div className="w-3 h-3 rounded bg-amber-500" />
+            <span className="text-xs text-muted-foreground">80-95% Atenção</span>
           </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-orange-500" />
+            <span className="text-xs text-muted-foreground">95-100% Limite</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-red-500" />
+            <span className="text-xs text-muted-foreground">&gt;100% Gargalo</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-border/30">
+          <span className="text-sm text-muted-foreground font-medium">Fórmula:</span>
+          <span className="text-xs text-muted-foreground">Capacidade = Equipe × Multiplicador × Horas/Turno × Dias Úteis</span>
+          <span className="text-xs text-muted-foreground">|</span>
+          <span className="text-xs text-muted-foreground">Demanda = Tempo Padrão ÷ Eficiência</span>
         </div>
       </Card>
     </div>
