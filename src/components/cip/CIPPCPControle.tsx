@@ -184,42 +184,42 @@ export function CIPPCPControle() {
   useBarcodeScanner(handleScan);
 
   // ─── Capacity Calculation ─────────────────────────────────────────
+  // DEMANDA = soma de tempo_total de TODAS as OPs ativas (programada + aguardando + em_producao)
   // CAPACIDADE = equipe × multiplicador × horas_turno × dias (SEM eficiência)
-  // HORAS NECESSÁRIAS = tempo_estimado / eficiência (eficiência aumenta demanda)
-  // Status: <50% Ocioso | 50-80% Normal | 80-95% Atenção | 95-100% Limite | >100% Gargalo
+  // OCUPAÇÃO = demanda / capacidade × 100
   const capacidadePorSetor = useMemo(() => {
+    // 1. Filtrar apenas OPs ativas
     const opsAtivas = ops.filter(op =>
-      op.status_producao !== 'Producao Finalizada' && op.status_producao !== 'cancelado'
+      ['programada', 'aguardando', 'em_producao'].includes(op.status_producao)
     );
-    const opIdsSet = new Set(opsAtivas.map(o => o.id));
-    const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
-    const numSetores = setores.length || 1;
 
-    // Fallback total for OPs without route steps
-    const fallbackTotal = opsAtivas
-      .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
-      .reduce((sum, op) => sum + Number(op.tempo_total || 0), 0);
-    const fallbackPerSetor = fallbackTotal / numSetores;
+    // 2. Somar TODA a demanda bruta (tempo_total de todas as OPs)
+    let demandaTotalBruta = 0;
+    for (const op of opsAtivas) {
+      demandaTotalBruta += Number(op.tempo_total || 0);
+    }
 
+    console.log(`[PCP] OPs ativas: ${opsAtivas.length} | Demanda total bruta: ${demandaTotalBruta.toFixed(1)}h`);
+
+    // 3. Para cada setor: capacidade vs demanda total / eficiência
     return setores.map(setor => {
       const multiplicador = Math.max(setor.maquinas_automaticas, 1);
       const dias = (setor as any).dias_uteis_mensais || 22;
       const eff = setor.eficiencia || 0.85;
+
       // OFERTA: sem eficiência
       const capacidadeTotal = setor.mao_de_obra * multiplicador * setor.horas_turno * dias;
 
-      const horasFromSteps = routeSteps
-        .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
-        .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
-
-      // DEMANDA: dividir por eficiência (eficiência < 1 → demanda aumenta)
-      const horasOcupadas = (horasFromSteps + fallbackPerSetor) / eff;
+      // DEMANDA: total bruta / eficiência (aplicada em cada setor)
+      const horasOcupadas = eff > 0 ? demandaTotalBruta / eff : demandaTotalBruta;
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
 
+      console.log(`[PCP] ${setor.nome}: Demanda=${horasOcupadas.toFixed(1)}h | Cap=${capacidadeTotal.toFixed(0)}h | Ocup=${percentual.toFixed(1)}%`);
+
       return { id: setor.id, nome: setor.nome, capacidadeTotal, horasOcupadas, horasLivres, percentual };
     });
-  }, [setores, ops, routeSteps]);
+  }, [setores, ops]);
 
   // Production tracking chart — ALL active OPs (carteira inteira)
   const chartProducao = useMemo(() => {
