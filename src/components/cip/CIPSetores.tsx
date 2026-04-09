@@ -522,20 +522,34 @@ export function CIPSetores() {
 
       {/* Legend */}
       <Card className="bg-secondary/30 border-border/50 p-4">
-        <div className="flex flex-wrap items-center gap-6">
-          <span className="text-sm text-muted-foreground font-medium">Indicadores:</span>
+        <div className="flex flex-wrap items-center gap-4">
+          <span className="text-sm text-muted-foreground font-medium">Ocupação:</span>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-blue-500" />
-            <span className="text-sm text-muted-foreground">Normal (&lt;60%)</span>
+            <div className="w-3 h-3 rounded bg-blue-500" />
+            <span className="text-xs text-muted-foreground">&lt;50% Ocioso</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-amber-500" />
-            <span className="text-sm text-muted-foreground">Atenção (60-80%)</span>
+            <div className="w-3 h-3 rounded bg-green-500" />
+            <span className="text-xs text-muted-foreground">50-80% Normal</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-red-500" />
-            <span className="text-sm text-muted-foreground">Gargalo (&gt;80%)</span>
+            <div className="w-3 h-3 rounded bg-amber-500" />
+            <span className="text-xs text-muted-foreground">80-95% Atenção</span>
           </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-orange-500" />
+            <span className="text-xs text-muted-foreground">95-100% Limite</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded bg-red-500" />
+            <span className="text-xs text-muted-foreground">&gt;100% Gargalo</span>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-border/30">
+          <span className="text-sm text-muted-foreground font-medium">Fórmula:</span>
+          <span className="text-xs text-muted-foreground">Capacidade = Equipe × Multiplicador × Horas/Turno × Dias Úteis</span>
+          <span className="text-xs text-muted-foreground">|</span>
+          <span className="text-xs text-muted-foreground">Demanda = Tempo Padrão ÷ Eficiência</span>
         </div>
       </Card>
     </div>
