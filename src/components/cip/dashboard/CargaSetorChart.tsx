@@ -25,20 +25,24 @@ export function CargaSetorChart({ data }: CargaSetorChartProps) {
     <div className="rounded-xl border border-border/30 bg-card/80 p-4">
       <div className="mb-4">
         <h3 className="font-display font-bold text-foreground">Carga por Setor</h3>
-        <p className="text-xs text-muted-foreground">Percentual de ocupação (excl. Embalagem)</p>
+        <p className="text-xs text-muted-foreground">Percentual de ocupação por setor</p>
         
         {/* Legend */}
-        <div className="flex items-center gap-4 mt-2">
+        <div className="flex items-center gap-3 mt-2 flex-wrap">
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full" style={{ background: '#60a5fa' }} />
-            <span className="text-[10px] text-muted-foreground">&lt;70% Ocioso</span>
+            <span className="text-[10px] text-muted-foreground">&lt;50% Ocioso</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full" style={{ background: '#22c55e' }} />
-            <span className="text-[10px] text-muted-foreground">70-95% Ideal</span>
+            <span className="text-[10px] text-muted-foreground">50-80% Normal</span>
           </div>
           <div className="flex items-center gap-1">
             <div className="w-2 h-2 rounded-full" style={{ background: '#f59e0b' }} />
+            <span className="text-[10px] text-muted-foreground">80-95% Atenção</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-2 h-2 rounded-full" style={{ background: '#f97316' }} />
             <span className="text-[10px] text-muted-foreground">95-100% Limite</span>
           </div>
           <div className="flex items-center gap-1">
