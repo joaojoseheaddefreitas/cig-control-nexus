@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -378,30 +379,55 @@ export function CIPSetores() {
                 <CircularGauge value={setor.ativo ? setor.cargaPercent : 0} size={130} />
               </div>
 
-              {/* Capacity Data */}
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div className="bg-secondary/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Equipe</p>
-                  <p className="text-xl font-bold text-foreground">{setor.mao_de_obra}</p>
+              {/* 🔵 CAPACIDADE (OFERTA) */}
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider mb-1.5">▸ Capacidade (Oferta)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-secondary/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Users className="h-3 w-3" /> Equipe</p>
+                    <p className="text-lg font-bold text-foreground">{setor.mao_de_obra}</p>
+                  </div>
+                  <div className="bg-secondary/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Cog className="h-3 w-3" /> Multiplicador</p>
+                    <p className="text-lg font-bold text-foreground">{setor.maquinas_automaticas}×</p>
+                  </div>
+                  <div className="bg-secondary/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Dias Úteis</p>
+                    <div className="flex items-baseline gap-1">
+                      <p className="text-lg font-bold text-foreground">{(setor as any).dias_uteis_mensais || 22}d</p>
+                      <span className={`text-[8px] px-1 py-0.5 rounded ${(setor as any).dias_uteis_manual ? 'bg-blue-500/20 text-blue-400' : 'bg-secondary text-muted-foreground'}`}>
+                        {(setor as any).dias_uteis_manual ? 'Manual' : 'Auto'}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="bg-blue-500/10 rounded-lg p-2 border border-blue-500/20">
+                    <p className="text-[10px] text-blue-400">Cap. Total</p>
+                    <p className="text-lg font-bold text-blue-400">{setor.horasDisponiveis.toFixed(0)}h</p>
+                  </div>
                 </div>
-                <div className="bg-secondary/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Cog className="h-3 w-3" /> Máquinas</p>
-                  <p className="text-xl font-bold text-foreground">{setor.maquinas_automaticas}</p>
-                </div>
-                <div className="bg-secondary/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Horas Disponíveis</p>
-                  <p className="text-xl font-bold text-blue-400">{setor.horasDisponiveis.toFixed(0)}h</p>
-                </div>
-                <div className="bg-secondary/30 rounded-lg p-3">
-                  <p className="text-xs text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Eficiência</p>
-                  <p className="text-xl font-bold text-foreground">{Math.round(setor.eficiencia * 100)}%</p>
+              </div>
+
+              {/* 🟢 PRODUÇÃO (DEMANDA) */}
+              <div className="mb-3">
+                <p className="text-[10px] font-semibold text-green-400 uppercase tracking-wider mb-1.5">▸ Produção (Demanda)</p>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-secondary/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Eficiência</p>
+                    <p className="text-lg font-bold text-foreground">{Math.round(setor.eficiencia * 100)}%</p>
+                  </div>
+                  <div className="bg-secondary/30 rounded-lg p-2">
+                    <p className="text-[10px] text-muted-foreground">Necessário</p>
+                    <p className="text-lg font-bold text-foreground">{setor.horasOcupadas.toFixed(1)}h</p>
+                  </div>
                 </div>
               </div>
 
               {/* OPs info */}
               <div className="flex justify-between text-sm px-1">
                 <span className="text-cip font-semibold">{setor.opsEntrada} na fila</span>
-                <span className="text-blue-400 font-semibold">{setor.horasOcupadas.toFixed(1)}h ocupadas</span>
+                <span className={cn('font-semibold', setor.horasDisponiveis - setor.horasOcupadas >= 0 ? 'text-success' : 'text-destructive')}>
+                  {(setor.horasDisponiveis - setor.horasOcupadas).toFixed(0)}h folga
+                </span>
               </div>
 
               {/* Delete */}

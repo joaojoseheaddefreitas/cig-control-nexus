@@ -6,7 +6,7 @@ import {
 interface CargaSetorData {
   setor: string;
   carga: number;
-  status: 'verde' | 'amarelo' | 'vermelho' | 'azul';
+  status: 'verde' | 'amarelo' | 'vermelho' | 'azul' | 'laranja';
 }
 
 interface CargaSetorChartProps {
@@ -14,10 +14,11 @@ interface CargaSetorChartProps {
 }
 
 const statusColors: Record<string, string> = {
-  azul: '#60a5fa',    // Ocioso <70%
-  verde: '#22c55e',   // Ideal 70-95%
-  amarelo: '#f59e0b', // Limite 95-100%
-  vermelho: '#ef4444', // Gargalo >100%
+  azul: '#60a5fa',
+  verde: '#22c55e',
+  amarelo: '#f59e0b',
+  laranja: '#f97316',
+  vermelho: '#ef4444',
 };
 
 export function CargaSetorChart({ data }: CargaSetorChartProps) {

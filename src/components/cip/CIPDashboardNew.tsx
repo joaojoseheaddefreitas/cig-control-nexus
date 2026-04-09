@@ -86,7 +86,7 @@ export function CIPDashboardNew() {
   const cargaSetorData = setorCapacidade.map(s => ({
     setor: s.nome.length > 12 ? s.nome.substring(0, 10) + '...' : s.nome,
     carga: s.carga_percent,
-    status: s.status === 'laranja' ? 'amarelo' as const : s.status as 'verde' | 'amarelo' | 'vermelho' | 'azul',
+    status: s.status as 'verde' | 'amarelo' | 'vermelho' | 'azul' | 'laranja',
   }));
 
   const producaoMensalData = useMemo(() => {
@@ -293,12 +293,7 @@ export function CIPDashboardNew() {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {displayedSetores.map((setor) => {
-            const dias = setor.dias_uteis_mensais || 22;
-            const multiplicador = Math.max(setor.maquinas_automaticas, 1);
-            // Map 5-level to 4-level for SetorCard (laranja → amarelo)
-            const cardStatus = setor.status === 'laranja' ? 'amarelo' : setor.status as 'azul' | 'verde' | 'amarelo' | 'vermelho';
-            return (
+          {displayedSetores.map((setor) => (
               <SetorCard
                 key={setor.id}
                 nome={setor.nome}
@@ -307,16 +302,14 @@ export function CIPDashboardNew() {
                 capacidadeReal={Math.round(setor.horas_disponiveis_mensal)}
                 horasNecessarias={Math.round(setor.horas_ocupadas)}
                 lotacaoAtual={setor.mao_de_obra}
-                lotacaoNecessaria={setor.horas_ocupadas > 0 ? Math.ceil(setor.horas_ocupadas / (setor.horas_turno * dias)) : 0}
-                maquinas={multiplicador}
-                diasCarteira={setor.horas_disponiveis_mensal > 0 ? setor.horas_ocupadas / (setor.mao_de_obra * multiplicador * setor.horas_turno) : 0}
-                eficiencia={setor.eficiencia * 100}
+                maquinas={Math.max(setor.maquinas_automaticas, 1)}
+                diasUteis={setor.dias_uteis_mensais}
+                diasUteisManual={setor.dias_uteis_manual}
+                eficiencia={Math.round(setor.eficiencia * 100)}
                 folga={Math.round(setor.horas_disponiveis_mensal - setor.horas_ocupadas)}
-                status={cardStatus}
-                moExtra={(setor.horas_disponiveis_mensal - setor.horas_ocupadas) / 8.8}
+                status={setor.status}
               />
-            );
-          })}
+          ))}
         </div>
       </div>
 
