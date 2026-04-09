@@ -184,32 +184,27 @@ export function CIPPCPControle() {
   useBarcodeScanner(handleScan);
 
   // ─── Capacity Calculation ─────────────────────────────────────────
-  // REGRA: capacidade_setor = operadores × 8.8
+  // REGRA: capacidade_setor = operadores × horas_turno × eficiência
+  // Ocupação: <70% Ocioso, 70-95% Ideal, 95-100% Limite, >100% Gargalo
   const capacidadePorSetor = useMemo(() => {
+    const opsAtivas = ops.filter(op =>
+      op.status_producao !== 'Producao Finalizada' && op.status_producao !== 'cancelado'
+    );
+    const opIdsSet = new Set(opsAtivas.map(o => o.id));
+    const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
+
     return setores.map(setor => {
-      const capacidadeTotal = setor.mao_de_obra * 8.8;
+      const capacidadeTotal = setor.mao_de_obra * setor.horas_turno * setor.eficiencia;
 
-      // Sum hours from ALL non-finalized OPs (programmed + in-production + pending with orders)
-      const opsAtivas = ops.filter(op => {
-        if (op.status_producao === 'Producao Finalizada') return false;
-        if (op.status_producao === 'cancelado') return false;
-        return true;
-      });
-      const opIdsSet = new Set(opsAtivas.map(o => o.id));
-
-      // Hours from route_steps
       const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
         .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
 
-      // Fallback: OPs without route_steps → distribute tempo_total equally across sectors
-      const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
       const horasFallback = opsAtivas
         .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
         .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
 
       const horasOcupadas = horasFromSteps + horasFallback;
-
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
 
