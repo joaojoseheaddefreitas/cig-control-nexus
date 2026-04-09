@@ -117,19 +117,22 @@ export function CIPSetores() {
       const mdo = Number(s.mao_de_obra) || 1;
       const ht = Number(s.horas_turno) || 8.8;
       const eff = Number(s.eficiencia) || 0.85;
-      const maq = Number(s.maquinas_automaticas) || 0;
+      const multiplicador = Math.max(Number(s.maquinas_automaticas) || 1, 1);
       const diasUteis = Number(s.dias_uteis_mensais) || 22;
-      const horasDisponiveis = (mdo + maq) * ht * eff * diasUteis;
-      const cargaPercent = horasDisponiveis > 0 ? Math.min(100, Math.round((horasOcupadas / horasDisponiveis) * 100)) : 0;
+      // CAPACIDADE = equipe × multiplicador × horas_turno × dias (SEM eficiência)
+      const horasDisponiveis = mdo * multiplicador * ht * diasUteis;
+      // DEMANDA ajustada pela eficiência
+      const horasAjustadas = horasOcupadas / eff;
+      const cargaPercent = horasDisponiveis > 0 ? Math.round((horasAjustadas / horasDisponiveis) * 100) : 0;
 
       return {
         ...s,
         mao_de_obra: mdo,
         horas_turno: ht,
         eficiencia: eff,
-        maquinas_automaticas: maq,
+        maquinas_automaticas: multiplicador,
         opsEntrada: cargaMap[s.id]?.ops || 0,
-        horasOcupadas,
+        horasOcupadas: horasAjustadas,
         horasDisponiveis,
         cargaPercent,
       };
