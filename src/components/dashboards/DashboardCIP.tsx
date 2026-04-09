@@ -2,7 +2,7 @@ import { useState } from 'react';
 import {
   BarChart2, Layers, Factory, Package, 
   Brain, LineChart, Menu, X, ChevronLeft, ChevronRight,
-  ArrowDownCircle, ArrowUpCircle, Truck, Home, ClipboardCheck, Search, Activity
+  ArrowDownCircle, ArrowUpCircle, Truck, Home, ClipboardCheck
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
