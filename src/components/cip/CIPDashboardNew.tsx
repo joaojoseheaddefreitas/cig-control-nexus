@@ -274,7 +274,7 @@ export function CIPDashboardNew() {
         />
         <KPICardCIP
           title="Total Horas Carteira"
-          value={`${totalHoras.toFixed(0)}h`}
+          value={`${totalHorasCarteira.toFixed(0)}h`}
           subtitle={`${ops.length} OPs no sistema`}
           icon={<Clock className="h-5 w-5" />}
           variant="default"
