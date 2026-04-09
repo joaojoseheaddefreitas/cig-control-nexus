@@ -197,16 +197,13 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     // CAPACIDADE (OFERTA) = equipe × multiplicador × horas_turno × dias
     const horasDisp = mdo * multiplicador * ht * diasUteis;
 
-    // DEMANDA POR SETOR (bruta) — cada setor tem seu próprio valor
-    const demandaBruta = demandaBrutaPorSetor.get(s.id) || 0;
+    // DEMANDA POR SETOR — tempo real já inclui eficiência (NÃO dividir)
+    const horasOcup = demandaBrutaPorSetor.get(s.id) || 0;
 
-    // DEMANDA AJUSTADA = demanda bruta / eficiência
-    const horasOcup = eff > 0 ? demandaBruta / eff : demandaBruta;
-
-    // OCUPAÇÃO = demanda ajustada / capacidade × 100
+    // OCUPAÇÃO = demanda / capacidade × 100
     const carga = horasDisp > 0 ? Math.round((horasOcup / horasDisp) * 100) : 0;
 
-    console.log(`[Capacidade] ${s.nome}: Demanda Bruta=${demandaBruta.toFixed(1)}h | Ajustada(÷eff)=${horasOcup.toFixed(1)}h | Cap=${horasDisp.toFixed(0)}h | Ocup=${carga}%`);
+    console.log(`[Capacidade] ${s.nome}: Demanda=${horasOcup.toFixed(1)}h | Cap=${horasDisp.toFixed(0)}h | Ocup=${carga}%`);
 
     return {
       id: s.id,
