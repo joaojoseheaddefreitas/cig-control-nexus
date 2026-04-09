@@ -18,6 +18,7 @@ interface SetorDB {
   horas_turno: number;
   eficiencia: number;
   maquinas_automaticas: number;
+  dias_uteis_mensais: number;
 }
 
 interface OPDB {
@@ -80,26 +81,48 @@ export function CIPDashboardNew() {
   // Calculations
   const today = new Date().toISOString().split('T')[0];
 
-  const setorCapacidade = useMemo(() => setores.map(s => {
-    const cap = s.mao_de_obra * 8.8;
-    const activeOps = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.data_programada === today);
-    const opIds = new Set(activeOps.map(o => o.id));
-    const horasNec = routeSteps.filter(rs => rs.setor_id === s.id && opIds.has(rs.op_id)).reduce((sum, rs) => sum + Number(rs.tempo_estimado), 0);
-    const lotacao = cap > 0 ? (horasNec / cap) * 100 : 0;
-    const status = lotacao >= 85 ? 'vermelho' as const : lotacao >= 70 ? 'amarelo' as const : lotacao <= 10 ? 'azul' as const : 'verde' as const;
-    return { ...s, cap, horasNec, horasDisp: cap, lotacao, status, gargalo: lotacao >= 85 };
-  }), [setores, ops, routeSteps, today]);
+  // Capacity: per-sector using real formula
+  // Capacidade Disponível (h) = horas_turno × operadores × eficiência
+  // Carga Necessária (h) = Σ(tempo_estimado from route_steps for active OPs)
+  // <70% Ocioso, 70-95% Ideal, 95-100% Limite, >100% Gargalo
+  const setorCapacidade = useMemo(() => {
+    const opsAtivas = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'cancelado');
+    const opIdsSet = new Set(opsAtivas.map(o => o.id));
+    const opsWithSteps = new Set(routeSteps.filter(rs => opIdsSet.has(rs.op_id)).map(rs => rs.op_id));
+
+    return setores.map(s => {
+      const cap = s.mao_de_obra * s.horas_turno * s.eficiencia;
+
+      const horasFromSteps = routeSteps
+        .filter(rs => rs.setor_id === s.id && opIdsSet.has(rs.op_id))
+        .reduce((sum, rs) => sum + Number(rs.tempo_estimado), 0);
+
+      const horasFallback = opsAtivas
+        .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
+        .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
+
+      const horasNec = horasFromSteps + horasFallback;
+      const lotacao = cap > 0 ? (horasNec / cap) * 100 : 0;
+      const status: 'azul' | 'verde' | 'amarelo' | 'vermelho' =
+        lotacao >= 100 ? 'vermelho' : lotacao >= 95 ? 'amarelo' : lotacao >= 70 ? 'verde' : 'azul';
+
+      return { ...s, cap, horasNec, horasDisp: cap, lotacao, status, gargalo: lotacao >= 100 };
+    });
+  }, [setores, ops, routeSteps]);
 
   const totalOperadores = setores.reduce((a, s) => a + s.mao_de_obra, 0);
-  const totalHoras = ops.reduce((a, o) => a + Number(o.tempo_total || 0), 0);
-  const saldoGlobalHoras = setorCapacidade.reduce((a, s) => a + (s.horasDisp - s.horasNec), 0);
+  const opsAtivas = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'cancelado');
+  const totalHorasCarteira = opsAtivas.reduce((a, o) => a + Number(o.tempo_total || 0), 0);
+  const totalCapDisp = setorCapacidade.reduce((a, s) => a + s.cap, 0);
+  const totalCargaNec = setorCapacidade.reduce((a, s) => a + s.horasNec, 0);
+  const saldoGlobalHoras = totalCapDisp - totalCargaNec;
   const eficienciaMedia = setores.length > 0 ? setores.reduce((a, s) => a + s.eficiencia * 100, 0) / setores.length : 0;
   const gargaloSetor = setorCapacidade.find(s => s.gargalo);
   const opsPendentes = ops.filter(o => o.status_producao === 'aguardando').length;
   const opsEmProducao = ops.filter(o => o.status_producao === 'em_producao').length;
   const opsProgramadas = ops.filter(o => o.status_producao === 'programada').length;
   const opsFinalizadas = ops.filter(o => o.status_producao === 'Producao Finalizada').length;
-  const ocupacaoGeral = setorCapacidade.length > 0 ? Math.round(setorCapacidade.reduce((a, s) => a + s.lotacao, 0) / setorCapacidade.length) : 0;
+  const ocupacaoGeral = totalCapDisp > 0 ? Math.round((totalCargaNec / totalCapDisp) * 100) : 0;
 
   const cargaSetorData = setorCapacidade.map(s => ({
     setor: s.nome.length > 12 ? s.nome.substring(0, 10) + '...' : s.nome,
@@ -109,18 +132,15 @@ export function CIPDashboardNew() {
 
   const producaoMensalData = useMemo(() => {
     const months: { mes: string; realizado: number; meta: number }[] = [];
+    const capMensal = setores.reduce((sum, s) => sum + s.mao_de_obra * s.horas_turno * s.eficiencia * (s.dias_uteis_mensais || 22), 0);
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
       const mesStr = d.toLocaleDateString('pt-BR', { month: 'short' });
-      const finalizadas = ops.filter(o => {
-        if (o.status_producao !== 'Producao Finalizada') return false;
-        return true; // simplified — real would check by month
-      });
-      months.push({ mes: mesStr, realizado: Math.round(totalHoras / 6 * (1 + Math.random() * 0.3)), meta: Math.round(totalHoras / 5) });
+      months.push({ mes: mesStr, realizado: Math.round(totalHorasCarteira / 6 * (1 + Math.random() * 0.3)), meta: Math.round(capMensal) });
     }
     return months;
-  }, [ops, totalHoras]);
+  }, [setores, totalHorasCarteira]);
 
   // IA Alerts based on real data
   const iaAlerts: IAAlert[] = useMemo(() => {
@@ -254,7 +274,7 @@ export function CIPDashboardNew() {
         />
         <KPICardCIP
           title="Total Horas Carteira"
-          value={`${totalHoras.toFixed(0)}h`}
+          value={`${totalHorasCarteira.toFixed(0)}h`}
           subtitle={`${ops.length} OPs no sistema`}
           icon={<Clock className="h-5 w-5" />}
           variant="default"

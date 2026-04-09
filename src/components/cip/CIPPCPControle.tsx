@@ -184,32 +184,27 @@ export function CIPPCPControle() {
   useBarcodeScanner(handleScan);
 
   // ─── Capacity Calculation ─────────────────────────────────────────
-  // REGRA: capacidade_setor = operadores × 8.8
+  // REGRA: capacidade_setor = operadores × horas_turno × eficiência
+  // Ocupação: <70% Ocioso, 70-95% Ideal, 95-100% Limite, >100% Gargalo
   const capacidadePorSetor = useMemo(() => {
+    const opsAtivas = ops.filter(op =>
+      op.status_producao !== 'Producao Finalizada' && op.status_producao !== 'cancelado'
+    );
+    const opIdsSet = new Set(opsAtivas.map(o => o.id));
+    const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
+
     return setores.map(setor => {
-      const capacidadeTotal = setor.mao_de_obra * 8.8;
+      const capacidadeTotal = setor.mao_de_obra * setor.horas_turno * setor.eficiencia;
 
-      // Sum hours from ALL non-finalized OPs (programmed + in-production + pending with orders)
-      const opsAtivas = ops.filter(op => {
-        if (op.status_producao === 'Producao Finalizada') return false;
-        if (op.status_producao === 'cancelado') return false;
-        return true;
-      });
-      const opIdsSet = new Set(opsAtivas.map(o => o.id));
-
-      // Hours from route_steps
       const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
         .reduce((sum, s) => sum + Number(s.tempo_estimado), 0);
 
-      // Fallback: OPs without route_steps → distribute tempo_total equally across sectors
-      const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
       const horasFallback = opsAtivas
         .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
         .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
 
       const horasOcupadas = horasFromSteps + horasFallback;
-
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
 
@@ -269,17 +264,17 @@ export function CIPPCPControle() {
     return capacidadePorSetor.some(s => s.percentual >= 100);
   }, [capacidadePorSetor]);
 
-  // Colors: 0%=AZUL, 1-79%=VERDE, 80-99%=AMARELO, >=100%=VERMELHO
+  // Colors: <70%=AZUL(Ocioso), 70-95%=VERDE(Ideal), 95-100%=AMARELO(Limite), >=100%=VERMELHO(Gargalo)
   const getCapacityColor = (pct: number) => {
-    if (pct === 0) return { bg: 'bg-blue-500/20', bar: 'bg-blue-500', text: 'text-blue-400', label: 'LIVRE' };
-    if (pct < 80) return { bg: 'bg-success/20', bar: 'bg-success', text: 'text-success', label: 'OK' };
-    if (pct < 100) return { bg: 'bg-warning/20', bar: 'bg-warning', text: 'text-warning', label: 'ALTO' };
+    if (pct < 70) return { bg: 'bg-blue-500/20', bar: 'bg-blue-500', text: 'text-blue-400', label: 'OCIOSO' };
+    if (pct < 95) return { bg: 'bg-success/20', bar: 'bg-success', text: 'text-success', label: 'IDEAL' };
+    if (pct < 100) return { bg: 'bg-warning/20', bar: 'bg-warning', text: 'text-warning', label: 'LIMITE' };
     return { bg: 'bg-destructive/20', bar: 'bg-destructive', text: 'text-destructive', label: 'GARGALO' };
   };
 
   const getCapacityBarColor = (pct: number) => {
-    if (pct === 0) return 'hsl(210, 100%, 56%)';
-    if (pct < 80) return 'hsl(145, 70%, 42%)';
+    if (pct < 70) return 'hsl(210, 100%, 56%)';
+    if (pct < 95) return 'hsl(145, 70%, 42%)';
     if (pct < 100) return 'hsl(45, 93%, 47%)';
     return 'hsl(0, 72%, 51%)';
   };
@@ -298,9 +293,10 @@ export function CIPPCPControle() {
       op.status_producao !== 'cancelado'
     );
     const opIdsHoje = new Set(opsHoje.map(o => o.id));
+    const opsWithSteps = new Set(routeSteps.filter(s => opIdsHoje.has(s.op_id)).map(s => s.op_id));
 
     return setores.map(setor => {
-      const capacidadeDiaria = setor.mao_de_obra * 8.8;
+      const capacidadeDiaria = setor.mao_de_obra * setor.horas_turno * setor.eficiencia;
 
       const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsHoje.has(s.op_id))

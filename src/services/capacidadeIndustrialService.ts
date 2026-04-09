@@ -60,6 +60,7 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     const ht = Number(s.horas_turno) || 8.8;
     const eff = Number(s.eficiencia) || 0.85;
     const diasUteis = Number(s.dias_uteis_mensais) || 22;
+    // Capacidade = operadores × horas_turno × eficiência × dias_uteis
     const horasDisp = (mdo + maq) * ht * eff * diasUteis;
     const horasOcup = cargaMap[s.id] || 0;
 
@@ -74,7 +75,7 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
       dias_uteis_mensais: diasUteis,
       horas_disponiveis_mensal: horasDisp,
       horas_ocupadas: horasOcup,
-      carga_percent: horasDisp > 0 ? Math.min(100, Math.round((horasOcup / horasDisp) * 100)) : 0,
+      carga_percent: horasDisp > 0 ? Math.round((horasOcup / horasDisp) * 100) : 0,
     };
   });
 
