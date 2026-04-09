@@ -19,10 +19,10 @@ interface SetorCardProps {
 }
 
 const statusLabels: Record<string, { label: string; color: string; bg: string }> = {
-  verde: { label: 'SOBRA', color: 'text-success', bg: 'bg-success/20' },
-  amarelo: { label: 'LIMITE', color: 'text-warning', bg: 'bg-warning/20' },
+  verde: { label: 'NORMAL', color: 'text-success', bg: 'bg-success/20' },
+  amarelo: { label: 'ATENÇÃO', color: 'text-warning', bg: 'bg-warning/20' },
   vermelho: { label: 'GARGALO', color: 'text-destructive', bg: 'bg-destructive/20' },
-  azul: { label: 'OCIOSO', color: 'text-primary', bg: 'bg-primary/20' },
+  azul: { label: 'OCIOSO', color: 'text-blue-400', bg: 'bg-blue-400/20' },
 };
 
 const progressColors: Record<string, string> = {
