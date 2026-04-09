@@ -6,7 +6,7 @@ import {
 interface CargaSetorData {
   setor: string;
   carga: number;
-  status: 'verde' | 'amarelo' | 'vermelho' | 'azul';
+  status: 'verde' | 'amarelo' | 'vermelho' | 'azul' | 'laranja';
 }
 
 interface CargaSetorChartProps {
