@@ -264,17 +264,17 @@ export function CIPPCPControle() {
     return capacidadePorSetor.some(s => s.percentual >= 100);
   }, [capacidadePorSetor]);
 
-  // Colors: 0%=AZUL, 1-79%=VERDE, 80-99%=AMARELO, >=100%=VERMELHO
+  // Colors: <70%=AZUL(Ocioso), 70-95%=VERDE(Ideal), 95-100%=AMARELO(Limite), >=100%=VERMELHO(Gargalo)
   const getCapacityColor = (pct: number) => {
-    if (pct === 0) return { bg: 'bg-blue-500/20', bar: 'bg-blue-500', text: 'text-blue-400', label: 'LIVRE' };
-    if (pct < 80) return { bg: 'bg-success/20', bar: 'bg-success', text: 'text-success', label: 'OK' };
-    if (pct < 100) return { bg: 'bg-warning/20', bar: 'bg-warning', text: 'text-warning', label: 'ALTO' };
+    if (pct < 70) return { bg: 'bg-blue-500/20', bar: 'bg-blue-500', text: 'text-blue-400', label: 'OCIOSO' };
+    if (pct < 95) return { bg: 'bg-success/20', bar: 'bg-success', text: 'text-success', label: 'IDEAL' };
+    if (pct < 100) return { bg: 'bg-warning/20', bar: 'bg-warning', text: 'text-warning', label: 'LIMITE' };
     return { bg: 'bg-destructive/20', bar: 'bg-destructive', text: 'text-destructive', label: 'GARGALO' };
   };
 
   const getCapacityBarColor = (pct: number) => {
-    if (pct === 0) return 'hsl(210, 100%, 56%)';
-    if (pct < 80) return 'hsl(145, 70%, 42%)';
+    if (pct < 70) return 'hsl(210, 100%, 56%)';
+    if (pct < 95) return 'hsl(145, 70%, 42%)';
     if (pct < 100) return 'hsl(45, 93%, 47%)';
     return 'hsl(0, 72%, 51%)';
   };
