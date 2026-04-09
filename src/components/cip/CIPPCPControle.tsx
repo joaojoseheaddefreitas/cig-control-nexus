@@ -184,7 +184,8 @@ export function CIPPCPControle() {
   useBarcodeScanner(handleScan);
 
   // ─── Capacity Calculation ─────────────────────────────────────────
-  // REGRA: capacidade_setor = operadores × horas_turno × eficiência
+  // FÓRMULA SOFAS_3: cap = equipe × max(maquinas,1) × horas_turno × dias_uteis
+  // Eficiência 85% = indicador de planejamento, NÃO entra na capacidade
   // Ocupação: <70% Ocioso, 70-95% Ideal, 95-100% Limite, >100% Gargalo
   const capacidadePorSetor = useMemo(() => {
     const opsAtivas = ops.filter(op =>
@@ -194,7 +195,9 @@ export function CIPPCPControle() {
     const opsWithSteps = new Set(routeSteps.filter(s => opIdsSet.has(s.op_id)).map(s => s.op_id));
 
     return setores.map(setor => {
-      const capacidadeTotal = setor.mao_de_obra * setor.horas_turno * setor.eficiencia;
+      const maquinas = Math.max(setor.maquinas_automaticas, 1);
+      const dias = (setor as any).dias_uteis_mensais || 22;
+      const capacidadeTotal = setor.mao_de_obra * maquinas * setor.horas_turno * dias;
 
       const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsSet.has(s.op_id))
@@ -296,7 +299,8 @@ export function CIPPCPControle() {
     const opsWithSteps = new Set(routeSteps.filter(s => opIdsHoje.has(s.op_id)).map(s => s.op_id));
 
     return setores.map(setor => {
-      const capacidadeDiaria = setor.mao_de_obra * setor.horas_turno * setor.eficiencia;
+      const maquinasDiaria = Math.max(setor.maquinas_automaticas, 1);
+      const capacidadeDiaria = setor.mao_de_obra * maquinasDiaria * setor.horas_turno;
 
       const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsHoje.has(s.op_id))
