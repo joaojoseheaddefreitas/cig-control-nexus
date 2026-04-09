@@ -86,7 +86,7 @@ export function CIPDashboardNew() {
   const cargaSetorData = setorCapacidade.map(s => ({
     setor: s.nome.length > 12 ? s.nome.substring(0, 10) + '...' : s.nome,
     carga: s.carga_percent,
-    status: s.status === 'laranja' ? 'amarelo' as const : s.status as 'verde' | 'amarelo' | 'vermelho' | 'azul',
+    status: s.status as 'verde' | 'amarelo' | 'vermelho' | 'azul' | 'laranja',
   }));
 
   const producaoMensalData = useMemo(() => {
