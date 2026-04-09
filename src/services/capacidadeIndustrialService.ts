@@ -75,14 +75,19 @@ function normalizeName(name: string): string {
  * Known aliases: OP product name → canonical product name in produto_setor_tempos
  */
 const PRODUCT_ALIASES: Record<string, string> = {
-  'astor - 02 lugares': 'ASTOR 02L',
+  'astor   02 lugares': 'ASTOR 02L',
   'astor 02 lugares': 'ASTOR 02L',
   'sofa astor 2 l': 'ASTOR 02L',
   'sofa astor 2l': 'ASTOR 02L',
+  'astor 03l': 'ASTOR 03L',
   'sofa ancora 3 lugares': 'ANCORA - 03 LUGARES',
-  'sofa cast': 'CAST - 02 LUGARES 1 BRAÇO',
-  'sofa cast 1l': 'CAST - 01 LUGAR 1 BRAÇO',
+  'sofa cast': 'CAST - 02 LUGARES 1 BRACO',
+  'sofa cast  1l': 'CAST - 01 LUGAR 1 BRACO',
+  'sofa cast 1l': 'CAST - 01 LUGAR 1 BRACO',
   'craft 03 lugares': 'CRAFT - 03 LUGARES',
+  'atenas   02 lugares assento solto': 'ATENAS - 02 LUGARES ASSENTO SOLTO',
+  'atenas   03 lugares assento solto': 'ATENAS - 03 LUGARES ASSENTO SOLTO',
+  'master 100   03 lugares i 02 alm': 'MASTER 100 - 03 LUGARES I 02 ALM',
 };
 
 /**
