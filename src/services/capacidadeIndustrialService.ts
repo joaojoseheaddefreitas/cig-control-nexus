@@ -54,14 +54,15 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
   });
 
   // Calculate per-sector capacity
+  // FÓRMULA SOFAS_3: cap = equipe × max(maquinas,1) × horas_turno × dias_uteis
+  // Eficiência 85% = indicador de planejamento, NÃO entra na capacidade disponível
   const setores: SetorCapacidade[] = setoresDB.map((s: any) => {
     const mdo = Number(s.mao_de_obra) || 0;
-    const maq = Number(s.maquinas_automaticas) || 0;
+    const maq = Math.max(Number(s.maquinas_automaticas) || 0, 1);
     const ht = Number(s.horas_turno) || 8.8;
     const eff = Number(s.eficiencia) || 0.85;
     const diasUteis = Number(s.dias_uteis_mensais) || 22;
-    // Capacidade = operadores × horas_turno × eficiência × dias_uteis
-    const horasDisp = (mdo + maq) * ht * eff * diasUteis;
+    const horasDisp = mdo * maq * ht * diasUteis;
     const horasOcup = cargaMap[s.id] || 0;
 
     return {
@@ -93,10 +94,13 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
   // Hours needed = sum of tempo_total from all open OPs
   const horasNecessarias = ops.reduce((sum, op) => sum + (Number(op.tempo_total) || 0), 0);
 
-  // Total productive hours = SUM(equipe × 8h × 22d) across ALL sectors
+  // Total productive hours = SUM(equipe × max(maquinas,1) × horas_turno × dias) across ALL sectors
   const horasProdutivasTotais = setoresDB.reduce((sum: number, s: any) => {
     const mdo = Number(s.mao_de_obra) || 0;
-    return sum + (mdo * 8 * 22);
+    const maq = Math.max(Number(s.maquinas_automaticas) || 0, 1);
+    const ht = Number(s.horas_turno) || 8.8;
+    const dias = Number(s.dias_uteis_mensais) || 22;
+    return sum + (mdo * maq * ht * dias);
   }, 0);
 
   // Average dias_uteis across sectors

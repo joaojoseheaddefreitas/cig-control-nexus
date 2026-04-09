@@ -81,9 +81,8 @@ export function CIPDashboardNew() {
   // Calculations
   const today = new Date().toISOString().split('T')[0];
 
-  // Capacity: per-sector using real formula
-  // Capacidade Disponível (h) = horas_turno × operadores × eficiência
-  // Carga Necessária (h) = Σ(tempo_estimado from route_steps for active OPs)
+  // Capacity: SOFAS_3 formula — cap = equipe × max(maquinas,1) × 8.8h × dias
+  // Eficiência 85% é indicador de planejamento, NÃO entra na capacidade disponível
   // <70% Ocioso, 70-95% Ideal, 95-100% Limite, >100% Gargalo
   const setorCapacidade = useMemo(() => {
     const opsAtivas = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'cancelado');
@@ -91,7 +90,10 @@ export function CIPDashboardNew() {
     const opsWithSteps = new Set(routeSteps.filter(rs => opIdsSet.has(rs.op_id)).map(rs => rs.op_id));
 
     return setores.map(s => {
-      const cap = s.mao_de_obra * s.horas_turno * s.eficiencia;
+      // Fórmula definitiva: equipe × max(maquinas,1) × horas_turno × dias_uteis
+      const maquinas = Math.max(s.maquinas_automaticas, 1);
+      const dias = s.dias_uteis_mensais || 22;
+      const cap = s.mao_de_obra * maquinas * s.horas_turno * dias;
 
       const horasFromSteps = routeSteps
         .filter(rs => rs.setor_id === s.id && opIdsSet.has(rs.op_id))
@@ -116,7 +118,7 @@ export function CIPDashboardNew() {
   const totalCapDisp = setorCapacidade.reduce((a, s) => a + s.cap, 0);
   const totalCargaNec = setorCapacidade.reduce((a, s) => a + s.horasNec, 0);
   const saldoGlobalHoras = totalCapDisp - totalCargaNec;
-  const eficienciaMedia = setores.length > 0 ? setores.reduce((a, s) => a + s.eficiencia * 100, 0) / setores.length : 0;
+  const eficienciaMedia = setores.length > 0 ? setores.reduce((a, s) => a + s.eficiencia * 100, 0) / setores.length : 85;
   const gargaloSetor = setorCapacidade.find(s => s.gargalo);
   const opsPendentes = ops.filter(o => o.status_producao === 'aguardando').length;
   const opsEmProducao = ops.filter(o => o.status_producao === 'em_producao').length;
@@ -132,7 +134,7 @@ export function CIPDashboardNew() {
 
   const producaoMensalData = useMemo(() => {
     const months: { mes: string; realizado: number; meta: number }[] = [];
-    const capMensal = setores.reduce((sum, s) => sum + s.mao_de_obra * s.horas_turno * s.eficiencia * (s.dias_uteis_mensais || 22), 0);
+    const capMensal = setores.reduce((sum, s) => sum + s.mao_de_obra * Math.max(s.maquinas_automaticas, 1) * s.horas_turno * (s.dias_uteis_mensais || 22), 0);
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
@@ -343,9 +345,9 @@ export function CIPDashboardNew() {
               capacidadeReal={Math.round(setor.horasDisp)}
               horasNecessarias={Math.round(setor.horasNec)}
               lotacaoAtual={setor.mao_de_obra}
-              lotacaoNecessaria={setor.horasNec > 0 ? Math.ceil(setor.horasNec / 8.8) : 0}
-              maquinas={setor.maquinas_automaticas}
-              diasCarteira={setor.horasDisp / 8.8}
+              lotacaoNecessaria={setor.horasNec > 0 ? Math.ceil(setor.horasNec / (setor.horas_turno * (setor.dias_uteis_mensais || 22))) : 0}
+              maquinas={Math.max(setor.maquinas_automaticas, 1)}
+              diasCarteira={setor.horasDisp > 0 ? setor.horasNec / (setor.mao_de_obra * Math.max(setor.maquinas_automaticas, 1) * setor.horas_turno) : 0}
               eficiencia={setor.eficiencia * 100}
               folga={Math.round(setor.horasDisp - setor.horasNec)}
               status={setor.status}
