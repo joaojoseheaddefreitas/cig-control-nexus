@@ -82,29 +82,70 @@ export function getEficienciaLabel(eff: number): { label: string; color: string 
  *   ocupação% = horas_necessárias / capacidade × 100
  */
 export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
-  const [setoresRes, opsRes, stepsRes, trackingRes] = await Promise.all([
+  // Fetch all needed data in parallel
+  const [setoresRes, opsRes, produtosRes, pstRes] = await Promise.all([
     supabase.from("setores_produtivos").select("*").eq("ativo", true).order("ordem"),
-    supabase.from("ops").select("id, tempo_total, tempo_unitario, quantidade, status_producao")
+    supabase.from("ops").select("id, tempo_total, tempo_unitario, quantidade, status_producao, produto_nome")
       .neq("status_producao", "Producao Finalizada")
       .neq("status_producao", "cancelado"),
-    supabase.from("op_route_steps").select("op_id, setor_id, tempo_estimado"),
-    supabase.from("setor_rastreamento").select("setor_id, op_id, status"),
+    supabase.from("produtos").select("id, nome"),
+    supabase.from("produto_setor_tempos").select("produto_id, setor_id, tempo_horas"),
   ]);
 
   const setoresDB = setoresRes.data || [];
   const ops = opsRes.data || [];
-  const allSteps = stepsRes.data || [];
-  
-  const opIdsSet = new Set(ops.map(o => o.id));
-  const activeSteps = allSteps.filter(s => opIdsSet.has(s.op_id));
-  const opsWithSteps = new Set(activeSteps.map(s => s.op_id));
+  const produtos = produtosRes.data || [];
+  const pstData = pstRes.data || [];
   const numSetores = setoresDB.length || 1;
 
-  // Fallback hours for OPs without route steps
-  const fallbackTotal = ops
-    .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
-    .reduce((sum, op) => sum + Number(op.tempo_total || 0), 0);
-  const fallbackPerSetor = fallbackTotal / numSetores;
+  // Build product name → id lookup (case-insensitive)
+  const produtoNameMap = new Map<string, string>();
+  for (const p of produtos) {
+    produtoNameMap.set(p.nome.toLowerCase().trim(), p.id);
+  }
+
+  // Build setor_id → tempo_horas map per product: Map<produto_id, Map<setor_id, tempo>>
+  const pstMap = new Map<string, Map<string, number>>();
+  for (const pst of pstData) {
+    if (!pstMap.has(pst.produto_id)) pstMap.set(pst.produto_id, new Map());
+    pstMap.get(pst.produto_id)!.set(pst.setor_id, Number(pst.tempo_horas) || 0);
+  }
+
+  // Calculate demand per sector
+  const demandaPorSetor = new Map<string, number>();
+  for (const s of setoresDB) demandaPorSetor.set(s.id, 0);
+
+  let opsComProduto = 0;
+  let opsSemProduto = 0;
+
+  for (const op of ops) {
+    const qty = Number(op.quantidade) || 0;
+    const tempoTotal = Number(op.tempo_total) || 0;
+    if (qty === 0 && tempoTotal === 0) continue;
+
+    // Try to match OP product name to produtos table
+    const produtoId = produtoNameMap.get((op.produto_nome || '').toLowerCase().trim());
+    const setorTempos = produtoId ? pstMap.get(produtoId) : undefined;
+
+    if (setorTempos && setorTempos.size > 0) {
+      // Use REAL per-sector times: qty × tempo_por_setor
+      opsComProduto++;
+      for (const [setorId, tempoHoras] of setorTempos) {
+        if (demandaPorSetor.has(setorId)) {
+          demandaPorSetor.set(setorId, demandaPorSetor.get(setorId)! + qty * tempoHoras);
+        }
+      }
+    } else {
+      // Fallback: distribute tempo_total equally across all sectors
+      opsSemProduto++;
+      const perSetor = tempoTotal / numSetores;
+      for (const s of setoresDB) {
+        demandaPorSetor.set(s.id, demandaPorSetor.get(s.id)! + perSetor);
+      }
+    }
+  }
+
+  console.log(`[Capacidade] OPs ativas: ${ops.length} | Com produto: ${opsComProduto} | Sem produto (fallback): ${opsSemProduto}`);
 
   const setores: SetorCapacidade[] = setoresDB.map((s: any) => {
     const mdo = Number(s.mao_de_obra) || 0;
@@ -116,13 +157,12 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     // CAPACIDADE = equipe × multiplicador × horas_turno × dias (SEM eficiência)
     const horasDisp = mdo * multiplicador * ht * diasUteis;
 
-    // HORAS NECESSÁRIAS = steps hours / eficiência (eficiência increases needed hours)
-    const horasFromSteps = activeSteps
-      .filter(st => st.setor_id === s.id)
-      .reduce((sum, st) => sum + Number(st.tempo_estimado || 0), 0);
-    
-    const horasOcup = (horasFromSteps + fallbackPerSetor) / eff;
+    // DEMANDA = horas brutas do setor / eficiência
+    const horasBrutas = demandaPorSetor.get(s.id) || 0;
+    const horasOcup = eff > 0 ? horasBrutas / eff : horasBrutas;
     const carga = horasDisp > 0 ? Math.round((horasOcup / horasDisp) * 100) : 0;
+
+    console.log(`[Capacidade] ${s.nome}: Brutas=${horasBrutas.toFixed(1)}h | /eff=${horasOcup.toFixed(1)}h | Cap=${horasDisp.toFixed(0)}h | Ocup=${carga}%`);
 
     return {
       id: s.id,
@@ -148,7 +188,6 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
   const percentualOcupacao = horasProdutivasTotais > 0
     ? Math.round((horasNecessarias / horasProdutivasTotais) * 100) : 0;
 
-  // Bottleneck = sector with highest occupancy %
   const setorGargaloObj = setores.length > 0
     ? setores.reduce((max, s) => s.carga_percent > max.carga_percent ? s : max, setores[0])
     : null;
