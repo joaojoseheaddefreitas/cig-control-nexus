@@ -40,7 +40,13 @@ function CircularGauge({ value, size = 140 }: { value: number; size?: number }) 
   const circumference = 2 * Math.PI * radius;
   const progress = Math.min(100, Math.max(0, value));
   const offset = circumference - (progress / 100) * circumference * 0.75;
-  const getColor = (val: number) => val >= 80 ? '#ef4444' : val >= 60 ? '#f59e0b' : '#3b82f6';
+  const getColor = (val: number) => {
+    if (val > 100) return '#ef4444';  // Gargalo
+    if (val >= 95) return '#f97316';  // No limite
+    if (val >= 80) return '#f59e0b';  // Atenção
+    if (val >= 50) return '#22c55e';  // Normal
+    return '#3b82f6';                 // Ocioso
+  };
 
   return (
     <div className="relative" style={{ width: size, height: size }}>
@@ -60,9 +66,11 @@ function CircularGauge({ value, size = 140 }: { value: number; size?: number }) 
 }
 
 function getStatusBadge(carga: number) {
-  if (carga >= 80) return <Badge className="bg-red-600 text-white text-[10px]">Gargalo</Badge>;
-  if (carga >= 60) return <Badge className="bg-amber-500 text-white text-[10px]">Atenção</Badge>;
-  return <Badge className="bg-green-600 text-white text-[10px]">Normal</Badge>;
+  if (carga > 100) return <Badge className="bg-red-600 text-white text-[10px]">Gargalo</Badge>;
+  if (carga >= 95) return <Badge className="bg-orange-500 text-white text-[10px]">No Limite</Badge>;
+  if (carga >= 80) return <Badge className="bg-amber-500 text-white text-[10px]">Atenção</Badge>;
+  if (carga >= 50) return <Badge className="bg-green-600 text-white text-[10px]">Normal</Badge>;
+  return <Badge className="bg-blue-500 text-white text-[10px]">Ocioso</Badge>;
 }
 
 export function CIPSetores() {
