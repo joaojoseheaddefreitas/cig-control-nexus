@@ -9,17 +9,12 @@ import { CargaSetorChart } from './dashboard/CargaSetorChart';
 import { ProducaoMensalChart } from './dashboard/ProducaoMensalChart';
 import { Badge } from '@/components/ui/badge';
 import { useIsMobile } from '@/hooks/use-mobile';
-
-interface SetorDB {
-  id: string;
-  nome: string;
-  ordem: number;
-  mao_de_obra: number;
-  horas_turno: number;
-  eficiencia: number;
-  maquinas_automaticas: number;
-  dias_uteis_mensais: number;
-}
+import {
+  calcularCapacidadeFabrica,
+  getOcupacaoStatus,
+  getEficienciaLabel,
+  type CapacidadeFabrica,
+} from '@/services/capacidadeIndustrialService';
 
 interface OPDB {
   id: string;
@@ -38,38 +33,32 @@ export function CIPDashboardNew() {
   const isMobile = useIsMobile();
   const [showAllSetores, setShowAllSetores] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [setores, setSetores] = useState<SetorDB[]>([]);
+  const [capacidade, setCapacidade] = useState<CapacidadeFabrica | null>(null);
   const [ops, setOps] = useState<OPDB[]>([]);
-  const [routeSteps, setRouteSteps] = useState<{ op_id: string; setor_id: string; tempo_estimado: number }[]>([]);
   const [tracking, setTracking] = useState<{ op_id: string; setor_id: string; status: string }[]>([]);
 
   const loadData = async () => {
     setLoading(true);
-    const [setoresRes, opsRes] = await Promise.all([
-      supabase.from('setores_produtivos').select('*').eq('ativo', true).order('ordem'),
+    const [capResult, opsRes] = await Promise.all([
+      calcularCapacidadeFabrica(),
       supabase.from('ops').select('id, numero_op, produto_nome, quantidade, tempo_total, status_producao, current_sector, data_programada, pedido_id, prazo_entrega').order('created_at', { ascending: false }),
     ]);
-
-    const setoresData = (setoresRes.data || []) as SetorDB[];
+    setCapacidade(capResult);
     const opsData = (opsRes.data || []) as OPDB[];
-    setSetores(setoresData);
     setOps(opsData);
 
-    const opIds = opsData.map(o => o.id);
-    if (opIds.length > 0) {
-      const [stepsRes, trackRes] = await Promise.all([
-        supabase.from('op_route_steps').select('op_id, setor_id, tempo_estimado').in('op_id', opIds),
-        supabase.from('setor_rastreamento').select('op_id, setor_id, status').in('op_id', opIds),
-      ]);
-      setRouteSteps((stepsRes.data || []) as any);
-      setTracking((trackRes.data || []) as any);
+    if (opsData.length > 0) {
+      const { data: trackData } = await supabase
+        .from('setor_rastreamento')
+        .select('op_id, setor_id, status')
+        .in('op_id', opsData.map(o => o.id));
+      setTracking((trackData || []) as any);
     }
     setLoading(false);
   };
 
   useEffect(() => { loadData(); }, []);
 
-  // Realtime
   useEffect(() => {
     const ch = supabase.channel('dash-cip')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'ops' }, () => loadData())
@@ -78,63 +67,31 @@ export function CIPDashboardNew() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // Calculations
-  const today = new Date().toISOString().split('T')[0];
-
-  // Capacity: SOFAS_3 formula — cap = equipe × max(maquinas,1) × 8.8h × dias
-  // Eficiência 85% é indicador de planejamento, NÃO entra na capacidade disponível
-  // <70% Ocioso, 70-95% Ideal, 95-100% Limite, >100% Gargalo
-  const setorCapacidade = useMemo(() => {
-    const opsAtivas = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'cancelado');
-    const opIdsSet = new Set(opsAtivas.map(o => o.id));
-    const opsWithSteps = new Set(routeSteps.filter(rs => opIdsSet.has(rs.op_id)).map(rs => rs.op_id));
-
-    return setores.map(s => {
-      // Fórmula definitiva: equipe × max(maquinas,1) × horas_turno × dias_uteis
-      const maquinas = Math.max(s.maquinas_automaticas, 1);
-      const dias = s.dias_uteis_mensais || 22;
-      const cap = s.mao_de_obra * maquinas * s.horas_turno * dias;
-
-      const horasFromSteps = routeSteps
-        .filter(rs => rs.setor_id === s.id && opIdsSet.has(rs.op_id))
-        .reduce((sum, rs) => sum + Number(rs.tempo_estimado), 0);
-
-      const horasFallback = opsAtivas
-        .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
-        .reduce((sum, op) => sum + Number(op.tempo_total || 0) / Math.max(1, setores.length), 0);
-
-      const horasNec = horasFromSteps + horasFallback;
-      const lotacao = cap > 0 ? (horasNec / cap) * 100 : 0;
-      const status: 'azul' | 'verde' | 'amarelo' | 'vermelho' =
-        lotacao >= 100 ? 'vermelho' : lotacao >= 95 ? 'amarelo' : lotacao >= 70 ? 'verde' : 'azul';
-
-      return { ...s, cap, horasNec, horasDisp: cap, lotacao, status, gargalo: lotacao >= 100 };
-    });
-  }, [setores, ops, routeSteps]);
-
-  const totalOperadores = setores.reduce((a, s) => a + s.mao_de_obra, 0);
+  // Derived values — READ from centralized service, NO recalculation
+  const setorCapacidade = capacidade?.setores || [];
+  const totalOperadores = setorCapacidade.reduce((a, s) => a + s.mao_de_obra, 0);
   const opsAtivas = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'cancelado');
   const totalHorasCarteira = opsAtivas.reduce((a, o) => a + Number(o.tempo_total || 0), 0);
-  const totalCapDisp = setorCapacidade.reduce((a, s) => a + s.cap, 0);
-  const totalCargaNec = setorCapacidade.reduce((a, s) => a + s.horasNec, 0);
-  const saldoGlobalHoras = totalCapDisp - totalCargaNec;
-  const eficienciaMedia = setores.length > 0 ? setores.reduce((a, s) => a + s.eficiencia * 100, 0) / setores.length : 85;
-  const gargaloSetor = setorCapacidade.find(s => s.gargalo);
+  const totalCapDisp = capacidade?.horasProdutivasTotais || 0;
+  const totalCargaNec = capacidade?.horasNecessarias || 0;
+  const saldoGlobalHoras = capacidade?.saldoHoras || 0;
+  const eficienciaMedia = capacidade ? Math.round(capacidade.eficienciaMedia * 100) : 85;
+  const gargaloSetor = setorCapacidade.reduce((max, s) => s.carga_percent > (max?.carga_percent || 0) ? s : max, setorCapacidade[0] || null);
   const opsPendentes = ops.filter(o => o.status_producao === 'aguardando').length;
   const opsEmProducao = ops.filter(o => o.status_producao === 'em_producao').length;
   const opsProgramadas = ops.filter(o => o.status_producao === 'programada').length;
   const opsFinalizadas = ops.filter(o => o.status_producao === 'Producao Finalizada').length;
-  const ocupacaoGeral = totalCapDisp > 0 ? Math.round((totalCargaNec / totalCapDisp) * 100) : 0;
+  const ocupacaoGeral = capacidade?.percentualOcupacao || 0;
 
   const cargaSetorData = setorCapacidade.map(s => ({
     setor: s.nome.length > 12 ? s.nome.substring(0, 10) + '...' : s.nome,
-    carga: Math.round(s.lotacao),
-    status: s.status,
+    carga: s.carga_percent,
+    status: s.status === 'laranja' ? 'amarelo' as const : s.status as 'verde' | 'amarelo' | 'vermelho' | 'azul',
   }));
 
   const producaoMensalData = useMemo(() => {
     const months: { mes: string; realizado: number; meta: number }[] = [];
-    const capMensal = setores.reduce((sum, s) => sum + s.mao_de_obra * Math.max(s.maquinas_automaticas, 1) * s.horas_turno * (s.dias_uteis_mensais || 22), 0);
+    const capMensal = totalCapDisp;
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
@@ -142,37 +99,32 @@ export function CIPDashboardNew() {
       months.push({ mes: mesStr, realizado: Math.round(totalHorasCarteira / 6 * (1 + Math.random() * 0.3)), meta: Math.round(capMensal) });
     }
     return months;
-  }, [setores, totalHorasCarteira]);
+  }, [totalCapDisp, totalHorasCarteira]);
 
-  // IA Alerts based on real data
   const iaAlerts: IAAlert[] = useMemo(() => {
     const alerts: IAAlert[] = [];
-    const gargalos = setorCapacidade.filter(s => s.gargalo);
+    const gargalos = setorCapacidade.filter(s => s.carga_percent > 100);
     gargalos.forEach(s => {
       alerts.push({
         id: `gargalo-${s.id}`,
         tipo: 'gargalo',
         prioridade: 'alta',
-        mensagem: `GARGALO: ${s.nome} com ${Math.round(s.lotacao)}% de ocupação. Déficit de ${(s.horasNec - s.horasDisp).toFixed(0)}h.`,
+        mensagem: `GARGALO: ${s.nome} com ${s.carga_percent}% de ocupação. Déficit de ${(s.horas_ocupadas - s.horas_disponiveis_mensal).toFixed(0)}h.`,
         setor: s.nome,
         horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       });
     });
     if (opsPendentes > 5) {
       alerts.push({
-        id: 'pendentes',
-        tipo: 'sugestao',
-        prioridade: 'media',
-        mensagem: `${opsPendentes} OPs aguardando programação. Utilize "Sugerir Carga" no PCP para otimizar.`,
+        id: 'pendentes', tipo: 'sugestao', prioridade: 'media',
+        mensagem: `${opsPendentes} OPs aguardando programação.`,
         setor: 'Geral',
         horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       });
     }
     if (alerts.length === 0) {
       alerts.push({
-        id: 'ok',
-        tipo: 'otimizacao',
-        prioridade: 'media',
+        id: 'ok', tipo: 'otimizacao', prioridade: 'media',
         mensagem: 'Produção dentro da capacidade. Sem gargalos detectados.',
         setor: 'Geral',
         horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
@@ -181,14 +133,13 @@ export function CIPDashboardNew() {
     return alerts;
   }, [setorCapacidade, opsPendentes]);
 
-  // Pedidos em execução
   const pedidosEmExecucao = useMemo(() => {
     return ops
       .filter(o => o.status_producao === 'em_producao' || o.status_producao === 'programada')
       .slice(0, 4)
       .map(op => {
         const opTracking = tracking.filter(t => t.op_id === op.id);
-        const totalSetores = setores.length;
+        const totalSetores = setorCapacidade.length;
         const concluidos = opTracking.filter(t => t.status === 'baixa').length;
         const progresso = totalSetores > 0 ? Math.round((concluidos / totalSetores) * 100) : 0;
         return {
@@ -200,9 +151,10 @@ export function CIPDashboardNew() {
           status: op.status_producao === 'em_producao' ? 'em_producao' as const : 'aguardando' as const,
         };
       });
-  }, [ops, tracking, setores]);
+  }, [ops, tracking, setorCapacidade]);
 
   const displayedSetores = showAllSetores ? setorCapacidade : setorCapacidade.slice(0, isMobile ? 4 : 7);
+  const efLabel = getEficienciaLabel(eficienciaMedia);
 
   if (loading) {
     return (
@@ -257,8 +209,8 @@ export function CIPDashboardNew() {
         />
         <KPICardCIP
           title="Gargalo Atual"
-          value={gargaloSetor?.nome || 'Nenhum'}
-          subtitle={gargaloSetor ? `${Math.round(gargaloSetor.lotacao)}% ocupação` : 'Sem gargalos'}
+          value={gargaloSetor && gargaloSetor.carga_percent > 100 ? gargaloSetor.nome : 'Nenhum'}
+          subtitle={gargaloSetor && gargaloSetor.carga_percent > 100 ? `${gargaloSetor.carga_percent}% ocupação` : 'Sem gargalos'}
           icon={<AlertTriangle className="h-5 w-5" />}
           variant="red"
           size="sm"
@@ -270,7 +222,7 @@ export function CIPDashboardNew() {
         <KPICardCIP
           title="Lotação Total"
           value={totalOperadores}
-          subtitle={`${setores.length} setores ativos`}
+          subtitle={`${setorCapacidade.length} setores ativos`}
           icon={<Users className="h-5 w-5" />}
           variant="blue"
         />
@@ -283,14 +235,15 @@ export function CIPDashboardNew() {
         />
         <KPICardCIP
           title="Eficiência Média"
-          value={`${eficienciaMedia.toFixed(0)}%`}
+          value={`${eficienciaMedia}%`}
+          subtitle={efLabel.label}
           icon={<TrendingUp className="h-5 w-5" />}
           variant="blue"
         />
         <KPICardCIP
-          title="Meta do Dia"
-          value={`${Math.min(100, ocupacaoGeral + 10)}%`}
-          subtitle={`Projetado: ${Math.min(100, ocupacaoGeral + 20)}%`}
+          title="Dias Necessários"
+          value={`${capacidade?.diasNecessarios || 0}d`}
+          subtitle={`${capacidade?.diasUteis || 22} dias úteis/mês`}
           icon={<Target className="h-5 w-5" />}
           variant={ocupacaoGeral > 80 ? 'red' : 'green'}
         />
@@ -307,22 +260,26 @@ export function CIPDashboardNew() {
         <div className="flex items-center justify-between mb-4">
           <div>
             <h2 className="font-display font-bold text-foreground text-lg">Status dos Setores</h2>
-            <div className="flex items-center gap-4 mt-1">
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-destructive" />
-                <span className="text-[10px] text-muted-foreground">Gargalo</span>
+                <span className="text-[10px] text-muted-foreground">&gt;100% Gargalo</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-orange-400" />
+                <span className="text-[10px] text-muted-foreground">95-100% Limite</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-warning" />
-                <span className="text-[10px] text-muted-foreground">Limite</span>
+                <span className="text-[10px] text-muted-foreground">80-95% Atenção</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-success" />
-                <span className="text-[10px] text-muted-foreground">OK</span>
+                <span className="text-[10px] text-muted-foreground">50-80% Normal</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-primary" />
-                <span className="text-[10px] text-muted-foreground">Sobra</span>
+                <div className="w-2 h-2 rounded-full bg-blue-400" />
+                <span className="text-[10px] text-muted-foreground">&lt;50% Ocioso</span>
               </div>
             </div>
           </div>
@@ -336,30 +293,35 @@ export function CIPDashboardNew() {
         </div>
         
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {displayedSetores.map((setor) => (
-            <SetorCard
-              key={setor.id}
-              nome={setor.nome}
-              sigla={setor.id.substring(0, 3).toUpperCase()}
-              carga={Math.round(setor.lotacao)}
-              capacidadeReal={Math.round(setor.horasDisp)}
-              horasNecessarias={Math.round(setor.horasNec)}
-              lotacaoAtual={setor.mao_de_obra}
-              lotacaoNecessaria={setor.horasNec > 0 ? Math.ceil(setor.horasNec / (setor.horas_turno * (setor.dias_uteis_mensais || 22))) : 0}
-              maquinas={Math.max(setor.maquinas_automaticas, 1)}
-              diasCarteira={setor.horasDisp > 0 ? setor.horasNec / (setor.mao_de_obra * Math.max(setor.maquinas_automaticas, 1) * setor.horas_turno) : 0}
-              eficiencia={setor.eficiencia * 100}
-              folga={Math.round(setor.horasDisp - setor.horasNec)}
-              status={setor.status}
-              moExtra={(setor.horasDisp - setor.horasNec) / 8.8}
-            />
-          ))}
+          {displayedSetores.map((setor) => {
+            const dias = setor.dias_uteis_mensais || 22;
+            const multiplicador = Math.max(setor.maquinas_automaticas, 1);
+            // Map 5-level to 4-level for SetorCard (laranja → amarelo)
+            const cardStatus = setor.status === 'laranja' ? 'amarelo' : setor.status as 'azul' | 'verde' | 'amarelo' | 'vermelho';
+            return (
+              <SetorCard
+                key={setor.id}
+                nome={setor.nome}
+                sigla={setor.id.substring(0, 3).toUpperCase()}
+                carga={setor.carga_percent}
+                capacidadeReal={Math.round(setor.horas_disponiveis_mensal)}
+                horasNecessarias={Math.round(setor.horas_ocupadas)}
+                lotacaoAtual={setor.mao_de_obra}
+                lotacaoNecessaria={setor.horas_ocupadas > 0 ? Math.ceil(setor.horas_ocupadas / (setor.horas_turno * dias)) : 0}
+                maquinas={multiplicador}
+                diasCarteira={setor.horas_disponiveis_mensal > 0 ? setor.horas_ocupadas / (setor.mao_de_obra * multiplicador * setor.horas_turno) : 0}
+                eficiencia={setor.eficiencia * 100}
+                folga={Math.round(setor.horas_disponiveis_mensal - setor.horas_ocupadas)}
+                status={cardStatus}
+                moExtra={(setor.horas_disponiveis_mensal - setor.horas_ocupadas) / 8.8}
+              />
+            );
+          })}
         </div>
       </div>
 
       {/* IA e Pedidos Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Inteligência Artificial */}
         <div className="rounded-xl border border-border/30 bg-card/80 p-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -380,7 +342,6 @@ export function CIPDashboardNew() {
           </div>
         </div>
 
-        {/* Pedidos em Execução */}
         <div className="rounded-xl border border-border/30 bg-card/80 p-4">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
