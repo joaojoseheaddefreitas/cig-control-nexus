@@ -293,9 +293,10 @@ export function CIPPCPControle() {
       op.status_producao !== 'cancelado'
     );
     const opIdsHoje = new Set(opsHoje.map(o => o.id));
+    const opsWithSteps = new Set(routeSteps.filter(s => opIdsHoje.has(s.op_id)).map(s => s.op_id));
 
     return setores.map(setor => {
-      const capacidadeDiaria = setor.mao_de_obra * 8.8;
+      const capacidadeDiaria = setor.mao_de_obra * setor.horas_turno * setor.eficiencia;
 
       const horasFromSteps = routeSteps
         .filter(s => s.setor_id === setor.id && opIdsHoje.has(s.op_id))
