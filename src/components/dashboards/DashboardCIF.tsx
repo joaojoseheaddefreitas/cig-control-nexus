@@ -7,17 +7,22 @@ import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
-  Wallet, TrendingUp, DollarSign, PiggyBank, CreditCard, BarChart2,
+  Wallet, TrendingUp, TrendingDown, DollarSign, PiggyBank, CreditCard, BarChart2,
   Brain, Home, ChevronLeft, ChevronRight, Menu, X,
-  Target, Shield, Gauge, Activity, Scale, RefreshCw,
+  Target, Shield, Gauge, Activity, Scale, RefreshCw, Plus, Check,
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
 import { Sheet, SheetContent, SheetTrigger, SheetClose } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
+import { fetchCIFData, marcarComoPago, criarTransacao, type CIFDashboardData } from '@/services/cifService';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 const CHART_COLORS = {
   azulMarinho: 'hsl(215, 75%, 48%)',
@@ -50,25 +55,55 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<CIFDashboardData | null>(null);
-  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [showNewTx, setShowNewTx] = useState(false);
+  const [hoverCard, setHoverCard] = useState<string | null>(null);
+  const [newTx, setNewTx] = useState({ tipo: 'DESPESA', categoria: 'materiais', descricao: '', valor: '', data_vencimento: '' });
   const isMobile = useIsMobile();
 
   const loadData = async () => {
     setLoading(true);
-    const [cifData, logsResult] = await Promise.all([
-      fetchCIFData(),
-      supabase.from('action_logs').select('*').order('created_at', { ascending: false }).limit(20),
-    ]);
+    const cifData = await fetchCIFData();
     setData(cifData);
-    setAuditLogs(logsResult.data || []);
     setLoading(false);
   };
 
   useEffect(() => { loadData(); }, []);
 
-  const handleTabChange = (tabId: CIFTab) => {
-    setActiveTab(tabId);
-    setSidebarOpen(false);
+  // Realtime
+  useEffect(() => {
+    const ch = supabase.channel('cif-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transacoes' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orcamentos' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'logs_auditoria' }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  const handleTabChange = (tabId: CIFTab) => { setActiveTab(tabId); setSidebarOpen(false); };
+
+  const handleMarcarPago = async (id: string, valor: number) => {
+    try {
+      await marcarComoPago(id, valor);
+      toast.success('Transação marcada como PAGO');
+    } catch { toast.error('Erro ao marcar como pago'); }
+  };
+
+  const handleCriarTx = async () => {
+    if (!newTx.descricao || !newTx.valor) { toast.error('Preencha descrição e valor'); return; }
+    try {
+      await criarTransacao({
+        tipo: newTx.tipo,
+        categoria: newTx.categoria,
+        descricao: newTx.descricao,
+        valor: Number(newTx.valor),
+        data_emissao: new Date().toISOString().slice(0, 10),
+        data_vencimento: newTx.data_vencimento || new Date().toISOString().slice(0, 10),
+        status: 'PENDENTE',
+      });
+      toast.success('Transação criada');
+      setShowNewTx(false);
+      setNewTx({ tipo: 'DESPESA', categoria: 'materiais', descricao: '', valor: '', data_vencimento: '' });
+    } catch { toast.error('Erro ao criar transação'); }
   };
 
   if (loading || !data) {
@@ -79,8 +114,421 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     );
   }
 
-  const statusEquilibrio = data.faturamento > data.pontoEquilibrio ? 'acima' : data.faturamento === data.pontoEquilibrio ? 'empate' : 'abaixo';
+  const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
+  const margemLiquida = data.receita > 0 ? (data.ebitda / data.receita) * 100 : 0;
+  const statusEquilibrio = data.faturamento > data.pontoEquilibrio ? 'acima' : 'abaixo';
   const percentualAcima = data.pontoEquilibrio > 0 ? (((data.faturamento - data.pontoEquilibrio) / data.pontoEquilibrio) * 100).toFixed(1) : '0';
+
+  // Gauge data for break-even
+  const gaugePercent = data.pontoEquilibrio > 0 ? Math.min(200, (data.faturamento / data.pontoEquilibrio) * 100) : 0;
+
+  const renderDashboard = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="relative" onMouseEnter={() => setHoverCard(null)}>
+          <KPICard title="Receita Total" value={fmt(data!.receita)} icon={<DollarSign className="h-5 w-5" />} variant="cif"
+            trend={data!.tendenciaReceita >= 0 ? 'up' : 'down'}
+            trendValue={`${data!.tendenciaReceita >= 0 ? '+' : ''}${data!.tendenciaReceita.toFixed(1)}% MoM`}
+          />
+        </div>
+        <div className="relative" onMouseEnter={() => setHoverCard(null)}>
+          <KPICard title="Despesa Total" value={fmt(data!.despesa)} icon={<CreditCard className="h-5 w-5" />} variant="cif"
+            trend={data!.tendenciaDespesa <= 0 ? 'up' : 'down'}
+            trendValue={`${data!.tendenciaDespesa >= 0 ? '+' : ''}${data!.tendenciaDespesa.toFixed(1)}% MoM`}
+          />
+        </div>
+        <KPICard title="EBITDA" value={fmt(data!.ebitda)} icon={<TrendingUp className="h-5 w-5" />} variant="cif" trend={data!.ebitda > 0 ? 'up' : 'down'} trendValue={data!.ebitda > 0 ? 'Positivo' : 'Negativo'} />
+        <KPICard title="Saldo de Caixa" value={fmt(data!.saldoCaixa)} icon={<Wallet className="h-5 w-5" />} variant="cif" />
+        <div className="relative" onMouseEnter={() => setHoverCard('material')} onMouseLeave={() => setHoverCard(null)}>
+          <KPICard title="Custo Material" value={fmt(data!.top3CustoMaterial.reduce((s, c) => s + c.valor, 0))} subtitle="Hover: TOP 3" icon={<Target className="h-5 w-5" />} variant="cif" />
+          {hoverCard === 'material' && (
+            <div className="absolute top-full left-0 z-50 mt-1 p-3 bg-card border border-border rounded-lg shadow-xl min-w-[200px]">
+              <p className="text-xs font-semibold text-cif mb-2">TOP 3 Custos Material</p>
+              {data!.top3CustoMaterial.map((c, i) => (
+                <div key={i} className="flex justify-between text-xs py-1">
+                  <span className="text-muted-foreground capitalize">{c.categoria}</span>
+                  <span className="font-medium">{fmt(c.valor)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="relative" onMouseEnter={() => setHoverCard('mob')} onMouseLeave={() => setHoverCard(null)}>
+          <KPICard title="Custo Mão de Obra" value={fmt(data!.top3CustoMaoObra.reduce((s, c) => s + c.valor, 0))} subtitle="Hover: TOP 3" icon={<Activity className="h-5 w-5" />} variant="cif" />
+          {hoverCard === 'mob' && (
+            <div className="absolute top-full left-0 z-50 mt-1 p-3 bg-card border border-border rounded-lg shadow-xl min-w-[200px]">
+              <p className="text-xs font-semibold text-cif mb-2">TOP 3 Custos MOB</p>
+              {data!.top3CustoMaoObra.map((c, i) => (
+                <div key={i} className="flex justify-between text-xs py-1">
+                  <span className="text-muted-foreground capitalize">{c.categoria}</span>
+                  <span className="font-medium">{fmt(c.valor)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Break-even Gauge */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <ModuleCard title="Break-Even (Velocímetro)" variant="cif">
+          <div className="h-52 flex flex-col items-center justify-center">
+            <div className="relative w-40 h-20 overflow-hidden">
+              <div className="absolute inset-0 rounded-t-full border-[12px] border-b-0 border-destructive/30" />
+              <div className="absolute inset-0 rounded-t-full border-[12px] border-b-0 border-transparent" style={{
+                borderTopColor: gaugePercent >= 100 ? CHART_COLORS.verde : CHART_COLORS.amarelo,
+                borderLeftColor: gaugePercent >= 50 ? (gaugePercent >= 100 ? CHART_COLORS.verde : CHART_COLORS.amarelo) : 'transparent',
+                borderRightColor: gaugePercent >= 100 ? CHART_COLORS.verde : 'transparent',
+              }} />
+              <div className="absolute bottom-0 left-1/2 w-1 h-16 bg-foreground origin-bottom rounded-full" style={{
+                transform: `translateX(-50%) rotate(${Math.min(180, (gaugePercent / 200) * 180) - 90}deg)`,
+              }} />
+              <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-4 h-4 rounded-full bg-foreground" />
+            </div>
+            <p className="text-2xl font-bold mt-3">{gaugePercent.toFixed(0)}%</p>
+            <p className="text-xs text-muted-foreground">
+              {gaugePercent < 80 ? '🔴 Zona de Prejuízo' : gaugePercent < 110 ? '🟡 Zona de Equilíbrio' : '🟢 Zona de Lucro'}
+            </p>
+          </div>
+        </ModuleCard>
+
+        <ModuleCard title="Receita vs Despesa (Mensal)" variant="cif" className="lg:col-span-2">
+          <div className="h-52">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={data!.receitaMensal}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
+                <Legend />
+                <Bar dataKey="receita" fill={CHART_COLORS.verde} name="Receita" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="despesa" fill={CHART_COLORS.vermelho} name="Despesa" radius={[4, 4, 0, 0]} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </ModuleCard>
+      </div>
+    </div>
+  );
+
+  const renderFluxo = () => (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">Fluxo de Caixa & Conciliação</h3>
+        <Button size="sm" onClick={() => setShowNewTx(true)}><Plus className="h-4 w-4 mr-1" />Nova Transação</Button>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <KPICard title="Saldo Atual" value={fmt(data!.saldoCaixa)} icon={<Wallet className="h-5 w-5" />} variant="cif" />
+        <KPICard title="A Receber (Pendente)" value={fmt(data!.transacoes.filter(t => t.tipo === 'RECEITA' && t.status === 'PENDENTE').reduce((s, t) => s + Number(t.valor), 0))} icon={<TrendingUp className="h-5 w-5" />} variant="cif" />
+        <KPICard title="A Pagar (Pendente)" value={fmt(data!.transacoes.filter(t => t.tipo === 'DESPESA' && t.status === 'PENDENTE').reduce((s, t) => s + Number(t.valor), 0))} icon={<TrendingDown className="h-5 w-5" />} variant="cif" />
+        <KPICard title="Margem Líquida" value={`${margemLiquida.toFixed(1)}%`} icon={<PiggyBank className="h-5 w-5" />} variant="cif" />
+      </div>
+
+      <ModuleCard title="Projeção de Caixa (30 dias)" variant="cif">
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={data!.fluxoProjetado}>
+              <defs>
+                <linearGradient id="fluxoGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.3} />
+                  <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+              <XAxis dataKey="dia" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+              <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Saldo']} />
+              <Area type="monotone" dataKey="saldo" stroke={CHART_COLORS.verde} strokeWidth={2} fill="url(#fluxoGrad)" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+      </ModuleCard>
+
+      {/* Conciliação */}
+      <ModuleCard title="Transações Pendentes (Conciliação)" variant="cif">
+        <div className="overflow-auto max-h-[300px]">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0">
+              <th className="text-left py-2 px-3">Tipo</th>
+              <th className="text-left py-2 px-3">Descrição</th>
+              <th className="text-left py-2 px-3">Categoria</th>
+              <th className="text-right py-2 px-3">Valor</th>
+              <th className="text-center py-2 px-3">Vencimento</th>
+              <th className="text-center py-2 px-3">Ação</th>
+            </tr></thead>
+            <tbody>
+              {data!.transacoes.filter(t => t.status === 'PENDENTE').map(t => (
+                <tr key={t.id} className="border-b border-border/30 hover:bg-secondary/20">
+                  <td className="py-2 px-3">
+                    <Badge className={t.tipo === 'RECEITA' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive'}>{t.tipo}</Badge>
+                  </td>
+                  <td className="py-2 px-3 text-foreground">{t.descricao}</td>
+                  <td className="py-2 px-3 text-muted-foreground capitalize">{t.categoria.replace('_', ' ')}</td>
+                  <td className="py-2 px-3 text-right font-medium">{fmt(Number(t.valor))}</td>
+                  <td className="py-2 px-3 text-center text-muted-foreground">{new Date(t.data_vencimento).toLocaleDateString('pt-BR')}</td>
+                  <td className="py-2 px-3 text-center">
+                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => handleMarcarPago(t.id, Number(t.valor))}>
+                      <Check className="h-3 w-3 mr-1" />PAGO
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {data!.transacoes.filter(t => t.status === 'PENDENTE').length === 0 && (
+                <tr><td colSpan={6} className="py-6 text-center text-muted-foreground">Todas as transações estão conciliadas ✅</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </ModuleCard>
+    </div>
+  );
+
+  const renderCustos = () => (
+    <div className="space-y-6">
+      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
+        <p className="text-sm text-muted-foreground"><strong className="text-cif">Custos & Orçamento</strong> — Comparação real vs limite orçamentário por categoria.</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {data!.custosPorCategoria.map((c, i) => (
+          <div key={i} className="p-4 rounded-xl bg-card border border-border/30">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium capitalize">{c.categoria.replace('_', ' ')}</span>
+              <Badge className={cn(
+                c.percentual <= 80 ? 'bg-success/20 text-success' :
+                c.percentual <= 100 ? 'bg-warning/20 text-warning' :
+                'bg-destructive/20 text-destructive'
+              )}>{c.percentual.toFixed(0)}%</Badge>
+            </div>
+            <Progress value={Math.min(100, c.percentual)} className={cn(
+              "h-3",
+              c.percentual > 100 ? '[&>div]:bg-destructive' : c.percentual > 80 ? '[&>div]:bg-warning' : '[&>div]:bg-success'
+            )} />
+            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+              <span>Real: {fmt(c.valor)}</span>
+              <span>Limite: {fmt(c.limite)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <ModuleCard title="Composição de Custos" variant="cif">
+        <div className="h-64">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie data={data!.custosPorCategoria.filter(c => c.valor > 0)} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="valor" nameKey="categoria">
+                {data!.custosPorCategoria.map((_, i) => <Cell key={i} fill={Object.values(CHART_COLORS)[i % 6]} />)}
+              </Pie>
+              <Tooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+      </ModuleCard>
+    </div>
+  );
+
+  const renderEquilibrio = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="p-4 rounded-xl bg-card border border-border/30">
+          <p className="text-xs text-muted-foreground">Ponto de Equilíbrio</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.pontoEquilibrio)}</p>
+        </div>
+        <div className="p-4 rounded-xl bg-card border border-border/30">
+          <p className="text-xs text-muted-foreground">Custo Fixo Médio</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.custoFixo)}</p>
+        </div>
+        <div className="p-4 rounded-xl bg-card border border-border/30">
+          <p className="text-xs text-muted-foreground">Faturamento</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.faturamento)}</p>
+        </div>
+        <div className={cn("p-4 rounded-xl border-2", statusEquilibrio === 'acima' ? "bg-success/10 border-success/50" : "bg-destructive/10 border-destructive/50")}>
+          <p className="text-xs text-muted-foreground">Status</p>
+          <p className={cn("text-xl font-bold mt-1", statusEquilibrio === 'acima' ? "text-success" : "text-destructive")}>
+            {statusEquilibrio === 'acima' ? `🟢 ${percentualAcima}% ACIMA` : `🔴 ${Math.abs(Number(percentualAcima))}% ABAIXO`}
+          </p>
+        </div>
+      </div>
+
+      {/* Gauge visual */}
+      <ModuleCard title="Velocímetro Break-Even" variant="cif">
+        <div className="h-56 flex flex-col items-center justify-center">
+          <div className="relative w-48 h-24 overflow-hidden">
+            <svg viewBox="0 0 200 100" className="w-full h-full">
+              {/* Background arcs */}
+              <path d="M 20 95 A 80 80 0 0 1 100 15" fill="none" stroke={CHART_COLORS.vermelho} strokeWidth="14" strokeLinecap="round" opacity="0.3" />
+              <path d="M 100 15 A 80 80 0 0 1 140 30" fill="none" stroke={CHART_COLORS.amarelo} strokeWidth="14" strokeLinecap="round" opacity="0.3" />
+              <path d="M 140 30 A 80 80 0 0 1 180 95" fill="none" stroke={CHART_COLORS.verde} strokeWidth="14" strokeLinecap="round" opacity="0.3" />
+              {/* Needle */}
+              {(() => {
+                const angle = Math.PI - (Math.min(gaugePercent, 200) / 200) * Math.PI;
+                const nx = 100 + 65 * Math.cos(angle);
+                const ny = 95 - 65 * Math.sin(angle);
+                return <line x1="100" y1="95" x2={nx} y2={ny} stroke="hsl(var(--foreground))" strokeWidth="3" strokeLinecap="round" />;
+              })()}
+              <circle cx="100" cy="95" r="5" fill="hsl(var(--foreground))" />
+            </svg>
+          </div>
+          <p className="text-3xl font-bold mt-2">{gaugePercent.toFixed(0)}%</p>
+          <div className="flex gap-4 mt-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-destructive" />Prejuízo</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-warning" />Equilíbrio</span>
+            <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success" />Lucro</span>
+          </div>
+        </div>
+      </ModuleCard>
+    </div>
+  );
+
+  const renderRentabilidade = () => (
+    <div className="space-y-6">
+      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
+        <p className="text-sm text-muted-foreground"><strong className="text-cif">Rentabilidade & Pricing</strong> — Margem por SKU calculada com custos reais.</p>
+      </div>
+      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[400px]">
+        <ScrollArea className="h-full">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
+              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Produto</th>
+              <th className="text-right py-3 px-4 text-muted-foreground font-medium">Preço Venda</th>
+              <th className="text-right py-3 px-4 text-muted-foreground font-medium">Custo Total</th>
+              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Margem</th>
+              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Vol.</th>
+            </tr></thead>
+            <tbody>
+              {data!.rentabilidadeSKU.map((s, i) => (
+                <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
+                  <td className="py-3 px-4 font-medium text-foreground">{s.sku}</td>
+                  <td className="py-3 px-4 text-right">R$ {s.preco.toLocaleString('pt-BR')}</td>
+                  <td className="py-3 px-4 text-right text-muted-foreground">R$ {s.custo.toLocaleString('pt-BR')}</td>
+                  <td className="py-3 px-4 text-center">
+                    <Badge className={cn(s.margem >= 35 ? 'bg-success/20 text-success' : s.margem >= 25 ? 'bg-warning/20 text-warning' : 'bg-destructive/20 text-destructive')}>{s.margem}%</Badge>
+                  </td>
+                  <td className="py-3 px-4 text-center">{s.volume}</td>
+                </tr>
+              ))}
+              {data!.rentabilidadeSKU.length === 0 && (
+                <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">Sem dados de produtos cadastrados</td></tr>
+              )}
+            </tbody>
+          </table>
+        </ScrollArea>
+      </div>
+      {data!.rentabilidadeSKU.length > 0 && (
+        <ModuleCard title="Margem por Produto" variant="cif">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data!.rentabilidadeSKU}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="sku" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
+                <Tooltip formatter={(value: number) => [`${value}%`, 'Margem']} />
+                <Bar dataKey="margem" radius={[4, 4, 0, 0]}>
+                  {data!.rentabilidadeSKU.map((s, i) => <Cell key={i} fill={s.margem >= 35 ? CHART_COLORS.verde : s.margem >= 25 ? CHART_COLORS.amarelo : CHART_COLORS.vermelho} />)}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ModuleCard>
+      )}
+    </div>
+  );
+
+  const renderAuditoria = () => (
+    <div className="space-y-6">
+      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
+        <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria</strong> — Registro imutável de todas as operações financeiras.</p>
+      </div>
+      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[500px]">
+        <ScrollArea className="h-full">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
+              <th className="text-left py-3 px-4">Data</th>
+              <th className="text-center py-3 px-4">Ação</th>
+              <th className="text-right py-3 px-4">Valor Anterior</th>
+              <th className="text-right py-3 px-4">Valor Novo</th>
+              <th className="text-left py-3 px-4">Detalhes</th>
+            </tr></thead>
+            <tbody>
+              {data!.logs.length === 0 ? (
+                <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum log de auditoria registrado.</td></tr>
+              ) : data!.logs.map((log, i) => (
+                <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
+                  <td className="py-3 px-4 text-muted-foreground">{new Date(log.data).toLocaleString('pt-BR')}</td>
+                  <td className="py-3 px-4 text-center"><Badge variant="outline">{log.acao}</Badge></td>
+                  <td className="py-3 px-4 text-right">{log.valor_antigo != null ? fmt(log.valor_antigo) : '-'}</td>
+                  <td className="py-3 px-4 text-right font-medium">{log.valor_novo != null ? fmt(log.valor_novo) : '-'}</td>
+                  <td className="py-3 px-4 text-xs text-muted-foreground">{log.detalhes || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+
+  const renderAnalytics = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ModuleCard title="Evolução Receita (12 meses)" variant="cif">
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data!.receitaMensal}>
+                <defs>
+                  <linearGradient id="recGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
+                <Area type="monotone" dataKey="receita" stroke={CHART_COLORS.verde} strokeWidth={2} fill="url(#recGrad)" name="Receita" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </ModuleCard>
+
+        <ModuleCard title="Evolução Despesas (12 meses)" variant="cif">
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={data!.receitaMensal}>
+                <defs>
+                  <linearGradient id="despGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={CHART_COLORS.vermelho} stopOpacity={0.3} />
+                    <stop offset="95%" stopColor={CHART_COLORS.vermelho} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
+                <Area type="monotone" dataKey="despesa" stroke={CHART_COLORS.vermelho} strokeWidth={2} fill="url(#despGrad)" name="Despesa" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </ModuleCard>
+
+        <ModuleCard title="Margem ao Longo do Tempo" variant="cif" className="lg:col-span-2">
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={data!.receitaMensal.map(r => ({
+                mes: r.mes,
+                margem: r.receita > 0 ? ((r.receita - r.despesa) / r.receita * 100) : 0,
+              }))}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} tickFormatter={(v) => `${v}%`} />
+                <Tooltip formatter={(value: number) => [`${Number(value).toFixed(1)}%`, 'Margem']} />
+                <Line type="monotone" dataKey="margem" stroke={CHART_COLORS.azulMarinho} strokeWidth={2} dot={{ r: 4 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </ModuleCard>
+      </div>
+    </div>
+  );
 
   const renderContent = () => {
     switch (activeTab) {
@@ -95,334 +543,6 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     }
   };
 
-  const fmt = (v: number) => `R$ ${(v / 1000).toFixed(0)}k`;
-
-  const renderDashboard = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <KPICard title="Faturamento" value={fmt(data!.faturamento)} subtitle="Total pedidos" icon={<DollarSign className="h-5 w-5" />} variant="cif" />
-        <KPICard title="Custo MOB" value={fmt(data!.custoMaoDeObra)} subtitle="Mão de obra" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
-        <KPICard title="Custo Material" value={fmt(data!.custoMateriais)} subtitle="Em estoque" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
-        <KPICard title="EBITDA" value={fmt(data!.ebitda)} subtitle="Resultado" icon={<TrendingUp className="h-5 w-5" />} variant="cif" trend={data!.ebitda > 0 ? 'up' : 'down'} trendValue={data!.ebitda > 0 ? 'Positivo' : 'Negativo'} />
-        <KPICard title="Margem Líq." value={`${data!.margemLiquida.toFixed(1)}%`} subtitle="Rentabilidade" icon={<PiggyBank className="h-5 w-5" />} variant="cif" />
-        <div className={cn(
-          "p-3 rounded-xl border flex flex-col justify-center items-center",
-          statusEquilibrio === 'acima' ? "bg-success/10 border-success/30" :
-          statusEquilibrio === 'empate' ? "bg-warning/10 border-warning/30" :
-          "bg-destructive/10 border-destructive/30"
-        )}>
-          <span className="text-[10px] text-muted-foreground uppercase">Ponto de Equilíbrio</span>
-          <span className={cn("text-sm font-bold mt-1",
-            statusEquilibrio === 'acima' ? "text-success" : statusEquilibrio === 'empate' ? "text-warning" : "text-destructive"
-          )}>
-            {statusEquilibrio === 'acima' ? `${percentualAcima}% ACIMA` : statusEquilibrio === 'empate' ? 'EMPATE' : `${Math.abs(Number(percentualAcima))}% ABAIXO`}
-          </span>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="Receita vs Custo (Mensal)" variant="cif">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data!.receitaMensal}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                <Legend />
-                <Bar dataKey="receita" fill={CHART_COLORS.verde} name="Receita" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="custo" fill={CHART_COLORS.vermelho} name="Custo" radius={[4, 4, 0, 0]} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-
-        <ModuleCard title="Faturamento x Ponto de Equilíbrio" variant="cif">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={data!.receitaMensal.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: data!.pontoEquilibrio }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                <Legend />
-                <Bar dataKey="faturamento" fill={CHART_COLORS.verde} name="Faturamento" radius={[4, 4, 0, 0]} />
-                <Line type="monotone" dataKey="equilibrio" stroke={CHART_COLORS.vermelho} strokeWidth={2} strokeDasharray="5 5" name="Ponto de Equilíbrio" dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-      </div>
-    </div>
-  );
-
-  const renderFluxo = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <KPICard title="Faturamento" value={fmt(data!.faturamento)} subtitle="Receita total" icon={<TrendingUp className="h-5 w-5" />} variant="cif" />
-        <KPICard title="Custos" value={fmt(data!.custoTotal + data!.custoFixo)} subtitle="Total" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
-        <KPICard title="EBITDA" value={fmt(data!.ebitda)} subtitle="Resultado" icon={<Wallet className="h-5 w-5" />} variant="cif" trend={data!.ebitda > 0 ? 'up' : 'down'} trendValue={data!.ebitda > 0 ? 'Positivo' : 'Negativo'} />
-        <KPICard title="Pedidos" value={data!.pedidosTotal} subtitle={`${data!.pedidosFaturados} faturados`} icon={<Brain className="h-5 w-5" />} variant="cif" />
-      </div>
-      <ModuleCard title="Fluxo de Caixa por Período" variant="cif">
-        <div className="h-72">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data!.receitaMensal}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-              <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-              <Legend />
-              <Bar dataKey="receita" fill={CHART_COLORS.verde} name="Entradas" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="custo" fill={CHART_COLORS.vermelho} name="Saídas" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </ModuleCard>
-    </div>
-  );
-
-  const renderCustos = () => {
-    const custoCategories = [
-      { categoria: 'Matéria Prima', valor: data!.custoMateriais * 0.3, color: CHART_COLORS.vermelho },
-      { categoria: 'Mão de Obra', valor: data!.custoMaoDeObra, color: CHART_COLORS.laranja },
-      { categoria: 'Fixos', valor: data!.custoFixo, color: CHART_COLORS.azulMarinho },
-    ];
-    const total = custoCategories.reduce((s, c) => s + c.valor, 0);
-    const withPercent = custoCategories.map(c => ({ ...c, percentual: total > 0 ? ((c.valor / total) * 100).toFixed(1) : '0' }));
-
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KPICard title="Custo Fixo" value={fmt(data!.custoFixo)} subtitle="Mensal" icon={<CreditCard className="h-5 w-5" />} variant="cif" />
-          <KPICard title="Custo MOB" value={fmt(data!.custoMaoDeObra)} subtitle="Variável" icon={<Activity className="h-5 w-5" />} variant="cif" />
-          <KPICard title="Custo Material" value={fmt(data!.custoMateriais * 0.3)} subtitle="Consumido" icon={<Target className="h-5 w-5" />} variant="cif" />
-          <KPICard title="Margem Contrib." value={`${((data!.faturamento - data!.custoTotal) / Math.max(1, data!.faturamento) * 100).toFixed(0)}%`} subtitle="Média" icon={<TrendingUp className="h-5 w-5" />} variant="cif" />
-        </div>
-        <ModuleCard title="Composição de Custos" variant="cif">
-          <div className="h-64 flex items-center">
-            <div className="w-1/2 h-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie data={withPercent} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="valor">
-                    {withPercent.map((entry, index) => <Cell key={index} fill={entry.color} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="w-1/2 space-y-2">
-              {withPercent.map((item, index) => (
-                <div key={index} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
-                    <span className="text-xs text-muted-foreground">{item.categoria}</span>
-                  </div>
-                  <span className="text-xs font-semibold text-foreground">{item.percentual}%</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </ModuleCard>
-      </div>
-    );
-  };
-
-  const renderEquilibrio = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl bg-card border border-border/30">
-          <p className="text-xs text-muted-foreground">Ponto de Equilíbrio (R$)</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.pontoEquilibrio)}</p>
-        </div>
-        <div className="p-4 rounded-xl bg-card border border-border/30">
-          <p className="text-xs text-muted-foreground">Custo Fixo Total</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.custoFixo)}</p>
-        </div>
-        <div className="p-4 rounded-xl bg-card border border-border/30">
-          <p className="text-xs text-muted-foreground">Faturamento Atual</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.faturamento)}</p>
-        </div>
-        <div className={cn(
-          "p-4 rounded-xl border-2",
-          statusEquilibrio === 'acima' ? "bg-success/10 border-success/50" :
-          statusEquilibrio === 'empate' ? "bg-warning/10 border-warning/50" :
-          "bg-destructive/10 border-destructive/50"
-        )}>
-          <p className="text-xs text-muted-foreground">Status da Fábrica</p>
-          <p className={cn("text-xl font-bold mt-1",
-            statusEquilibrio === 'acima' ? "text-success" : statusEquilibrio === 'empate' ? "text-warning" : "text-destructive"
-          )}>
-            {statusEquilibrio === 'acima' ? '🟢 ACIMA' : statusEquilibrio === 'empate' ? '🟡 EMPATE' : '🔴 ABAIXO'}
-          </p>
-        </div>
-      </div>
-      <ModuleCard title="Faturamento x Ponto de Equilíbrio" variant="cif">
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data!.receitaMensal.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: data!.pontoEquilibrio }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-              <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-              <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-              <Legend />
-              <Bar dataKey="faturamento" fill={CHART_COLORS.verde} name="Faturamento Real" radius={[4, 4, 0, 0]} />
-              <Line type="monotone" dataKey="equilibrio" stroke={CHART_COLORS.vermelho} strokeWidth={3} strokeDasharray="8 4" name="Ponto de Equilíbrio" dot={false} />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      </ModuleCard>
-      <div className="p-6 rounded-xl bg-card border border-border/30 text-center">
-        <Gauge className="h-12 w-12 mx-auto mb-3 text-cif" />
-        <p className="text-lg font-bold text-foreground">Status Operacional</p>
-        <div className={cn(
-          "inline-block px-6 py-2 rounded-full mt-3 text-sm font-bold",
-          statusEquilibrio === 'acima' ? "bg-success/20 text-success" :
-          statusEquilibrio === 'empate' ? "bg-warning/20 text-warning" :
-          "bg-destructive/20 text-destructive"
-        )}>
-          Fábrica operando {percentualAcima}% {statusEquilibrio === 'acima' ? 'acima' : 'abaixo'} do ponto de equilíbrio
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderRentabilidade = () => (
-    <div className="space-y-6">
-      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cif">Rentabilidade & Pricing</strong> — Margem por SKU calculada a partir de dados reais de produção.</p>
-      </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden" style={{ maxHeight: '400px' }}>
-        <ScrollArea className="h-full">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">SKU / Produto</th>
-              <th className="text-right py-3 px-4 text-muted-foreground font-medium">Preço Venda</th>
-              <th className="text-right py-3 px-4 text-muted-foreground font-medium">Custo</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Margem %</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Vol.</th>
-              <th className="text-right py-3 px-4 text-muted-foreground font-medium">Receita Total</th>
-            </tr></thead>
-            <tbody>
-              {data!.rentabilidadeSKU.map((s, i) => (
-                <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
-                  <td className="py-3 px-4 font-medium text-foreground">{s.sku}</td>
-                  <td className="py-3 px-4 text-right">R$ {s.preco.toLocaleString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-right text-muted-foreground">R$ {s.custo.toLocaleString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-center">
-                    <Badge className={cn(s.margem >= 35 ? 'bg-success/20 text-success' : s.margem >= 25 ? 'bg-warning/20 text-warning' : 'bg-destructive/20 text-destructive')}>
-                      {s.margem}%
-                    </Badge>
-                  </td>
-                  <td className="py-3 px-4 text-center">{s.volume}</td>
-                  <td className="py-3 px-4 text-right font-semibold text-cif">R$ {(s.preco * s.volume).toLocaleString('pt-BR')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollArea>
-      </div>
-      {data!.rentabilidadeSKU.length > 0 && (
-        <ModuleCard title="Margem por Produto" variant="cif">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data!.rentabilidadeSKU}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="sku" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`${value}%`, 'Margem']} />
-                <Bar dataKey="margem" radius={[4, 4, 0, 0]}>
-                  {data!.rentabilidadeSKU.map((s, i) => (
-                    <Cell key={i} fill={s.margem >= 35 ? CHART_COLORS.verde : s.margem >= 25 ? CHART_COLORS.amarelo : CHART_COLORS.vermelho} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-      )}
-    </div>
-  );
-
-  const renderAuditoria = () => (
-    <div className="space-y-6">
-      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria & Compliance</strong> — Logs de ações do sistema. Registros imutáveis.</p>
-      </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden" style={{ maxHeight: '500px' }}>
-        <ScrollArea className="h-full">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Data</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ação</th>
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Entidade</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Status</th>
-            </tr></thead>
-            <tbody>
-              {auditLogs.length === 0 ? (
-                <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Nenhum log registrado.</td></tr>
-              ) : auditLogs.map((log, i) => (
-                <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
-                  <td className="py-3 px-4 text-muted-foreground">{new Date(log.created_at).toLocaleString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-center"><Badge variant="outline">{log.action}</Badge></td>
-                  <td className="py-3 px-4 text-foreground">{log.entity}</td>
-                  <td className="py-3 px-4 text-center">
-                    <Badge className={cn(log.status === 'success' ? 'bg-success/20 text-success' : 'bg-destructive/20 text-destructive')}>
-                      {log.status === 'success' ? 'OK' : 'Erro'}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollArea>
-      </div>
-    </div>
-  );
-
-  const renderAnalytics = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="Resultado por Período" variant="cif">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data!.receitaMensal.map(r => ({ mes: r.mes, resultado: r.receita - r.custo }))}>
-                <defs>
-                  <linearGradient id="colorResultadoCIF" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={CHART_COLORS.verdeEscuro} stopOpacity={0.4} />
-                    <stop offset="95%" stopColor={CHART_COLORS.verdeEscuro} stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Resultado']} />
-                <Area type="monotone" dataKey="resultado" stroke={CHART_COLORS.verdeEscuro} strokeWidth={2} fill="url(#colorResultadoCIF)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-
-        <ModuleCard title="Receita vs Custo (Tendência)" variant="cif">
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={data!.receitaMensal}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                <Legend />
-                <Line type="monotone" dataKey="receita" stroke={CHART_COLORS.verde} strokeWidth={2} name="Receita" dot={{ r: 4 }} />
-                <Line type="monotone" dataKey="custo" stroke={CHART_COLORS.vermelho} strokeWidth={2} name="Custo" dot={{ r: 4 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-      </div>
-    </div>
-  );
-
-  // === SIDEBAR ===
   const SidebarContent = ({ isCollapsed = false }: { isCollapsed?: boolean }) => (
     <>
       <div className={cn("mb-6", isCollapsed && "text-center")}>
@@ -438,26 +558,18 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         )}
       </div>
       <div className={cn("mb-2 pb-2 border-b border-border/30", isCollapsed && "pb-1 mb-1")}>
-        <button
-          onClick={() => { onGoHome?.(); }}
-          className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all font-medium', isCollapsed && 'justify-center px-2')}
-        >
+        <button onClick={() => { onGoHome?.(); }} className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-primary hover:bg-primary/10 transition-all font-medium', isCollapsed && 'justify-center px-2')}>
           <Home className="h-4 w-4 flex-shrink-0" />
           {!isCollapsed && <span>HOME</span>}
         </button>
       </div>
       <nav className="space-y-1">
         {menuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => handleTabChange(item.id)}
-            title={isCollapsed ? item.label : undefined}
-            className={cn(
-              'w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all',
+          <button key={item.id} onClick={() => handleTabChange(item.id)} title={isCollapsed ? item.label : undefined}
+            className={cn('w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm transition-all',
               activeTab === item.id ? 'bg-cif/20 text-cif font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50',
               isCollapsed && 'justify-center px-2'
-            )}
-          >
+            )}>
             <item.icon className="h-4 w-4 flex-shrink-0" />
             {!isCollapsed && <span className="truncate">{item.label}</span>}
           </button>
@@ -472,9 +584,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         <div className="fixed top-12 left-0 right-0 z-40 bg-background/95 backdrop-blur border-b border-border/50 px-4 py-3">
           <div className="flex items-center justify-between">
             <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-              <SheetTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-10 w-10"><Menu className="h-6 w-6" /></Button>
-              </SheetTrigger>
+              <SheetTrigger asChild><Button variant="ghost" size="icon" className="h-10 w-10"><Menu className="h-6 w-6" /></Button></SheetTrigger>
               <SheetContent side="left" className="w-72 p-4 overflow-y-auto">
                 <SheetClose className="absolute right-4 top-4"><X className="h-5 w-5" /></SheetClose>
                 <SidebarContent />
@@ -490,24 +600,16 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
       )}
 
       {!isMobile && (
-        <aside className={cn(
-          'h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
-          sidebarCollapsed ? 'w-16' : 'w-56'
-        )}>
-          <button
-            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-4 top-6 w-8 h-8 bg-cif border-2 border-cif/50 rounded-full flex items-center justify-center hover:bg-cif/80 hover:scale-110 transition-all z-10 shadow-lg shadow-cif/30 text-white"
-          >
+        <aside className={cn('h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto', sidebarCollapsed ? 'w-16' : 'w-56')}>
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            className="absolute -right-4 top-6 w-8 h-8 bg-cif border-2 border-cif/50 rounded-full flex items-center justify-center hover:bg-cif/80 hover:scale-110 transition-all z-10 shadow-lg shadow-cif/30 text-white">
             {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
           <SidebarContent isCollapsed={sidebarCollapsed} />
         </aside>
       )}
 
-      <main className={cn(
-        'flex-1 overflow-y-auto',
-        isMobile ? 'pt-28 px-3 pb-4' : 'p-4 lg:p-6'
-      )}>
+      <main className={cn('flex-1 overflow-y-auto', isMobile ? 'pt-28 px-3 pb-4' : 'p-4 lg:p-6')}>
         {!isMobile && (
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -524,6 +626,40 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         )}
         {renderContent()}
       </main>
+
+      {/* Modal Nova Transação */}
+      <Dialog open={showNewTx} onOpenChange={setShowNewTx}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Nova Transação</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Select value={newTx.tipo} onValueChange={(v) => setNewTx(p => ({ ...p, tipo: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="RECEITA">Receita</SelectItem>
+                <SelectItem value="DESPESA">Despesa</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={newTx.categoria} onValueChange={(v) => setNewTx(p => ({ ...p, categoria: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="materiais">Materiais</SelectItem>
+                <SelectItem value="mao_de_obra">Mão de Obra</SelectItem>
+                <SelectItem value="aluguel">Aluguel</SelectItem>
+                <SelectItem value="energia">Energia</SelectItem>
+                <SelectItem value="manutencao">Manutenção</SelectItem>
+                <SelectItem value="administrativo">Administrativo</SelectItem>
+                <SelectItem value="vendas_moveis">Vendas Móveis</SelectItem>
+                <SelectItem value="projetos_especiais">Projetos Especiais</SelectItem>
+                <SelectItem value="assistencia">Assistência</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder="Descrição" value={newTx.descricao} onChange={(e) => setNewTx(p => ({ ...p, descricao: e.target.value }))} />
+            <Input type="number" placeholder="Valor (R$)" value={newTx.valor} onChange={(e) => setNewTx(p => ({ ...p, valor: e.target.value }))} />
+            <Input type="date" value={newTx.data_vencimento} onChange={(e) => setNewTx(p => ({ ...p, data_vencimento: e.target.value }))} />
+            <Button className="w-full" onClick={handleCriarTx}>Criar Transação</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
