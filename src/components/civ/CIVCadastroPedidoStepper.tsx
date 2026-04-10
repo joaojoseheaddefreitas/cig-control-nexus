@@ -907,8 +907,8 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           {/* ─── STEP 2: Múltiplos Produtos ─── */}
           {currentStep === 2 && (
             <div className="space-y-4 animate-fade-in">
-              <div className="flex items-center justify-between">
-                <label className="text-sm font-bold text-foreground">Itens do Pedido</label>
+              {/* Capacity Alert Banner for Salespeople */}
+              <CapacityAlertBanner capacidade={capacidade} />
                 {!isLocked && (
                   <Button variant="outline" size="sm" onClick={addItem}>
                     <Plus className="h-3 w-3 mr-1" /> Adicionar Produto
