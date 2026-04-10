@@ -63,8 +63,19 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 60000);
-    return () => clearInterval(interval);
+    // Realtime: reload when key tables change
+    const channel = supabase
+      .channel('cig-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ops' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'setores_produtivos' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'materiais' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'op_route_steps' }, () => loadData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadData = async () => {
