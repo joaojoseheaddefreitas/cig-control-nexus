@@ -11,6 +11,7 @@ import {
 import { cn } from '@/lib/utils';
 import { fetchMateriais, type Material } from '@/services/materiaisService';
 import { fetchPedidosCompra, type PedidoCompra } from '@/services/pedidoCompraService';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Insight {
   tipo: 'comprar' | 'evitar' | 'risco' | 'oportunidade' | 'info';
@@ -23,13 +24,19 @@ interface Insight {
 export function CIIA() {
   const [materiais, setMateriais] = useState<Material[]>([]);
   const [pedidosCompra, setPedidosCompra] = useState<PedidoCompra[]>([]);
+  const [fornecedorMateriais, setFornecedorMateriais] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = async () => {
     setLoading(true);
-    const [mats, pcs] = await Promise.all([fetchMateriais(), fetchPedidosCompra()]);
+    const [mats, pcs, fmData] = await Promise.all([
+      fetchMateriais(),
+      fetchPedidosCompra(),
+      supabase.from('fornecedor_materiais').select('*').eq('status', 'ativo'),
+    ]);
     setMateriais(mats);
     setPedidosCompra(pcs);
+    setFornecedorMateriais(fmData.data || []);
     setLoading(false);
   };
 
@@ -38,20 +45,33 @@ export function CIIA() {
   const insights = useMemo<Insight[]>(() => {
     const result: Insight[] = [];
     const hoje = new Date();
+    const hojeStr = hoje.toISOString().split('T')[0];
 
-    // Materials below reorder point
-    materiais.filter(m => m.estoque_atual < m.ponto_pedido && m.consumo_medio_diario > 0).forEach(m => {
-      const cobertura = m.estoque_atual / m.consumo_medio_diario;
+    // Materials below PP (ponto de pedido calculado)
+    materiais.filter(m => m.consumo_medio_diario > 0).forEach(m => {
+      const ppCalc = m.ponto_pedido_calculado || m.ponto_pedido;
       const hasPCAberto = pedidosCompra.some(p => p.material_id === m.id && !['recebido', 'cancelado'].includes(p.status));
-      if (!hasPCAberto) {
+      if (m.estoque_atual < ppCalc && !hasPCAberto) {
+        const cobertura = m.estoque_atual / m.consumo_medio_diario;
         result.push({
           tipo: 'comprar',
-          titulo: `Comprar: ${m.nome}`,
-          descricao: `Estoque em ${m.estoque_atual} ${m.unidade} (ponto pedido: ${m.ponto_pedido}). Cobertura de apenas ${cobertura.toFixed(1)} dias. Sem pedido de compra em aberto.`,
+          titulo: `Abaixo do Ponto de Pedido: ${m.nome}`,
+          descricao: `Estoque ${m.estoque_atual} ${m.unidade} < PP ${ppCalc.toFixed(0)}. Cobertura ${cobertura.toFixed(1)} dias. Margem segurança: ${m.margem_seguranca_percentual}%. Sem pedido em aberto — COMPRAR.`,
           urgencia: cobertura < m.lead_time_dias ? 'alta' : 'media',
           material: m.nome,
         });
       }
+    });
+
+    // Duas gavetas consuming gaveta2
+    materiais.filter(m => m.tipo_controle === 'DUAS_GAVETAS' && m.gaveta2_ativa).forEach(m => {
+      result.push({
+        tipo: 'risco',
+        titulo: `⚠ DUAS GAVETAS — Gaveta 2 Ativa: ${m.nome}`,
+        descricao: `Gaveta 1 zerou! Consumindo estoque de segurança (Gaveta 2 = ${m.gaveta2?.toFixed(0)} ${m.unidade}). Compra automática necessária AGORA.`,
+        urgencia: 'alta',
+        material: m.nome,
+      });
     });
 
     // Stoppage risk
@@ -71,6 +91,20 @@ export function CIIA() {
       }
     });
 
+    // Suggest margin increase for materials with frequent stockouts
+    materiais.filter(m => m.consumo_medio_diario > 0 && m.margem_seguranca_percentual < 25).forEach(m => {
+      const cobertura = m.estoque_atual / m.consumo_medio_diario;
+      if (cobertura < m.lead_time_dias * 0.8) {
+        result.push({
+          tipo: 'oportunidade',
+          titulo: `Sugestão: Aumentar margem de ${m.nome}`,
+          descricao: `Margem de segurança atual: ${m.margem_seguranca_percentual}%. Com cobertura de apenas ${cobertura.toFixed(1)}d vs lead time de ${m.lead_time_dias}d, recomenda-se aumentar para pelo menos 30%.`,
+          urgencia: 'media',
+          material: m.nome,
+        });
+      }
+    });
+
     // Overstock
     materiais.filter(m => m.estoque_maximo > 0 && m.estoque_atual > m.estoque_maximo).forEach(m => {
       result.push({
@@ -82,14 +116,15 @@ export function CIIA() {
       });
     });
 
-    // Late POs
-    const lateCount = pedidosCompra.filter(p => p.data_previsao && p.data_previsao < hoje.toISOString().split('T')[0] && !['recebido', 'cancelado'].includes(p.status)).length;
-    if (lateCount > 0) {
+    // Late POs with supplier impact
+    const latePCs = pedidosCompra.filter(p => p.data_previsao && p.data_previsao < hojeStr && !['recebido', 'cancelado'].includes(p.status));
+    if (latePCs.length > 0) {
+      const fornAtrasados = new Set(latePCs.map(p => p.fornecedor_nome));
       result.push({
         tipo: 'risco',
-        titulo: `${lateCount} Pedidos de Compra Atrasados`,
-        descricao: `Existem ${lateCount} pedidos com previsão vencida. Risco de desabastecimento se não forem cobrados ou substituídos.`,
-        urgencia: lateCount > 3 ? 'alta' : 'media',
+        titulo: `${latePCs.length} Pedidos Atrasados — ${fornAtrasados.size} fornecedor(es)`,
+        descricao: `Fornecedores com atraso: ${Array.from(fornAtrasados).join(', ')}. Risco de desabastecimento. Cobrar ou buscar alternativas.`,
+        urgencia: latePCs.length > 3 ? 'alta' : 'media',
       });
     }
 
@@ -120,7 +155,7 @@ export function CIIA() {
       const urgOrder = { alta: 0, media: 1, baixa: 2 };
       return urgOrder[a.urgencia] - urgOrder[b.urgencia];
     });
-  }, [materiais, pedidosCompra]);
+  }, [materiais, pedidosCompra, fornecedorMateriais]);
 
   const iconMap = {
     comprar: <ShoppingCart className="h-5 w-5" />,
@@ -156,12 +191,11 @@ export function CIIA() {
           <Brain className="h-5 w-5 text-cic" />
           <div className="text-sm">
             <strong className="text-cic">Inteligência Artificial — CIC CONTROL</strong>
-            <p className="text-muted-foreground mt-1">Insights automáticos baseados em dados reais de estoque, consumo, pedidos de compra e lead time dos fornecedores.</p>
+            <p className="text-muted-foreground mt-1">Insights automáticos com Ponto de Pedido, Duas Gavetas, margem de segurança e análise de fornecedores com atraso.</p>
           </div>
         </div>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <KPICard title="Alertas Críticos" value={altas.length} subtitle="Urgência alta" icon={<AlertTriangle className="h-5 w-5" />} variant="cic" trend={altas.length > 0 ? 'down' : 'up'} trendValue={altas.length > 0 ? 'Atenção' : 'OK'} />
         <KPICard title="Alertas Médios" value={medias.length} subtitle="Urgência média" icon={<TrendingDown className="h-5 w-5" />} variant="cic" />
@@ -169,7 +203,6 @@ export function CIIA() {
         <KPICard title="Status" value={altas.length === 0 ? 'NORMAL' : 'ALERTA'} subtitle={altas.length === 0 ? '🟢 Operação segura' : '🔴 Ação necessária'} icon={<ShieldCheck className="h-5 w-5" />} variant="cic" />
       </div>
 
-      {/* Insights */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold">Painel de Insights</h3>
         <Button variant="ghost" size="sm" onClick={loadData}>
