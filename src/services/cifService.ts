@@ -28,7 +28,19 @@ export interface LogAuditoriaRow {
   detalhes: string | null;
   entidade: string | null;
   entidade_id: string | null;
+  campo_alterado: string | null;
+  nivel_risco: string;
   data: string;
+}
+
+function calcRisco(valorAntigo: number | null, valorNovo: number | null, acao: string): string {
+  if (acao.includes('CRIAR')) return 'BAIXO';
+  if (valorAntigo != null && valorNovo != null && valorAntigo > 0) {
+    const pct = Math.abs((valorNovo - valorAntigo) / valorAntigo) * 100;
+    if (pct > 20) return 'ALTO';
+  }
+  if (acao.includes('EDITAR') || acao.includes('PAGAMENTO')) return 'MEDIO';
+  return 'BAIXO';
 }
 
 export interface RentabilidadeSKU {
