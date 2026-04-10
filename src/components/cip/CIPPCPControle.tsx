@@ -752,7 +752,7 @@ export function CIPPCPControle() {
                   />
                 </div>
                 <span className="text-[9px] text-muted-foreground mt-0.5 block">
-                  {setor.horasLivres.toFixed(1)}h livres
+                  {setor.diasGargalo.toFixed(1)}d · {setor.horasLivres.toFixed(0)}h livres
                 </span>
               </div>
             );
