@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { CICEstoqueMateriais } from '@/components/cic/CICEstoqueMateriais';
+import { CICFornecedores } from '@/components/cic/CICFornecedores';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -669,43 +670,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   };
 
   // === FORNECEDORES ===
-  const renderFornecedores = () => (
-    <div className="space-y-6">
-      <div className="flex gap-2 max-w-md">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Buscar fornecedor..." value={searchForn} onChange={(e) => setSearchForn(e.target.value)} className="pl-10" />
-        </div>
-      </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-        <ScrollArea className="max-h-[500px]">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Fornecedor</th>
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">CNPJ</th>
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Contato</th>
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Email</th>
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Telefone</th>
-            </tr></thead>
-            <tbody>
-              {fornecedores.filter(f => f.nome.toLowerCase().includes(searchForn.toLowerCase())).map(f => (
-                <tr key={f.id} className="border-b border-border/30 hover:bg-secondary/30">
-                  <td className="py-3 px-4 font-medium text-foreground">{f.nome}</td>
-                  <td className="py-3 px-4 text-muted-foreground">{f.cnpj || '—'}</td>
-                  <td className="py-3 px-4 text-muted-foreground">{f.contato || '—'}</td>
-                  <td className="py-3 px-4 text-muted-foreground">{f.email || '—'}</td>
-                  <td className="py-3 px-4 text-muted-foreground">{f.telefone || '—'}</td>
-                </tr>
-              ))}
-              {fornecedores.length === 0 && (
-                <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum fornecedor cadastrado.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </ScrollArea>
-      </div>
-    </div>
-  );
+  const renderFornecedores = () => <CICFornecedores />;
 
   // === MRP ===
   const renderMRP = () => {
