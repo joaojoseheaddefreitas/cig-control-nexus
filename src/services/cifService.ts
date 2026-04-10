@@ -73,16 +73,20 @@ export interface CIFDashboardData {
 const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
 
 export async function fetchCIFData(): Promise<CIFDashboardData> {
-  const [transRes, orcRes, logsRes, produtosRes, opsRes] = await Promise.all([
+  const [transRes, orcRes, logsRes, produtosRes, opsRes, configFinRes] = await Promise.all([
     (supabase as any).from("transacoes").select("*").order("data_emissao", { ascending: false }),
     (supabase as any).from("orcamentos").select("*"),
     (supabase as any).from("logs_auditoria").select("*").order("data", { ascending: false }).limit(50),
     supabase.from("produtos").select("nome, preco_base, tempo_unitario").eq("ativo", true).limit(20),
     supabase.from("ops").select("id, produto_nome, quantidade, tempo_unitario, tempo_total, status_producao"),
+    (supabase as any).from("configuracoes_financeiras").select("*").limit(1),
   ]);
 
   const transacoes: TransacaoRow[] = (transRes.data || []) as any[];
   const orcamentos: OrcamentoRow[] = (orcRes.data || []) as any[];
+  const cfgFin = (configFinRes.data || [])[0] || { impostos_percentual: 8.5, comissoes_percentual: 5 };
+  const impostosPerc = Number(cfgFin.impostos_percentual) / 100;
+  const comissaoPerc = Number(cfgFin.comissoes_percentual) / 100;
   const logs: LogAuditoriaRow[] = (logsRes.data || []) as any[];
 
   const now = new Date();
@@ -188,19 +192,53 @@ export async function fetchCIFData(): Promise<CIFDashboardData> {
 
   // Rentabilidade SKU
   const CUSTO_HORA = 18.5;
+  const CUSTO_INDIRETO_MULT = 0.15; // 15% overhead
   const allOps = opsRes.data || [];
-  const rentabilidadeSKU = (produtosRes.data || []).map(p => {
-    const custoUnit = Number(p.tempo_unitario) * CUSTO_HORA * 1.3;
-    const margem = Number(p.preco_base) > 0 ? ((Number(p.preco_base) - custoUnit) / Number(p.preco_base)) * 100 : 0;
-    const vol = allOps.filter(op => op.produto_nome === p.nome).reduce((s, op) => s + Number(op.quantidade), 0);
+
+  const rentabilidadeRaw: RentabilidadeSKU[] = (produtosRes.data || []).map(p => {
+    const preco = Number(p.preco_base);
+    const custoMaoObra = Number(p.tempo_unitario) * CUSTO_HORA;
+    const custoMaterial = custoMaoObra * 0.3; // proxy
+    const custoIndireto = (custoMaoObra + custoMaterial) * CUSTO_INDIRETO_MULT;
+    const custoImpostos = preco * impostosPerc;
+    const custoComissao = preco * comissaoPerc;
+    const custoTotal = custoMaoObra + custoMaterial + custoIndireto + custoImpostos + custoComissao;
+    const margem = preco > 0 ? ((preco - custoTotal) / preco) * 100 : 0;
+    const lucroUnitario = preco - custoTotal;
+    const volume = allOps.filter(op => op.produto_nome === p.nome).reduce((s, op) => s + Number(op.quantidade), 0);
     return {
       sku: p.nome.length > 20 ? p.nome.substring(0, 20) + '…' : p.nome,
-      preco: Number(p.preco_base),
-      custo: Number(custoUnit.toFixed(2)),
+      preco,
+      custoMaterial: Number(custoMaterial.toFixed(2)),
+      custoMaoObra: Number(custoMaoObra.toFixed(2)),
+      custoIndireto: Number(custoIndireto.toFixed(2)),
+      custoImpostos: Number(custoImpostos.toFixed(2)),
+      custoComissao: Number(custoComissao.toFixed(2)),
+      custoTotal: Number(custoTotal.toFixed(2)),
       margem: Number(margem.toFixed(1)),
-      volume: vol,
+      lucroUnitario: Number(lucroUnitario.toFixed(2)),
+      volume,
+      lucroTotal: Number((lucroUnitario * volume).toFixed(2)),
+      curvaABC: 'C' as const,
     };
   }).filter(s => s.preco > 0);
+
+  // Sort by lucroTotal DESC (only products with volume)
+  const comVolume = rentabilidadeRaw.filter(s => s.volume > 0).sort((a, b) => b.lucroTotal - a.lucroTotal);
+  const semVolume = rentabilidadeRaw.filter(s => s.volume === 0);
+
+  // Curva ABC calculation
+  const totalLucro = comVolume.reduce((s, p) => s + Math.max(0, p.lucroTotal), 0);
+  let acum = 0;
+  comVolume.forEach(p => {
+    acum += Math.max(0, p.lucroTotal);
+    if (totalLucro > 0) {
+      const pct = acum / totalLucro;
+      p.curvaABC = pct <= 0.8 ? 'A' : pct <= 0.95 ? 'B' : 'C';
+    }
+  });
+
+  const rentabilidadeSKU = [...comVolume, ...semVolume];
 
   return {
     receita, despesa, ebitda, saldoCaixa,
