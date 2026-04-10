@@ -170,7 +170,7 @@ export function CIPDashboardNew() {
   const displayedSetores = showAllSetores ? setorCapacidade : setorCapacidade.slice(0, isMobile ? 4 : 7);
   const efLabel = getEficienciaLabel(eficienciaMedia);
 
-  if (loading) {
+  if (loading || capLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-8 w-8 animate-spin text-cip" />
