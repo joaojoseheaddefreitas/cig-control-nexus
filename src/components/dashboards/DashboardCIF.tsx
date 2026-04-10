@@ -369,10 +369,10 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
       // Log audit
       await (supabase as any).from('logs_auditoria').insert({
         usuario: 'sistema',
-        acao: 'ALTERACAO_ORCAMENTO',
+        acao: 'EDITAR_ORCAMENTO',
         valor_antigo: existing ? Number(existing.valor_limite) : null,
         valor_novo: novoValor,
-        detalhes: `Orçamento ${categoria} alterado para R$ ${novoValor}`,
+        detalhes: `Orçamento ${categoria} alterado para R$ ${novoValor.toLocaleString('pt-BR')}`,
         entidade: 'orcamentos',
         entidade_id: existing?.id || null,
       });
