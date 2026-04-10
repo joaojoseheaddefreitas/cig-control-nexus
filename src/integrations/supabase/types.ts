@@ -713,8 +713,10 @@ export type Database = {
           id: string
           lead_time_dias: number
           lote_economico: number
+          margem_seguranca_percentual: number
           nome: string
           ponto_pedido: number
+          tipo_controle: string
           ultima_entrada: string | null
           unidade: string
           updated_at: string
@@ -735,8 +737,10 @@ export type Database = {
           id?: string
           lead_time_dias?: number
           lote_economico?: number
+          margem_seguranca_percentual?: number
           nome: string
           ponto_pedido?: number
+          tipo_controle?: string
           ultima_entrada?: string | null
           unidade?: string
           updated_at?: string
@@ -757,8 +761,10 @@ export type Database = {
           id?: string
           lead_time_dias?: number
           lote_economico?: number
+          margem_seguranca_percentual?: number
           nome?: string
           ponto_pedido?: number
+          tipo_controle?: string
           ultima_entrada?: string | null
           unidade?: string
           updated_at?: string
