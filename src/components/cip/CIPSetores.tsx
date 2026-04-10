@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,31 +8,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { KPICard } from '@/components/ui/KPICard';
-import { Layers, Users, TrendingUp, AlertTriangle, Pencil, Settings, BarChart3, Power, Plus, Save, X, Trash2, Loader2, Clock, Cog } from 'lucide-react';
+import { Layers, Users, TrendingUp, AlertTriangle, Pencil, BarChart3, Plus, Save, Trash2, Loader2, Clock, Cog, Target } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-
-interface SetorDB {
-  id: string;
-  nome: string;
-  ordem: number;
-  ativo: boolean;
-  mao_de_obra: number;
-  horas_turno: number;
-  eficiencia: number;
-  maquinas_automaticas: number;
-  dias_uteis_mensais: number;
-  dias_uteis_manual: boolean;
-}
-
-interface SetorComCarga extends SetorDB {
-  opsEntrada: number;
-  horasOcupadas: number;
-  horasDisponiveis: number;
-  cargaPercent: number;
-}
+import { useCapacidadeIndustrial } from '@/hooks/useCapacidadeIndustrial';
+import { getOcupacaoStatus } from '@/services/capacidadeIndustrialService';
 
 // Circular Gauge
 function CircularGauge({ value, size = 140 }: { value: number; size?: number }) {
@@ -42,11 +23,11 @@ function CircularGauge({ value, size = 140 }: { value: number; size?: number }) 
   const progress = Math.min(100, Math.max(0, value));
   const offset = circumference - (progress / 100) * circumference * 0.75;
   const getColor = (val: number) => {
-    if (val > 100) return '#ef4444';  // Gargalo
-    if (val >= 95) return '#f97316';  // No limite
-    if (val >= 80) return '#f59e0b';  // Atenção
-    if (val >= 50) return '#22c55e';  // Normal
-    return '#3b82f6';                 // Ocioso
+    if (val > 100) return '#ef4444';
+    if (val >= 95) return '#f97316';
+    if (val >= 80) return '#f59e0b';
+    if (val >= 50) return '#22c55e';
+    return '#3b82f6';
   };
 
   return (
@@ -75,89 +56,34 @@ function getStatusBadge(carga: number) {
 }
 
 export function CIPSetores() {
-  const [setores, setSetores] = useState<SetorComCarga[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { capacidade, loading, refresh } = useCapacidadeIndustrial();
   const [novoSetorOpen, setNovoSetorOpen] = useState(false);
   const [novoNome, setNovoNome] = useState('');
   const [saving, setSaving] = useState(false);
-  const [deleteDialog, setDeleteDialog] = useState<SetorComCarga | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<any>(null);
   const [substituteId, setSubstituteId] = useState('');
   const [deleting, setDeleting] = useState(false);
-  const [editDialog, setEditDialog] = useState<SetorComCarga | null>(null);
+  const [editDialog, setEditDialog] = useState<any>(null);
   const [editForm, setEditForm] = useState({ nome: '', mao_de_obra: 1, horas_turno: 8.8, eficiencia: 85, maquinas_automaticas: 1, dias_uteis_mensais: 22, dias_uteis_manual: false });
   const [editSaving, setEditSaving] = useState(false);
 
-  useEffect(() => { loadSetores(); }, []);
+  // Map unified data to display format
+  const setoresData = capacidade?.setores || [];
 
-  const loadSetores = async () => {
-    setLoading(true);
-    const { data: setoresDB } = await supabase
-      .from('setores_produtivos')
-      .select('*')
-      .order('ordem');
-
-    if (!setoresDB) { setLoading(false); return; }
-
-    // Load carga real from setor_rastreamento
-    const { data: rastreamento } = await supabase
-      .from('setor_rastreamento')
-      .select('setor_id, op_id, status, ops(quantidade, tempo_unitario)')
-      .eq('status', 'entrada');
-
-    const cargaMap: Record<string, { ops: number; horas: number }> = {};
-    (rastreamento || []).forEach((r: any) => {
-      if (!cargaMap[r.setor_id]) cargaMap[r.setor_id] = { ops: 0, horas: 0 };
-      cargaMap[r.setor_id].ops++;
-      const q = Number(r.ops?.quantidade) || 0;
-      const t = Number(r.ops?.tempo_unitario) || 0;
-      cargaMap[r.setor_id].horas += q * t;
-    });
-
-    const mapped: SetorComCarga[] = (setoresDB as any[]).map(s => {
-      const horasOcupadas = cargaMap[s.id]?.horas || 0;
-      const mdo = Number(s.mao_de_obra) || 1;
-      const ht = Number(s.horas_turno) || 8.8;
-      const eff = Number(s.eficiencia) || 0.85;
-      const multiplicador = Math.max(Number(s.maquinas_automaticas) || 1, 1);
-      const diasUteis = Number(s.dias_uteis_mensais) || 22;
-      // CAPACIDADE = equipe × multiplicador × horas_turno × dias (SEM eficiência)
-      const horasDisponiveis = mdo * multiplicador * ht * diasUteis;
-      // DEMANDA ajustada pela eficiência
-      const horasAjustadas = horasOcupadas / eff;
-      const cargaPercent = horasDisponiveis > 0 ? Math.round((horasAjustadas / horasDisponiveis) * 100) : 0;
-
-      return {
-        ...s,
-        mao_de_obra: mdo,
-        horas_turno: ht,
-        eficiencia: eff,
-        maquinas_automaticas: multiplicador,
-        opsEntrada: cargaMap[s.id]?.ops || 0,
-        horasOcupadas: horasAjustadas,
-        horasDisponiveis,
-        cargaPercent,
-      };
-    });
-
-    setSetores(mapped);
-    setLoading(false);
-  };
-
-  const handleToggle = async (setor: SetorComCarga) => {
+  const handleToggle = async (setor: any) => {
     const { error } = await supabase
       .from('setores_produtivos')
       .update({ ativo: !setor.ativo } as any)
       .eq('id', setor.id);
     if (error) { toast.error('Erro: ' + error.message); return; }
     toast.info(`Setor "${setor.nome}" ${setor.ativo ? 'desativado' : 'ativado'}`);
-    await loadSetores();
   };
 
   const handleAddSetor = async () => {
     if (saving) return;
     if (!novoNome.trim()) { toast.error('Nome é obrigatório'); return; }
     setSaving(true);
-    const maxOrdem = setores.length > 0 ? Math.max(...setores.map(s => s.ordem)) : 0;
+    const maxOrdem = setoresData.length > 0 ? Math.max(...setoresData.map(s => s.ordem)) : 0;
     const { error } = await supabase.from('setores_produtivos').insert({
       nome: novoNome.trim(),
       ordem: maxOrdem + 1,
@@ -166,10 +92,9 @@ export function CIPSetores() {
     if (error) { toast.error('Erro: ' + error.message); }
     else { toast.success('Setor criado!'); setNovoSetorOpen(false); setNovoNome(''); }
     setSaving(false);
-    await loadSetores();
   };
 
-  const openEdit = (setor: SetorComCarga) => {
+  const openEdit = (setor: any) => {
     setEditDialog(setor);
     setEditForm({
       nome: setor.nome,
@@ -177,8 +102,8 @@ export function CIPSetores() {
       horas_turno: setor.horas_turno,
       eficiencia: Math.round(setor.eficiencia * 100),
       maquinas_automaticas: setor.maquinas_automaticas,
-      dias_uteis_mensais: (setor as any).dias_uteis_mensais || 22,
-      dias_uteis_manual: (setor as any).dias_uteis_manual || false,
+      dias_uteis_mensais: setor.dias_uteis_mensais || 22,
+      dias_uteis_manual: setor.dias_uteis_manual || false,
     });
   };
 
@@ -201,13 +126,13 @@ export function CIPSetores() {
     if (error) { toast.error('Erro: ' + error.message); }
     else { toast.success(`Setor "${editForm.nome}" atualizado!`); setEditDialog(null); }
     setEditSaving(false);
-    await loadSetores();
   };
 
   const handleDeleteSetor = async () => {
     if (!deleteDialog || !substituteId) { toast.error('Selecione o setor substituto'); return; }
     setDeleting(true);
 
+    // Check active OPs via rastreamento
     const { data: activeOps } = await supabase
       .from('setor_rastreamento')
       .select('id')
@@ -250,7 +175,7 @@ export function CIPSetores() {
     await supabase.from('op_route_steps').update({ setor_id: substituteId } as any).eq('setor_id', deleteDialog.id);
     await supabase.from('setor_rastreamento').update({ setor_id: substituteId } as any).eq('setor_id', deleteDialog.id).eq('status', 'pendente');
 
-    const substituteName = setores.find(s => s.id === substituteId)?.nome || substituteId;
+    const substituteName = setoresData.find(s => s.id === substituteId)?.nome || substituteId;
     await supabase.from('action_logs').insert({
       action: 'excluir_setor', entity: 'setores_produtivos', entity_id: deleteDialog.id, status: 'success',
       details: { setor_removido: deleteDialog.nome, setor_substituto: substituteName, produtos_migrados: vinculos?.length || 0 } as any,
@@ -263,17 +188,16 @@ export function CIPSetores() {
     setDeleting(false);
     setDeleteDialog(null);
     setSubstituteId('');
-    await loadSetores();
   };
 
-  const setoresAtivos = setores.filter(s => s.ativo);
-  const totalOperadores = setoresAtivos.reduce((a, s) => a + s.mao_de_obra, 0);
-  const totalMaquinas = setoresAtivos.reduce((a, s) => a + s.maquinas_automaticas, 0);
-  const eficienciaMedia = setoresAtivos.length > 0
-    ? Math.round(setoresAtivos.reduce((a, s) => a + s.eficiencia * 100, 0) / setoresAtivos.length)
+  const totalOperadores = setoresData.reduce((a, s) => a + s.mao_de_obra, 0);
+  const totalMaquinas = setoresData.reduce((a, s) => a + s.maquinas_automaticas, 0);
+  const eficienciaMedia = setoresData.length > 0
+    ? Math.round(setoresData.reduce((a, s) => a + s.eficiencia * 100, 0) / setoresData.length)
     : 0;
-  const gargalos = setoresAtivos.filter(s => s.cargaPercent >= 80);
-  const totalNaFila = setoresAtivos.reduce((a, s) => a + s.opsEntrada, 0);
+  const gargalos = setoresData.filter(s => s.carga_percent >= 80);
+  const prazoVendas = capacidade?.prazoVendasDias || 0;
+  const setorGargalo = capacidade?.setorGargaloDias || 'N/A';
 
   if (loading) {
     return (
@@ -291,7 +215,7 @@ export function CIPSetores() {
           <Layers className="h-6 w-6 text-cip" />
           <div>
             <h2 className="text-2xl font-bold text-foreground">Setores de Produção</h2>
-            <p className="text-sm text-muted-foreground">Gestão de capacidade e eficiência por setor</p>
+            <p className="text-sm text-muted-foreground">Gestão de capacidade e eficiência por setor — dados em tempo real</p>
           </div>
         </div>
         <Dialog open={novoSetorOpen} onOpenChange={setNovoSetorOpen}>
@@ -319,28 +243,37 @@ export function CIPSetores() {
         </Dialog>
       </div>
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPICard title="Total Setores" value={setores.length} subtitle={`${setoresAtivos.length} ativos`} icon={<Layers className="h-5 w-5" />} variant="cip" />
+      {/* KPIs — from unified source */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        <KPICard title="Total Setores" value={setoresData.length} subtitle={`${setoresData.length} ativos`} icon={<Layers className="h-5 w-5" />} variant="cip" />
         <KPICard title="Operadores" value={totalOperadores} subtitle={`${totalMaquinas} máquinas`} icon={<Users className="h-5 w-5" />} variant="cip" />
         <KPICard title="Eficiência Média" value={`${eficienciaMedia}%`} subtitle="Produtividade geral" icon={<TrendingUp className="h-5 w-5" />} variant="cip" />
-        <KPICard title="Gargalos" value={gargalos.length} subtitle={gargalos.length > 0 ? 'Setores críticos' : 'OK'} icon={<AlertTriangle className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Gargalos" value={gargalos.length} subtitle={gargalos.length > 0 ? gargalos.map(g => g.nome).join(', ') : 'OK'} icon={<AlertTriangle className="h-5 w-5" />} variant="cip" />
+        <KPICard title="Prazo Vendas" value={`${prazoVendas}d`} subtitle={`Gargalo: ${setorGargalo}`} icon={<Target className="h-5 w-5" />} variant="cip" />
       </div>
 
       {/* Summary bar */}
       <Card className="bg-card/60 border-border/50 p-4">
         <div className="flex flex-wrap items-center gap-8">
           <div>
-            <p className="text-xs text-muted-foreground">Total na Fila</p>
-            <p className="text-2xl font-bold text-cip">{totalNaFila}</p>
+            <p className="text-xs text-muted-foreground">Cap. Total Fábrica</p>
+            <p className="text-2xl font-bold text-blue-400">{capacidade?.horasProdutivasTotais.toFixed(0) || 0}h</p>
           </div>
           <div className="border-l border-border/50 pl-8">
-            <p className="text-xs text-muted-foreground">Em Execução</p>
-            <p className="text-2xl font-bold text-amber-400">{totalNaFila}</p>
+            <p className="text-xs text-muted-foreground">Demanda Total</p>
+            <p className="text-2xl font-bold text-cip">{capacidade?.horasNecessarias.toFixed(0) || 0}h</p>
           </div>
           <div className="border-l border-border/50 pl-8">
-            <p className="text-xs text-muted-foreground">Setores Inativos</p>
-            <p className="text-2xl font-bold text-foreground">{setores.length - setoresAtivos.length}</p>
+            <p className="text-xs text-muted-foreground">Saldo</p>
+            <p className={cn('text-2xl font-bold', (capacidade?.saldoHoras || 0) >= 0 ? 'text-success' : 'text-destructive')}>
+              {(capacidade?.saldoHoras || 0) >= 0 ? '+' : ''}{capacidade?.saldoHoras.toFixed(0) || 0}h
+            </p>
+          </div>
+          <div className="border-l border-border/50 pl-8">
+            <p className="text-xs text-muted-foreground">Ocupação</p>
+            <p className={cn('text-2xl font-bold', (capacidade?.percentualOcupacao || 0) > 80 ? 'text-warning' : 'text-success')}>
+              {capacidade?.percentualOcupacao || 0}%
+            </p>
           </div>
           {gargalos.length > 0 && (
             <Badge className="bg-red-600/20 text-red-400 border border-red-600/30 ml-auto">
@@ -350,24 +283,24 @@ export function CIPSetores() {
         </div>
       </Card>
 
-      {/* Grid de Cards */}
+      {/* Grid de Cards — using unified SetorCapacidade data */}
       <div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
-          {setores.map(setor => (
-            <Card key={setor.id} className={`bg-card/60 backdrop-blur-sm border-border/50 p-5 transition-opacity ${!setor.ativo ? 'opacity-50' : ''}`}>
+          {setoresData.map(setor => (
+            <Card key={setor.id} className="bg-card/60 backdrop-blur-sm border-border/50 p-5">
               {/* Header */}
               <div className="flex items-start justify-between mb-2">
                 <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-lg ${setor.ativo ? 'bg-blue-500/20' : 'bg-zinc-500/20'}`}>
-                    <BarChart3 className={`h-5 w-5 ${setor.ativo ? 'text-blue-400' : 'text-zinc-400'}`} />
+                  <div className="p-2 rounded-lg bg-blue-500/20">
+                    <BarChart3 className="h-5 w-5 text-blue-400" />
                   </div>
                   <div>
                     <h3 className="font-semibold text-foreground">{setor.nome}</h3>
-                    {setor.ativo && getStatusBadge(setor.cargaPercent)}
+                    {getStatusBadge(setor.carga_percent)}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Switch checked={setor.ativo} onCheckedChange={() => handleToggle(setor)} className="data-[state=checked]:bg-green-500" />
+                  <Switch checked={true} onCheckedChange={() => handleToggle(setor)} className="data-[state=checked]:bg-green-500" />
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(setor)} title="Editar setor">
                     <Pencil className="h-3.5 w-3.5" />
                   </Button>
@@ -376,7 +309,7 @@ export function CIPSetores() {
 
               {/* Gauge */}
               <div className="flex justify-center my-3">
-                <CircularGauge value={setor.ativo ? setor.cargaPercent : 0} size={130} />
+                <CircularGauge value={setor.carga_percent} size={130} />
               </div>
 
               {/* 🔵 CAPACIDADE (OFERTA) */}
@@ -394,15 +327,15 @@ export function CIPSetores() {
                   <div className="bg-secondary/30 rounded-lg p-2">
                     <p className="text-[10px] text-muted-foreground flex items-center gap-1"><Clock className="h-3 w-3" /> Dias Úteis</p>
                     <div className="flex items-baseline gap-1">
-                      <p className="text-lg font-bold text-foreground">{(setor as any).dias_uteis_mensais || 22}d</p>
-                      <span className={`text-[8px] px-1 py-0.5 rounded ${(setor as any).dias_uteis_manual ? 'bg-blue-500/20 text-blue-400' : 'bg-secondary text-muted-foreground'}`}>
-                        {(setor as any).dias_uteis_manual ? 'Manual' : 'Auto'}
+                      <p className="text-lg font-bold text-foreground">{setor.dias_uteis_mensais}d</p>
+                      <span className={`text-[8px] px-1 py-0.5 rounded ${setor.dias_uteis_manual ? 'bg-blue-500/20 text-blue-400' : 'bg-secondary text-muted-foreground'}`}>
+                        {setor.dias_uteis_manual ? 'Manual' : 'Auto'}
                       </span>
                     </div>
                   </div>
                   <div className="bg-blue-500/10 rounded-lg p-2 border border-blue-500/20">
                     <p className="text-[10px] text-blue-400">Cap. Total</p>
-                    <p className="text-lg font-bold text-blue-400">{setor.horasDisponiveis.toFixed(0)}h</p>
+                    <p className="text-lg font-bold text-blue-400">{setor.horas_disponiveis_mensal.toFixed(0)}h</p>
                   </div>
                 </div>
               </div>
@@ -417,16 +350,16 @@ export function CIPSetores() {
                   </div>
                   <div className="bg-secondary/30 rounded-lg p-2">
                     <p className="text-[10px] text-muted-foreground">Necessário</p>
-                    <p className="text-lg font-bold text-foreground">{setor.horasOcupadas.toFixed(1)}h</p>
+                    <p className="text-lg font-bold text-foreground">{setor.horas_ocupadas.toFixed(1)}h</p>
                   </div>
                 </div>
               </div>
 
-              {/* OPs info */}
+              {/* Dias de Carga + Folga */}
               <div className="flex justify-between text-sm px-1">
-                <span className="text-cip font-semibold">{setor.opsEntrada} na fila</span>
-                <span className={cn('font-semibold', setor.horasDisponiveis - setor.horasOcupadas >= 0 ? 'text-success' : 'text-destructive')}>
-                  {(setor.horasDisponiveis - setor.horasOcupadas).toFixed(0)}h folga
+                <span className="text-cip font-semibold">{setor.diasGargalo.toFixed(1)}d carga</span>
+                <span className={cn('font-semibold', setor.folgaResidual >= 0 ? 'text-success' : 'text-destructive')}>
+                  {(setor.horas_disponiveis_mensal - setor.horas_ocupadas).toFixed(0)}h folga
                 </span>
               </div>
 
@@ -492,12 +425,10 @@ export function CIPSetores() {
                 <p className="text-xs text-muted-foreground mt-1">
                   ({editForm.mao_de_obra} equipe × {Math.max(editForm.maquinas_automaticas || 1, 1)} multiplicador × {editForm.horas_turno}h × {editForm.dias_uteis_mensais} dias)
                 </p>
-                <p className="text-[10px] text-muted-foreground italic">Eficiência NÃO entra na capacidade</p>
               </div>
               <div className="border-t border-border/30 pt-2">
                 <p className="text-muted-foreground">🔹 Eficiência (PRODUÇÃO):</p>
                 <p className="text-sm font-bold text-foreground">{editForm.eficiencia}%</p>
-                <p className="text-[10px] text-muted-foreground">Aplicada nas horas necessárias: tempo_padrão ÷ eficiência</p>
               </div>
             </div>
           </div>
@@ -518,17 +449,12 @@ export function CIPSetores() {
             <DialogDescription>Produtos e tempos serão migrados ao setor substituto. OPs e histórico preservados.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {deleteDialog && deleteDialog.opsEntrada > 0 && (
-              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 text-sm text-destructive">
-                ⚠ Este setor tem {deleteDialog.opsEntrada} OP(s) ativa(s). Exclusão bloqueada.
-              </div>
-            )}
             <div>
               <Label>Setor Substituto *</Label>
               <Select value={substituteId} onValueChange={setSubstituteId}>
                 <SelectTrigger className="mt-1"><SelectValue placeholder="Selecione o setor destino" /></SelectTrigger>
                 <SelectContent>
-                  {setores.filter(s => s.id !== deleteDialog?.id).map(s => (
+                  {setoresData.filter(s => s.id !== deleteDialog?.id).map(s => (
                     <SelectItem key={s.id} value={s.id}>{s.nome}</SelectItem>
                   ))}
                 </SelectContent>
@@ -537,8 +463,7 @@ export function CIPSetores() {
           </div>
           <div className="flex justify-end gap-2">
             <Button variant="outline" onClick={() => setDeleteDialog(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={handleDeleteSetor}
-              disabled={deleting || !substituteId || (deleteDialog?.opsEntrada || 0) > 0}>
+            <Button variant="destructive" onClick={handleDeleteSetor} disabled={deleting || !substituteId}>
               {deleting ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Trash2 className="h-4 w-4 mr-1" />}
               Excluir e Migrar
             </Button>
@@ -550,32 +475,17 @@ export function CIPSetores() {
       <Card className="bg-secondary/30 border-border/50 p-4">
         <div className="flex flex-wrap items-center gap-4">
           <span className="text-sm text-muted-foreground font-medium">Ocupação:</span>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-blue-500" />
-            <span className="text-xs text-muted-foreground">&lt;50% Ocioso</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-green-500" />
-            <span className="text-xs text-muted-foreground">50-80% Normal</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-amber-500" />
-            <span className="text-xs text-muted-foreground">80-95% Atenção</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-orange-500" />
-            <span className="text-xs text-muted-foreground">95-100% Limite</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded bg-red-500" />
-            <span className="text-xs text-muted-foreground">&gt;100% Gargalo</span>
-          </div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-blue-500" /><span className="text-xs text-muted-foreground">&lt;50% Ocioso</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-green-500" /><span className="text-xs text-muted-foreground">50-80% Normal</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-amber-500" /><span className="text-xs text-muted-foreground">80-95% Atenção</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-orange-500" /><span className="text-xs text-muted-foreground">95-100% Limite</span></div>
+          <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-red-500" /><span className="text-xs text-muted-foreground">&gt;100% Gargalo</span></div>
         </div>
         <div className="flex flex-wrap items-center gap-4 mt-3 pt-3 border-t border-border/30">
           <span className="text-sm text-muted-foreground font-medium">Fórmula:</span>
           <span className="text-xs text-muted-foreground">Capacidade = Equipe × Multiplicador × Horas/Turno × Dias Úteis</span>
           <span className="text-xs text-muted-foreground">|</span>
-          <span className="text-xs text-muted-foreground">Demanda = Tempo Padrão ÷ Eficiência</span>
+          <span className="text-xs text-muted-foreground">Demanda = Σ(Quantidade × Tempo Padrão do Setor)</span>
         </div>
       </Card>
     </div>
