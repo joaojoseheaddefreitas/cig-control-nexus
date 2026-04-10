@@ -748,6 +748,40 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Modal Nova Despesa (Custos & Orçamento) */}
+      <Dialog open={showNewDespesa} onOpenChange={setShowNewDespesa}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Nova Despesa</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <Select value={newDespesa.categoria} onValueChange={(v) => setNewDespesa(p => ({ ...p, categoria: v }))}>
+              <SelectTrigger><SelectValue placeholder="Categoria" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="materiais">Materiais</SelectItem>
+                <SelectItem value="mao_de_obra">Mão de Obra</SelectItem>
+                <SelectItem value="aluguel">Aluguel</SelectItem>
+                <SelectItem value="energia">Energia</SelectItem>
+                <SelectItem value="manutencao">Manutenção</SelectItem>
+                <SelectItem value="administrativo">Administrativo</SelectItem>
+                <SelectItem value="vendas_moveis">Vendas Móveis</SelectItem>
+                <SelectItem value="projetos_especiais">Projetos Especiais</SelectItem>
+                <SelectItem value="assistencia">Assistência</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input placeholder="Descrição" value={newDespesa.descricao} onChange={(e) => setNewDespesa(p => ({ ...p, descricao: e.target.value }))} />
+            <Input type="number" placeholder="Valor (R$)" value={newDespesa.valor} onChange={(e) => setNewDespesa(p => ({ ...p, valor: e.target.value }))} />
+            <Input type="date" value={newDespesa.data_emissao} onChange={(e) => setNewDespesa(p => ({ ...p, data_emissao: e.target.value }))} />
+            <Select value={newDespesa.status} onValueChange={(v) => setNewDespesa(p => ({ ...p, status: v }))}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="PENDENTE">Pendente</SelectItem>
+                <SelectItem value="PAGO">Pago</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button className="w-full" onClick={handleCriarDespesa}>Criar Despesa</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
