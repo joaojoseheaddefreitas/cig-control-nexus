@@ -14,6 +14,11 @@ interface SetorCardProps {
   eficiencia: number;
   folga: number;
   status: 'verde' | 'amarelo' | 'vermelho' | 'azul' | 'laranja';
+  // PCP 3.0
+  folgaResidual?: number;
+  diasGargalo?: number;
+  statusFolga?: 'azul' | 'verde' | 'amarelo' | 'vermelho';
+  limiteOperacional?: number;
 }
 
 const statusLabels: Record<string, { label: string; color: string; bg: string }> = {
@@ -52,15 +57,18 @@ export function SetorCard({
   nome, sigla, carga, capacidadeReal, horasNecessarias,
   lotacaoAtual, maquinas, diasUteis, diasUteisManual,
   eficiencia, folga, status,
+  folgaResidual, diasGargalo, statusFolga, limiteOperacional,
 }: SetorCardProps) {
-  const statusInfo = statusLabels[status] || statusLabels.azul;
+  // Use statusFolga for visual if available, otherwise fallback to status
+  const displayStatus = statusFolga || status;
+  const statusInfo = statusLabels[displayStatus] || statusLabels.azul;
 
   return (
     <div className="rounded-xl border border-border/30 bg-card/80 p-4 transition-all duration-300 hover:border-primary/30">
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
-          <div className={cn('w-2.5 h-2.5 rounded-full', dotColors[status])} />
+          <div className={cn('w-2.5 h-2.5 rounded-full', dotColors[displayStatus])} />
           <h3 className="font-display font-bold text-foreground text-sm lg:text-base">{nome}</h3>
         </div>
         <div className={cn('flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium', statusInfo.bg, statusInfo.color)}>
@@ -69,18 +77,39 @@ export function SetorCard({
         </div>
       </div>
 
-      {/* Carga Progress */}
+      {/* Carga Progress — baseado em folga residual */}
       <div className="mb-4">
         <div className="flex justify-between text-xs mb-1">
-          <span className="text-muted-foreground">Ocupação</span>
-          <span className={cn('font-bold', textColors[status])}>{carga}%</span>
+          <span className="text-muted-foreground">Carga</span>
+          <div className="flex items-center gap-2">
+            <span className={cn('font-bold tabular-nums', textColors[displayStatus])}>
+              {carga}%
+            </span>
+            {diasGargalo !== undefined && (
+              <span className="text-[10px] text-muted-foreground">
+                · {diasGargalo.toFixed(1)}d
+              </span>
+            )}
+          </div>
         </div>
         <div className="h-2 bg-secondary rounded-full overflow-hidden">
           <div
-            className={cn('h-full rounded-full transition-all', progressColors[status])}
+            className={cn('h-full rounded-full transition-all', progressColors[displayStatus])}
             style={{ width: `${Math.min(100, carga)}%` }}
           />
         </div>
+        {folgaResidual !== undefined && (
+          <div className="flex justify-between mt-1">
+            <span className="text-[9px] text-muted-foreground">
+              Folga: {folgaResidual.toFixed(1)}%
+            </span>
+            {limiteOperacional !== undefined && (
+              <span className="text-[9px] text-muted-foreground">
+                Limite: {limiteOperacional.toFixed(0)}h/dia
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* 🔵 CAPACIDADE (OFERTA) */}
@@ -135,8 +164,10 @@ export function SetorCard({
           <p className={cn('text-sm font-bold', folga >= 0 ? 'text-success' : 'text-destructive')}>{folga >= 0 ? '+' : ''}{folga}h</p>
         </div>
         <div className="text-right">
-          <p className="text-[10px] text-muted-foreground">Demanda ÷ Oferta</p>
-          <p className={cn('text-sm font-bold', textColors[status])}>{carga}%</p>
+          <p className="text-[10px] text-muted-foreground">Dias carga</p>
+          <p className={cn('text-sm font-bold', textColors[displayStatus])}>
+            {diasGargalo !== undefined ? `${diasGargalo.toFixed(1)}d` : `${carga}%`}
+          </p>
         </div>
       </div>
     </div>

@@ -183,43 +183,62 @@ export function CIPPCPControle() {
 
   useBarcodeScanner(handleScan);
 
-  // ─── Capacity Calculation ─────────────────────────────────────────
-  // DEMANDA = soma de tempo_total de TODAS as OPs ativas (programada + aguardando + em_producao)
+  // ─── Capacity Calculation — PCP 3.0 ─────────────────────────────────
+  // DEMANDA POR SETOR = SUM(op_route_steps.tempo_estimado) para OPs ativas
   // CAPACIDADE = equipe × multiplicador × horas_turno × dias (SEM eficiência)
   // OCUPAÇÃO = demanda / capacidade × 100
+  // DIAS GARGALO = demanda / capDiaria
   const capacidadePorSetor = useMemo(() => {
-    // 1. Filtrar apenas OPs ativas
     const opsAtivas = ops.filter(op =>
       ['programada', 'aguardando', 'em_producao'].includes(op.status_producao)
     );
+    const activeIds = new Set(opsAtivas.map(o => o.id));
 
-    // 2. Somar TODA a demanda bruta (tempo_total de todas as OPs)
-    let demandaTotalBruta = 0;
-    for (const op of opsAtivas) {
-      demandaTotalBruta += Number(op.tempo_total || 0);
+    // Sum demand from route_steps per sector
+    const demandaPorSetor = new Map<string, number>();
+    for (const step of routeSteps) {
+      if (!activeIds.has(step.op_id)) continue;
+      const atual = demandaPorSetor.get(step.setor_id) || 0;
+      demandaPorSetor.set(step.setor_id, atual + Number(step.tempo_estimado || 0));
     }
 
-    console.log(`[PCP] OPs ativas: ${opsAtivas.length} | Demanda total bruta: ${demandaTotalBruta.toFixed(1)}h`);
+    // Fallback: OPs without route_steps → distribute tempo_total equally
+    const opsWithSteps = new Set(routeSteps.filter(s => activeIds.has(s.op_id)).map(s => s.op_id));
+    const fallbackTotal = opsAtivas
+      .filter(op => !opsWithSteps.has(op.id) && Number(op.tempo_total || 0) > 0)
+      .reduce((sum, op) => sum + Number(op.tempo_total || 0), 0);
+    const fallbackPerSetor = setores.length > 0 ? fallbackTotal / setores.length : 0;
 
-    // 3. Para cada setor: capacidade vs demanda total / eficiência
+    console.log(`[PCP] OPs ativas: ${opsAtivas.length} | Com route_steps: ${opsWithSteps.size} | Fallback total: ${fallbackTotal.toFixed(1)}h`);
+
     return setores.map(setor => {
       const multiplicador = Math.max(setor.maquinas_automaticas, 1);
       const dias = (setor as any).dias_uteis_mensais || 22;
-      const eff = setor.eficiencia || 0.85;
 
-      // OFERTA: sem eficiência
       const capacidadeTotal = setor.mao_de_obra * multiplicador * setor.horas_turno * dias;
-
-      // DEMANDA: total bruta / eficiência (aplicada em cada setor)
-      const horasOcupadas = eff > 0 ? demandaTotalBruta / eff : demandaTotalBruta;
+      const capDiaria = setor.mao_de_obra * multiplicador * setor.horas_turno;
+      const horasOcupadas = (demandaPorSetor.get(setor.id) || 0) + fallbackPerSetor;
       const percentual = capacidadeTotal > 0 ? (horasOcupadas / capacidadeTotal) * 100 : 0;
       const horasLivres = Math.max(0, capacidadeTotal - horasOcupadas);
+      const diasGargalo = capDiaria > 0 ? horasOcupadas / capDiaria : 0;
 
-      console.log(`[PCP] ${setor.nome}: Demanda=${horasOcupadas.toFixed(1)}h | Cap=${capacidadeTotal.toFixed(0)}h | Ocup=${percentual.toFixed(1)}%`);
+      console.log(`[PCP] ${setor.nome}: Demanda=${horasOcupadas.toFixed(1)}h | Cap=${capacidadeTotal.toFixed(0)}h | Ocup=${percentual.toFixed(1)}% | Dias=${diasGargalo.toFixed(1)}`);
 
-      return { id: setor.id, nome: setor.nome, capacidadeTotal, horasOcupadas, horasLivres, percentual };
+      return { id: setor.id, nome: setor.nome, capacidadeTotal, horasOcupadas, horasLivres, percentual, capDiaria, diasGargalo };
     });
-  }, [setores, ops]);
+  }, [setores, ops, routeSteps]);
+
+  // PCP 3.0 — Prazo de vendas
+  const prazoVendasDias = useMemo(() => {
+    if (capacidadePorSetor.length === 0) return 0;
+    const maxDias = Math.max(...capacidadePorSetor.map(s => s.diasGargalo || 0));
+    return Math.ceil(maxDias + 1); // +1 folga operacional
+  }, [capacidadePorSetor]);
+
+  const setorGargaloDias = useMemo(() => {
+    if (capacidadePorSetor.length === 0) return null;
+    return capacidadePorSetor.reduce((max, s) => (s.diasGargalo || 0) > (max.diasGargalo || 0) ? s : max, capacidadePorSetor[0]);
+  }, [capacidadePorSetor]);
 
   // Production tracking chart — ALL active OPs (carteira inteira)
   const chartProducao = useMemo(() => {
@@ -661,6 +680,26 @@ export function CIPPCPControle() {
             <span className="text-xs text-muted-foreground">Total Horas:</span>
             <span className="text-sm font-bold text-cip">{totalHoras.toFixed(1)}h</span>
           </div>
+          <div className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-lg border',
+            prazoVendasDias > 25 ? 'border-destructive/50 bg-destructive/10' :
+            prazoVendasDias > 15 ? 'border-orange-400/50 bg-orange-400/10' :
+            prazoVendasDias > 8  ? 'border-success/50 bg-success/10' : 'border-blue-400/50 bg-blue-400/10'
+          )}>
+            <Gauge className="h-4 w-4" />
+            <span className="text-xs text-muted-foreground">Prazo:</span>
+            <span className={cn(
+              'text-sm font-bold font-mono',
+              prazoVendasDias > 25 ? 'text-destructive' :
+              prazoVendasDias > 15 ? 'text-orange-400' :
+              prazoVendasDias > 8  ? 'text-success' : 'text-blue-400'
+            )}>
+              {prazoVendasDias}d
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              ({setorGargaloDias?.nome?.substring(0, 10) || '—'})
+            </span>
+          </div>
 
           {/* Manual scanner input */}
           <div className="flex items-center gap-1 ml-auto">
@@ -713,7 +752,7 @@ export function CIPPCPControle() {
                   />
                 </div>
                 <span className="text-[9px] text-muted-foreground mt-0.5 block">
-                  {setor.horasLivres.toFixed(1)}h livres
+                  {setor.diasGargalo.toFixed(1)}d · {setor.horasLivres.toFixed(0)}h livres
                 </span>
               </div>
             );

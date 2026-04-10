@@ -1,5 +1,11 @@
 import { supabase } from "@/integrations/supabase/client";
 
+// ─── Constants ───────────────────────────────────────────────────────
+export const DIAS_UTEIS_DEFAULT = 22;
+export const FOLGA_OPERACIONAL = 1;        // dias — configurável
+export const LIMITE_OPERACIONAL = 0.95;    // 95% da cap diária
+export const ALERTA_DESEQUILIBRIO = 50;    // % de diferença entre setores
+
 export interface SetorCapacidade {
   id: string;
   nome: string;
@@ -14,6 +20,12 @@ export interface SetorCapacidade {
   horas_ocupadas: number;
   carga_percent: number;
   status: 'azul' | 'verde' | 'amarelo' | 'laranja' | 'vermelho';
+  // PCP 3.0 — novos campos
+  capDiaria: number;
+  folgaResidual: number;
+  diasGargalo: number;
+  limiteOperacional: number;
+  statusFolga: 'azul' | 'verde' | 'amarelo' | 'vermelho';
 }
 
 export interface CapacidadeFabrica {
@@ -28,6 +40,15 @@ export interface CapacidadeFabrica {
   diasNecessarios: number;
   eficienciaMedia: number;
   setores: SetorCapacidade[];
+  // PCP 3.0
+  prazoVendasDias: number;
+  gargaloEmDias: number;
+  setorGargaloDias: string;
+  alertaDesbalanceamento: boolean;
+  folgaMax: number;
+  folgaMin: number;
+  setorMaisFolgado: string;
+  setorMenosFolgado: string;
 }
 
 export function getOcupacaoStatus(percent: number): 'azul' | 'verde' | 'amarelo' | 'laranja' | 'vermelho' {
@@ -36,6 +57,13 @@ export function getOcupacaoStatus(percent: number): 'azul' | 'verde' | 'amarelo'
   if (percent >= 80) return 'amarelo';
   if (percent >= 50) return 'verde';
   return 'azul';
+}
+
+export function getFolgaStatus(folgaResidual: number): 'azul' | 'verde' | 'amarelo' | 'vermelho' {
+  if (folgaResidual > 30) return 'azul';
+  if (folgaResidual > 11) return 'verde';
+  if (folgaResidual > 3)  return 'amarelo';
+  return 'vermelho';
 }
 
 export function getOcupacaoLabel(status: string): { label: string; color: string; bg: string } {
@@ -56,24 +84,15 @@ export function getEficienciaLabel(eff: number): { label: string; color: string 
   return { label: 'Problema', color: 'text-destructive' };
 }
 
-/**
- * Normalize product name for fuzzy matching.
- * "Sofá Astor 2 L" → "sofa astor 2 l"
- * "ASTOR - 02 LUGARES" → "astor 02 lugares"
- * "ASTOR 02L" → "astor 02l"
- */
 function normalizeName(name: string): string {
   return name
     .toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove accents
-    .replace(/[^a-z0-9\s]/g, ' ') // remove special chars
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
 }
 
-/**
- * Known aliases: OP product name → canonical product name in produto_setor_tempos
- */
 const PRODUCT_ALIASES: Record<string, string> = {
   'astor   02 lugares': 'ASTOR 02L',
   'astor 02 lugares': 'ASTOR 02L',
@@ -90,18 +109,13 @@ const PRODUCT_ALIASES: Record<string, string> = {
   'master 100   03 lugares i 02 alm': 'MASTER 100 - 03 LUGARES I 02 ALM',
 };
 
-/**
- * Find the best matching product_id for an OP's produto_nome
- */
 function findProductId(
   opNome: string,
-  produtosMap: Map<string, string> // normalized name → product id
+  produtosMap: Map<string, string>
 ): string | null {
-  // 1. Direct match
   const norm = normalizeName(opNome);
   if (produtosMap.has(norm)) return produtosMap.get(norm)!;
 
-  // 2. Alias match
   for (const [alias, canonical] of Object.entries(PRODUCT_ALIASES)) {
     if (norm === alias || norm.includes(alias)) {
       const canonNorm = normalizeName(canonical);
@@ -109,7 +123,6 @@ function findProductId(
     }
   }
 
-  // 3. Substring match — find product whose normalized name is contained in OP name or vice versa
   for (const [prodNorm, prodId] of produtosMap.entries()) {
     if (norm.includes(prodNorm) || prodNorm.includes(norm)) return prodId;
   }
@@ -118,35 +131,50 @@ function findProductId(
 }
 
 /**
- * FORMULA CENTRAL — single source of truth
+ * FORMULA CENTRAL — PCP 3.0
  *
  * CAPACIDADE (OFERTA):
- *   cap = equipe × multiplicador × horas_turno × dias_uteis (SEM eficiência)
+ *   capDisp = equipe × multiplicador × horas_turno × dias_uteis
+ *   capDiaria = equipe × multiplicador × horas_turno
  *
  * DEMANDA POR SETOR:
- *   Para cada OP ativa, buscar tempo por setor em produto_setor_tempos
- *   demanda_setor += quantidade × tempo_do_setor
- *   Depois: demanda_ajustada = demanda_setor / eficiência
+ *   horasNec = SUM(op_route_steps.tempo_estimado) para OPs ativas do setor
  *
  * OCUPAÇÃO:
- *   ocupação% = demanda_ajustada / capacidade × 100
+ *   ocupação% = horasNec / capDisp × 100
+ *
+ * DIAS DE GARGALO:
+ *   diasGargalo = horasNec / capDiaria
+ *
+ * FOLGA RESIDUAL:
+ *   folgaResidual% = (capDisp - horasNec) / capDisp × 100
+ *
+ * PRAZO DE VENDAS:
+ *   prazoVendasDias = max(diasGargalo de todos setores) + FOLGA_OPERACIONAL
  *
  * GARGALO DA FÁBRICA:
- *   Setor com MENOR horas disponíveis relativas à demanda (maior ocupação %)
+ *   Setor com MAIOR ocupação %
+ *
+ * Eficiência 85% NÃO entra nessas fórmulas.
  */
 export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
-  const [setoresRes, opsRes, pstRes, produtosRes] = await Promise.all([
+  const [setoresRes, opsRes, pstRes, produtosRes, routeStepsRes] = await Promise.all([
     supabase.from("setores_produtivos").select("*").eq("ativo", true).order("ordem"),
     supabase.from("ops").select("id, tempo_total, tempo_unitario, quantidade, status_producao, produto_nome")
       .in("status_producao", ["programada", "aguardando", "em_producao"]),
     supabase.from("produto_setor_tempos").select("produto_id, setor_id, tempo_horas"),
     supabase.from("produtos").select("id, nome").eq("ativo", true),
+    supabase.from("op_route_steps").select("op_id, setor_id, tempo_estimado"),
   ]);
 
   const setoresDB = setoresRes.data || [];
   const ops = opsRes.data || [];
   const pstRows = pstRes.data || [];
   const produtos = produtosRes.data || [];
+  const allRouteSteps = routeStepsRes.data || [];
+
+  // Active OP ids
+  const activeOpIds = new Set(ops.map(o => o.id));
 
   // Build product name → id map
   const produtosMap = new Map<string, string>();
@@ -163,13 +191,25 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     temposPorSetor.get(row.setor_id)!.set(row.produto_id, Number(row.tempo_horas) || 0);
   }
 
-  // Calculate demand PER SECTOR
-  // demandaBrutaPorSetor[setor_id] = Σ(quantidade × tempo_do_setor)
-  const demandaBrutaPorSetor = new Map<string, number>();
+  // PRIMARY: demand from op_route_steps (already has qty × tempo baked in)
+  const demandaRouteSteps = new Map<string, number>();
+  for (const step of allRouteSteps) {
+    if (!activeOpIds.has(step.op_id)) continue;
+    const atual = demandaRouteSteps.get(step.setor_id) || 0;
+    demandaRouteSteps.set(step.setor_id, atual + Number(step.tempo_estimado || 0));
+  }
+
+  // FALLBACK: for OPs without route_steps, use produto_setor_tempos
+  const opsWithSteps = new Set(allRouteSteps.filter(s => activeOpIds.has(s.op_id)).map(s => s.op_id));
+  const demandaFallback = new Map<string, number>();
   let opsComTempo = 0;
   let opsSemTempo = 0;
 
   for (const op of ops) {
+    if (opsWithSteps.has(op.id)) {
+      opsComTempo++;
+      continue; // Already counted in route_steps
+    }
     const qty = Number(op.quantidade) || 0;
     const produtoId = findProductId(op.produto_nome, produtosMap);
 
@@ -180,17 +220,16 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     }
 
     opsComTempo++;
-    // For each sector, accumulate: qty × tempo_horas
     for (const [setorId, produtoTempos] of temposPorSetor.entries()) {
       const tempoSetor = produtoTempos.get(produtoId);
       if (tempoSetor && tempoSetor > 0) {
-        const atual = demandaBrutaPorSetor.get(setorId) || 0;
-        demandaBrutaPorSetor.set(setorId, atual + qty * tempoSetor);
+        const atual = demandaFallback.get(setorId) || 0;
+        demandaFallback.set(setorId, atual + qty * tempoSetor);
       }
     }
   }
 
-  console.log(`[Capacidade] OPs ativas: ${ops.length} | Com tempo por setor: ${opsComTempo} | Sem tempo: ${opsSemTempo}`);
+  console.log(`[Capacidade] OPs ativas: ${ops.length} | Com route_steps: ${opsWithSteps.size} | Fallback: ${opsComTempo - opsWithSteps.size} | Sem tempo: ${opsSemTempo}`);
 
   const setores: SetorCapacidade[] = setoresDB.map((s: any) => {
     const mdo = Number(s.mao_de_obra) || 0;
@@ -199,16 +238,29 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     const eff = Number(s.eficiencia) || 0.85;
     const diasUteis = Number(s.dias_uteis_mensais) || 22;
 
-    // CAPACIDADE (OFERTA) = equipe × multiplicador × horas_turno × dias
+    // CAPACIDADE (OFERTA)
     const horasDisp = mdo * multiplicador * ht * diasUteis;
+    const capDiaria = mdo * multiplicador * ht;
 
-    // DEMANDA POR SETOR — tempo real já inclui eficiência (NÃO dividir)
-    const horasOcup = demandaBrutaPorSetor.get(s.id) || 0;
+    // DEMANDA POR SETOR — route_steps (primary) + fallback
+    const horasOcup = (demandaRouteSteps.get(s.id) || 0) + (demandaFallback.get(s.id) || 0);
 
     // OCUPAÇÃO = demanda / capacidade × 100
     const carga = horasDisp > 0 ? Math.round((horasOcup / horasDisp) * 100) : 0;
 
-    console.log(`[Capacidade] ${s.nome}: Demanda=${horasOcup.toFixed(1)}h | Cap=${horasDisp.toFixed(0)}h | Ocup=${carga}%`);
+    // DIAS DE GARGALO = horasNec / capDiaria
+    const diasGargalo = capDiaria > 0 ? horasOcup / capDiaria : 0;
+
+    // FOLGA RESIDUAL %
+    const folgaResidual = horasDisp > 0 ? ((horasDisp - horasOcup) / horasDisp) * 100 : 100;
+
+    // LIMITE OPERACIONAL (95% da cap diária)
+    const limiteOp = capDiaria * LIMITE_OPERACIONAL;
+
+    // SEMÁFORO baseado em FOLGA RESIDUAL
+    const statusFolga = getFolgaStatus(folgaResidual);
+
+    console.log(`[Capacidade] ${s.nome}: Demanda=${horasOcup.toFixed(1)}h | Cap=${horasDisp.toFixed(0)}h | Ocup=${carga}% | Dias=${diasGargalo.toFixed(1)} | Folga=${folgaResidual.toFixed(1)}%`);
 
     return {
       id: s.id,
@@ -224,6 +276,11 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
       horas_ocupadas: horasOcup,
       carga_percent: carga,
       status: getOcupacaoStatus(carga),
+      capDiaria,
+      folgaResidual,
+      diasGargalo,
+      limiteOperacional: limiteOp,
+      statusFolga,
     };
   });
 
@@ -248,9 +305,28 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     : 22;
 
   const capacidadeFabrica = horasProdutivasTotais;
-  const capacidadeDiaria = diasUteis > 0 ? capacidadeFabrica / diasUteis : 0;
-  const diasNecessarios = capacidadeDiaria > 0
-    ? Math.ceil(horasNecessarias / capacidadeDiaria) : 0;
+  const capacidadeDiariaTotal = diasUteis > 0 ? capacidadeFabrica / diasUteis : 0;
+  const diasNecessarios = capacidadeDiariaTotal > 0
+    ? Math.ceil(horasNecessarias / capacidadeDiariaTotal) : 0;
+
+  // PCP 3.0 — Prazo de vendas baseado em dias do gargalo
+  const gargaloEmDias = setores.length > 0
+    ? Math.max(...setores.map(s => s.diasGargalo))
+    : 0;
+  const prazoVendasDias = Math.ceil(gargaloEmDias + FOLGA_OPERACIONAL);
+
+  const setorGargaloDiasObj = setores.length > 0
+    ? setores.reduce((max, s) => s.diasGargalo > max.diasGargalo ? s : max, setores[0])
+    : null;
+
+  // Alerta de desbalanceamento
+  const folgaMax = setores.length > 0 ? Math.max(...setores.map(s => s.folgaResidual)) : 0;
+  const folgaMin = setores.length > 0 ? Math.min(...setores.map(s => s.folgaResidual)) : 0;
+  const setorMaisFolgado = setores.find(s => s.folgaResidual === folgaMax);
+  const setorMenosFolgado = setores.find(s => s.folgaResidual === folgaMin);
+  const alertaDesbalanceamento = (folgaMax - folgaMin) > ALERTA_DESEQUILIBRIO;
+
+  console.log(`[Capacidade] PRAZO VENDAS: ${prazoVendasDias}d | Gargalo dias: ${gargaloEmDias.toFixed(1)} (${setorGargaloDiasObj?.nome}) | Desbalanc: ${alertaDesbalanceamento ? 'SIM' : 'NÃO'}`);
 
   return {
     setorGargalo: setorGargaloObj?.nome || "N/A",
@@ -260,9 +336,17 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
     saldoHoras,
     percentualOcupacao,
     diasUteis,
-    capacidadeDiaria,
+    capacidadeDiaria: capacidadeDiariaTotal,
     diasNecessarios,
     eficienciaMedia,
     setores,
+    prazoVendasDias,
+    gargaloEmDias,
+    setorGargaloDias: setorGargaloDiasObj?.nome || 'N/A',
+    alertaDesbalanceamento,
+    folgaMax,
+    folgaMin,
+    setorMaisFolgado: setorMaisFolgado?.nome || 'N/A',
+    setorMenosFolgado: setorMenosFolgado?.nome || 'N/A',
   };
 }

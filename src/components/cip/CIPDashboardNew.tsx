@@ -67,26 +67,37 @@ export function CIPDashboardNew() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  // Derived values — READ from centralized service, NO recalculation
+  // Derived values
   const setorCapacidade = capacidade?.setores || [];
   const totalOperadores = setorCapacidade.reduce((a, s) => a + s.mao_de_obra, 0);
   const opsAtivas = ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'cancelado');
   const totalHorasCarteira = opsAtivas.reduce((a, o) => a + Number(o.tempo_total || 0), 0);
   const totalCapDisp = capacidade?.horasProdutivasTotais || 0;
-  const totalCargaNec = capacidade?.horasNecessarias || 0;
   const saldoGlobalHoras = capacidade?.saldoHoras || 0;
   const eficienciaMedia = capacidade ? Math.round(capacidade.eficienciaMedia * 100) : 85;
-  const gargaloSetor = setorCapacidade.reduce((max, s) => s.carga_percent > (max?.carga_percent || 0) ? s : max, setorCapacidade[0] || null);
   const opsPendentes = ops.filter(o => o.status_producao === 'aguardando').length;
   const opsEmProducao = ops.filter(o => o.status_producao === 'em_producao').length;
   const opsProgramadas = ops.filter(o => o.status_producao === 'programada').length;
   const opsFinalizadas = ops.filter(o => o.status_producao === 'Producao Finalizada').length;
   const ocupacaoGeral = capacidade?.percentualOcupacao || 0;
 
+  // PCP 3.0 — prazo de vendas
+  const prazoVendasDias = capacidade?.prazoVendasDias || 0;
+  const gargaloEmDias = capacidade?.gargaloEmDias || 0;
+  const setorGargaloDias = capacidade?.setorGargaloDias || 'N/A';
+  const alertaDesbalanceamento = capacidade?.alertaDesbalanceamento || false;
+  const folgaMax = capacidade?.folgaMax || 0;
+  const folgaMin = capacidade?.folgaMin || 0;
+  const setorMaisFolgado = capacidade?.setorMaisFolgado || '';
+  const setorMenosFolgado = capacidade?.setorMenosFolgado || '';
+
   const cargaSetorData = setorCapacidade.map(s => ({
     setor: s.nome.length > 12 ? s.nome.substring(0, 10) + '...' : s.nome,
     carga: s.carga_percent,
     status: s.status as 'verde' | 'amarelo' | 'vermelho' | 'azul' | 'laranja',
+    cap: Math.round(s.horas_disponiveis_mensal),
+    nec: Math.round(s.horas_ocupadas),
+    diasGargalo: s.diasGargalo,
   }));
 
   const producaoMensalData = useMemo(() => {
@@ -109,7 +120,7 @@ export function CIPDashboardNew() {
         id: `gargalo-${s.id}`,
         tipo: 'gargalo',
         prioridade: 'alta',
-        mensagem: `GARGALO: ${s.nome} com ${s.carga_percent}% de ocupação. Déficit de ${(s.horas_ocupadas - s.horas_disponiveis_mensal).toFixed(0)}h.`,
+        mensagem: `GARGALO: ${s.nome} com ${s.carga_percent}% de ocupação. ${s.diasGargalo.toFixed(1)} dias de carga.`,
         setor: s.nome,
         horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       });
@@ -118,6 +129,14 @@ export function CIPDashboardNew() {
       alerts.push({
         id: 'pendentes', tipo: 'sugestao', prioridade: 'media',
         mensagem: `${opsPendentes} OPs aguardando programação.`,
+        setor: 'Geral',
+        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+      });
+    }
+    if (alertaDesbalanceamento) {
+      alerts.push({
+        id: 'desbalance', tipo: 'gargalo', prioridade: 'alta',
+        mensagem: `Desbalanceamento: ${setorMenosFolgado} (${folgaMin.toFixed(1)}% folga) vs ${setorMaisFolgado} (${folgaMax.toFixed(1)}% folga). Diferença de ${(folgaMax - folgaMin).toFixed(0)}%.`,
         setor: 'Geral',
         horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
       });
@@ -131,7 +150,7 @@ export function CIPDashboardNew() {
       });
     }
     return alerts;
-  }, [setorCapacidade, opsPendentes]);
+  }, [setorCapacidade, opsPendentes, alertaDesbalanceamento, folgaMax, folgaMin, setorMaisFolgado, setorMenosFolgado]);
 
   const pedidosEmExecucao = useMemo(() => {
     return ops
@@ -187,11 +206,15 @@ export function CIPDashboardNew() {
       {/* KPIs Grid - Main */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
         <KPICardCIP
-          title="Capacidade Fábrica"
-          value={`${ocupacaoGeral}%`}
-          subtitle={`Saldo: ${saldoGlobalHoras >= 0 ? '+' : ''}${saldoGlobalHoras.toFixed(0)}h`}
-          icon={<Gauge className="h-5 w-5" />}
-          variant="blue"
+          title="Prazo de Vendas"
+          value={`${prazoVendasDias}d`}
+          subtitle={`Gargalo: ${setorGargaloDias.substring(0, 15)} (${gargaloEmDias.toFixed(1)}d)`}
+          icon={<Target className="h-5 w-5" />}
+          variant={
+            gargaloEmDias > 25 ? 'red' :
+            gargaloEmDias > 15 ? 'orange' :
+            gargaloEmDias > 8  ? 'green' : 'blue'
+          }
         />
         <KPICardCIP
           title="OPs Ativas"
@@ -209,10 +232,10 @@ export function CIPDashboardNew() {
         />
         <KPICardCIP
           title="Gargalo Atual"
-          value={gargaloSetor && gargaloSetor.carga_percent > 100 ? gargaloSetor.nome : 'Nenhum'}
-          subtitle={gargaloSetor && gargaloSetor.carga_percent > 100 ? `${gargaloSetor.carga_percent}% ocupação` : 'Sem gargalos'}
+          value={setorGargaloDias.substring(0, 12)}
+          subtitle={`${gargaloEmDias.toFixed(1)} dias · ${ocupacaoGeral}% ocup.`}
           icon={<AlertTriangle className="h-5 w-5" />}
-          variant="red"
+          variant={ocupacaoGeral > 100 ? 'red' : ocupacaoGeral >= 91 ? 'red' : 'orange'}
           size="sm"
         />
       </div>
@@ -241,10 +264,10 @@ export function CIPDashboardNew() {
           variant="blue"
         />
         <KPICardCIP
-          title="Dias Necessários"
-          value={`${capacidade?.diasNecessarios || 0}d`}
-          subtitle={`${capacidade?.diasUteis || 22} dias úteis/mês`}
-          icon={<Target className="h-5 w-5" />}
+          title="Ocupação Geral"
+          value={`${ocupacaoGeral}%`}
+          subtitle={`Saldo: ${saldoGlobalHoras >= 0 ? '+' : ''}${saldoGlobalHoras.toFixed(0)}h`}
+          icon={<Gauge className="h-5 w-5" />}
           variant={ocupacaoGeral > 80 ? 'red' : 'green'}
         />
       </div>
@@ -263,23 +286,19 @@ export function CIPDashboardNew() {
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-destructive" />
-                <span className="text-[10px] text-muted-foreground">&gt;100% Gargalo</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-orange-400" />
-                <span className="text-[10px] text-muted-foreground">95-100% Limite</span>
+                <span className="text-[10px] text-muted-foreground">&lt;3% Folga — Crítico</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-warning" />
-                <span className="text-[10px] text-muted-foreground">80-95% Atenção</span>
+                <span className="text-[10px] text-muted-foreground">3-11% Atenção</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-success" />
-                <span className="text-[10px] text-muted-foreground">50-80% Normal</span>
+                <span className="text-[10px] text-muted-foreground">11-30% Normal</span>
               </div>
               <div className="flex items-center gap-1">
                 <div className="w-2 h-2 rounded-full bg-blue-400" />
-                <span className="text-[10px] text-muted-foreground">&lt;50% Ocioso</span>
+                <span className="text-[10px] text-muted-foreground">&gt;30% Disponível</span>
               </div>
             </div>
           </div>
@@ -308,10 +327,32 @@ export function CIPDashboardNew() {
                 eficiencia={Math.round(setor.eficiencia * 100)}
                 folga={Math.round(setor.horas_disponiveis_mensal - setor.horas_ocupadas)}
                 status={setor.status}
+                folgaResidual={Math.round(setor.folgaResidual)}
+                diasGargalo={+(setor.diasGargalo).toFixed(1)}
+                statusFolga={setor.statusFolga}
+                limiteOperacional={Math.round(setor.limiteOperacional)}
               />
           ))}
         </div>
       </div>
+
+      {/* Alerta de Desbalanceamento */}
+      {alertaDesbalanceamento && (
+        <div className="flex items-start gap-3 px-4 py-3 rounded-xl border-2 border-warning/60 bg-warning/10 text-sm">
+          <AlertTriangle className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
+          <div>
+            <p className="font-bold text-warning">⚠️ ALERTA DE DESBALANCEAMENTO</p>
+            <p className="text-muted-foreground text-xs mt-1">
+              <strong className="text-foreground">{setorMenosFolgado}</strong> está
+              bloqueando o faturamento ({folgaMin.toFixed(1)}% de folga) enquanto{' '}
+              <strong className="text-foreground">{setorMaisFolgado}</strong> está
+              ocioso ({folgaMax.toFixed(1)}% de folga).
+              Diferença de {(folgaMax - folgaMin).toFixed(0)}%.
+              Sugerido remanejamento imediato.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* IA e Pedidos Row */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -359,7 +400,7 @@ export function CIPDashboardNew() {
           <span className="font-semibold">Modelo Industrial CIP</span> — João José Head de Freitas
         </p>
         <p className="text-[10px] text-muted-foreground mt-1">
-          40 anos de chão de fábrica • Gargalo por saldo calculado, <span className="text-warning">nunca estimado</span>
+          40 anos de chão de fábrica • Prazo baseado em <span className="text-warning">dias do gargalo</span>, nunca estimado
         </p>
       </div>
     </div>
