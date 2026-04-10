@@ -15,7 +15,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { fetchConfigCapacidade, calcularDataEntrega, calcularDiasProducao } from '@/services/capacidadeService';
+import { useCapacidadeIndustrial } from '@/hooks/useCapacidadeIndustrial';
+import { calcularDataEntrega } from '@/services/capacidadeService';
+import { FOLGA_OPERACIONAL } from '@/services/capacidadeIndustrialService';
 
 // Step 3 component with real-time prazo calculation + material check
 interface MaterialFalta { nome: string; necessidade: number; estoque: number; falta: number; leadTime: number }
