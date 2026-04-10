@@ -29,7 +29,7 @@ import {
   Search, Clock, TrendingUp,
   CheckCircle2, ChevronLeft, ChevronRight, Menu, X, RefreshCw,
   Download, Truck, AlertCircle, Ban, Timer, CircleDollarSign,
-  OctagonAlert,
+  OctagonAlert, Plus, Pencil, Save, Trash2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
