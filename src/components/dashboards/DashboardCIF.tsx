@@ -73,7 +73,36 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); loadConfigFin(); }, []);
+
+  const loadConfigFin = async () => {
+    const { data: rows } = await (supabase as any).from('configuracoes_financeiras').select('*').limit(1);
+    if (rows && rows.length > 0) {
+      const r = rows[0];
+      setConfigFin({ id: r.id, impostos_percentual: Number(r.impostos_percentual), comissoes_percentual: Number(r.comissoes_percentual) });
+      setConfigFinEdit({ impostos_percentual: String(r.impostos_percentual), comissoes_percentual: String(r.comissoes_percentual) });
+    }
+  };
+
+  const handleSaveConfigFin = async () => {
+    const imp = Number(configFinEdit.impostos_percentual);
+    const com = Number(configFinEdit.comissoes_percentual);
+    if (isNaN(imp) || isNaN(com) || imp < 0 || imp > 100 || com < 0 || com > 100) {
+      toast.error('Valores devem estar entre 0 e 100'); return;
+    }
+    try {
+      if (configFin.id) {
+        await (supabase as any).from('configuracoes_financeiras').update({ impostos_percentual: imp, comissoes_percentual: com }).eq('id', configFin.id);
+      } else {
+        const { data: inserted } = await (supabase as any).from('configuracoes_financeiras').insert({ impostos_percentual: imp, comissoes_percentual: com }).select().single();
+        if (inserted) setConfigFin(prev => ({ ...prev, id: inserted.id }));
+      }
+      setConfigFin(prev => ({ ...prev, impostos_percentual: imp, comissoes_percentual: com }));
+      toast.success('Configurações salvas');
+      setShowConfigEquil(false);
+      loadData();
+    } catch { toast.error('Erro ao salvar configurações'); }
+  };
 
   // Realtime
   useEffect(() => {
@@ -81,6 +110,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transacoes' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orcamentos' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'logs_auditoria' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'configuracoes_financeiras' }, () => { loadData(); loadConfigFin(); })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
