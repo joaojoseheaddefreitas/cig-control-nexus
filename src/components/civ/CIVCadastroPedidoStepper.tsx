@@ -277,29 +277,24 @@ function CapacityAlertBanner({ capacidade }: { capacidade: import('@/services/ca
         </div>
         <Badge className={cn(
           'text-xs font-bold whitespace-nowrap',
-          isCritical ? 'bg-destructive text-destructive-foreground' : isWarning ? 'bg-warning text-warning-foreground' : 'bg-success text-success-foreground'
+          isCritical ? 'bg-destructive text-destructive-foreground' : isPreCritical ? 'bg-warning text-warning-foreground' : 'bg-success text-success-foreground'
         )}>
           {prazo}d
         </Badge>
       </div>
 
-      {/* IA Recommendations when critical */}
-      {isCritical && (
-        <div className="mt-3 pt-3 border-t border-destructive/20 space-y-2">
+      {/* IA Recommendations from 75%+ */}
+      {(isCritical || isPreCritical) && (
+        <div className={cn('mt-3 pt-3 border-t space-y-2', isCritical ? 'border-destructive/20' : 'border-warning/20')}>
           <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-destructive" />
-            <span className="text-xs font-bold text-destructive">IA — Ações recomendadas para aumentar capacidade:</span>
+            <Brain className={cn('h-4 w-4', isCritical ? 'text-destructive' : 'text-warning')} />
+            <span className={cn('text-xs font-bold', isCritical ? 'text-destructive' : 'text-warning')}>
+              {isCritical
+                ? 'IA — Ações URGENTES para aumentar capacidade:'
+                : 'IA — Providências preventivas recomendadas (janela de ~15 dias):'}
+            </span>
           </div>
           <IACapacityRecommendations capacidade={capacidade} />
-        </div>
-      )}
-
-      {isWarning && (
-        <div className="mt-2 pt-2 border-t border-warning/20">
-          <p className="text-[10px] text-warning flex items-center gap-1">
-            <Brain className="h-3 w-3" />
-            Fábrica em zona de atenção. Novos pedidos grandes podem elevar prazo significativamente.
-          </p>
         </div>
       )}
     </div>
