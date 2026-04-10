@@ -192,7 +192,7 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
                   const masks: string[] = [];
                   for (let f = 0; f < fractions; f++) {
                     seq++;
-                    masks.push(getPreviewOPMask(seq));
+                    masks.push(getPreviewOPMask(seq, totalOPs));
                   }
                   const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
                   return (
