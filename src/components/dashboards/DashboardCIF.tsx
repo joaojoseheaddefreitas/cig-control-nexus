@@ -152,11 +152,18 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
 
   const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
   const margemLiquida = data.receita > 0 ? (data.ebitda / data.receita) * 100 : 0;
-  const statusEquilibrio = data.faturamento > data.pontoEquilibrio ? 'acima' : 'abaixo';
-  const percentualAcima = data.pontoEquilibrio > 0 ? (((data.faturamento - data.pontoEquilibrio) / data.pontoEquilibrio) * 100).toFixed(1) : '0';
+
+  // Break-even calculations with configurable params
+  const custosVariaveisPerc = data.receita > 0 ? (data.despesa - data.custoFixo * (data.receitaMensal.length || 1)) / data.receita : 0;
+  const margemContribuicao = 1 - (Math.max(0, custosVariaveisPerc) + configFin.impostos_percentual / 100 + configFin.comissoes_percentual / 100);
+  const pontoEquilibrioCalc = margemContribuicao > 0 ? data.custoFixo / margemContribuicao : 0;
+  const margemInvalida = margemContribuicao <= 0;
+
+  const statusEquilibrio = data.faturamento > pontoEquilibrioCalc ? 'acima' : 'abaixo';
+  const percentualAcima = pontoEquilibrioCalc > 0 ? (((data.faturamento - pontoEquilibrioCalc) / pontoEquilibrioCalc) * 100).toFixed(1) : '0';
 
   // Gauge data for break-even
-  const gaugePercent = data.pontoEquilibrio > 0 ? Math.min(200, (data.faturamento / data.pontoEquilibrio) * 100) : 0;
+  const gaugePercent = pontoEquilibrioCalc > 0 ? Math.min(200, (data.faturamento / pontoEquilibrioCalc) * 100) : 0;
 
   const renderDashboard = () => (
     <div className="space-y-6">
