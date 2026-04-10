@@ -384,7 +384,7 @@ export function CIVCarteiraProducao() {
               </tbody>
             </table>
           </div>
-        </ScrollArea>
+        </div>
       </div>
 
       {/* Stepper */}
