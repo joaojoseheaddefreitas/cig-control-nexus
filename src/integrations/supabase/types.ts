@@ -1352,6 +1352,7 @@ export type Database = {
           dias_uteis_manual: boolean
           dias_uteis_mensais: number
           eficiencia: number
+          fator_eficiencia_setorial: number | null
           horas_turno: number
           id: string
           mao_de_obra: number
@@ -1365,6 +1366,7 @@ export type Database = {
           dias_uteis_manual?: boolean
           dias_uteis_mensais?: number
           eficiencia?: number
+          fator_eficiencia_setorial?: number | null
           horas_turno?: number
           id?: string
           mao_de_obra?: number
@@ -1378,6 +1380,7 @@ export type Database = {
           dias_uteis_manual?: boolean
           dias_uteis_mensais?: number
           eficiencia?: number
+          fator_eficiencia_setorial?: number | null
           horas_turno?: number
           id?: string
           mao_de_obra?: number
