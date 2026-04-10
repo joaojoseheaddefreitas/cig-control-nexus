@@ -5,6 +5,10 @@ import {
 } from 'recharts';
 import { CICEstoqueMateriais } from '@/components/cic/CICEstoqueMateriais';
 import { CICFornecedores } from '@/components/cic/CICFornecedores';
+import { CICCompras } from '@/components/cic/CICCompras';
+import { CICMRP } from '@/components/cic/CICMRP';
+import { CIIA } from '@/components/cic/CIIA';
+import { CICAnalytics } from '@/components/cic/CICAnalytics';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
