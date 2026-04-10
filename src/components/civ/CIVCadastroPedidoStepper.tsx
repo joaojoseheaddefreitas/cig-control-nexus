@@ -251,17 +251,17 @@ function CapacityAlertBanner({ capacidade }: { capacidade: import('@/services/ca
   const ocupacaoGargalo = capacidade.setores.reduce((max, s) => s.carga_percent > max ? s.carga_percent : max, 0);
 
   const isCritical = ocupacaoGargalo >= 95;
-  const isWarning = ocupacaoGargalo >= 80 && ocupacaoGargalo < 95;
-  const isNormal = ocupacaoGargalo < 80;
+  const isPreCritical = ocupacaoGargalo >= 75 && ocupacaoGargalo < 95;
+  const isNormal = ocupacaoGargalo < 75;
 
   const bgClass = isCritical
     ? 'bg-destructive/15 border-destructive/50 animate-pulse'
-    : isWarning
+    : isPreCritical
       ? 'bg-warning/15 border-warning/50'
       : 'bg-success/10 border-success/30';
 
-  const iconColor = isCritical ? 'text-destructive' : isWarning ? 'text-warning' : 'text-success';
-  const statusLabel = isCritical ? '🔴 CAPACIDADE CRÍTICA' : isWarning ? '🟡 ATENÇÃO' : '🟢 DISPONÍVEL';
+  const iconColor = isCritical ? 'text-destructive' : isPreCritical ? 'text-warning' : 'text-success';
+  const statusLabel = isCritical ? '🔴 CAPACIDADE CRÍTICA' : isPreCritical ? '🟡 ATENÇÃO — PROVIDÊNCIAS RECOMENDADAS' : '🟢 DISPONÍVEL';
 
   return (
     <div className={cn('p-3 rounded-lg border-2 mb-4', bgClass)}>
