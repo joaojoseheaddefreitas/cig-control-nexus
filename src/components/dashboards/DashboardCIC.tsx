@@ -81,6 +81,17 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   const [drilldownData, setDrilldownData] = useState<any[]>([]);
   const isMobile = useIsMobile();
 
+  // Gestão de Materiais - editing state
+  const [matEditId, setMatEditId] = useState<string | null>(null);
+  const [matEditData, setMatEditData] = useState<Record<string, any>>({});
+  const [matNewOpen, setMatNewOpen] = useState(false);
+  const [matNewData, setMatNewData] = useState({
+    codigo: '', nome: '', categoria: 'geral', unidade: 'un',
+    tipo_controle: 'MRP', lead_time_dias: 7, margem_seguranca_percentual: 20,
+    valor_unitario: 0, estoque_minimo: 0, estoque_maximo: 0, consumo_medio_diario: 0,
+    lote_economico: 0, estoque_atual: 0, estoque_seguranca: 0, ponto_pedido: 0,
+  });
+
   // Filters
   const [filterFornecedor, setFilterFornecedor] = useState('todos');
   const [filterCategoria, setFilterCategoria] = useState('todos');
