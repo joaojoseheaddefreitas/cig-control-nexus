@@ -267,9 +267,21 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       )}
 
       {/* KPIs Row 1 - Vendas & Produção */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        <div className="p-4 rounded-xl bg-gradient-to-br from-civ/20 to-civ/5 border border-civ/30">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        {/* PRAZO DE VENDAS - KPI mestre */}
+        <div className={cn('p-4 rounded-xl border-2 col-span-1',
+          prazoVendas > 20 ? 'bg-destructive/15 border-destructive/50' : prazoVendas > 12 ? 'bg-warning/15 border-warning/50' : 'bg-success/10 border-success/30'
+        )}>
           <div className="flex items-center justify-between mb-2">
+            <Clock className={cn('h-5 w-5', prazoVendas > 20 ? 'text-destructive' : prazoVendas > 12 ? 'text-warning' : 'text-success')} />
+            <span className="text-xs text-muted-foreground">PRAZO</span>
+          </div>
+          <p className={cn('text-3xl font-bold', prazoVendas > 20 ? 'text-destructive' : prazoVendas > 12 ? 'text-warning' : 'text-success')}>{prazoVendas}d</p>
+          <p className="text-xs text-muted-foreground mt-1">Prazo de Vendas</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Gargalo: {gargaloNome}</p>
+        </div>
+
+        {/* CARTEIRA */}
             <TrendingUp className="h-5 w-5 text-civ" />
             <span className="text-xs text-muted-foreground">CIV</span>
           </div>
