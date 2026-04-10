@@ -565,59 +565,152 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     </div>
   );
 
-  const renderRentabilidade = () => (
-    <div className="space-y-6">
-      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cif">Rentabilidade & Pricing</strong> — Margem por SKU calculada com custos reais.</p>
-      </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[400px]">
-        <ScrollArea className="h-full">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Produto</th>
-              <th className="text-right py-3 px-4 text-muted-foreground font-medium">Preço Venda</th>
-              <th className="text-right py-3 px-4 text-muted-foreground font-medium">Custo Total</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Margem</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Vol.</th>
-            </tr></thead>
-            <tbody>
-              {data!.rentabilidadeSKU.map((s, i) => (
-                <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
-                  <td className="py-3 px-4 font-medium text-foreground">{s.sku}</td>
-                  <td className="py-3 px-4 text-right">R$ {s.preco.toLocaleString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-right text-muted-foreground">R$ {s.custo.toLocaleString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-center">
-                    <Badge className={cn(s.margem >= 35 ? 'bg-success/20 text-success' : s.margem >= 25 ? 'bg-warning/20 text-warning' : 'bg-destructive/20 text-destructive')}>{s.margem}%</Badge>
-                  </td>
-                  <td className="py-3 px-4 text-center">{s.volume}</td>
-                </tr>
-              ))}
-              {data!.rentabilidadeSKU.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-muted-foreground">Sem dados de produtos cadastrados</td></tr>
-              )}
-            </tbody>
-          </table>
-        </ScrollArea>
-      </div>
-      {data!.rentabilidadeSKU.length > 0 && (
-        <ModuleCard title="Margem por Produto" variant="cif">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={data!.rentabilidadeSKU}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="sku" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${v}%`} />
-                <Tooltip formatter={(value: number) => [`${value}%`, 'Margem']} />
-                <Bar dataKey="margem" radius={[4, 4, 0, 0]}>
-                  {data!.rentabilidadeSKU.map((s, i) => <Cell key={i} fill={s.margem >= 35 ? CHART_COLORS.verde : s.margem >= 25 ? CHART_COLORS.amarelo : CHART_COLORS.vermelho} />)}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+  const renderRentabilidade = () => {
+    const skus = data!.rentabilidadeSKU;
+    const comVolume = skus.filter(s => s.volume > 0);
+    const semVolume = skus.filter(s => s.volume === 0);
+    const margemColor = (m: number) => m >= 60 ? 'bg-success/20 text-success' : m >= 30 ? 'bg-warning/20 text-warning' : 'bg-destructive/20 text-destructive';
+    const margemDot = (m: number) => m >= 60 ? '🟢' : m >= 30 ? '🟡' : '🔴';
+    const curvaColor = (c: string) => c === 'A' ? 'bg-success/20 text-success' : c === 'B' ? 'bg-warning/20 text-warning' : 'bg-muted text-muted-foreground';
+    const fmt = (v: number) => `R$ ${v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+    // Alertas críticos: Curva A com margem < 30%
+    const alertasCriticos = comVolume.filter(s => s.curvaABC === 'A' && s.margem < 30);
+
+    return (
+      <div className="space-y-6">
+        <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
+          <p className="text-sm text-muted-foreground"><strong className="text-cif">Rentabilidade & Pricing</strong> — Análise de lucro real por SKU com Curva ABC. Ranking por lucro total.</p>
+        </div>
+
+        {/* Alertas Críticos */}
+        {alertasCriticos.length > 0 && (
+          <div className="space-y-2">
+            {alertasCriticos.map((s, i) => (
+              <div key={i} className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-2">
+                <span className="text-lg">⚠️</span>
+                <p className="text-sm text-destructive"><strong>{s.sku}</strong> — Volume alto com margem perigosa ({s.margem}%) — risco de prejuízo operacional. Curva A gera {fmt(s.lucroTotal)} de lucro total.</p>
+              </div>
+            ))}
           </div>
-        </ModuleCard>
-      )}
-    </div>
-  );
+        )}
+
+        {/* KPIs resumo */}
+        {comVolume.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+              <p className="text-xs text-muted-foreground">Lucro Total</p>
+              <p className="text-lg font-bold text-foreground">{fmt(comVolume.reduce((s, p) => s + p.lucroTotal, 0))}</p>
+            </div>
+            <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+              <p className="text-xs text-muted-foreground">Margem Média Pond.</p>
+              <p className="text-lg font-bold text-foreground">{(() => { const tr = comVolume.reduce((s, p) => s + p.preco * p.volume, 0); const tc = comVolume.reduce((s, p) => s + p.custoTotal * p.volume, 0); return tr > 0 ? ((tr - tc) / tr * 100).toFixed(1) : '0'; })()}%</p>
+            </div>
+            <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+              <p className="text-xs text-muted-foreground">Curva A (80% lucro)</p>
+              <p className="text-lg font-bold text-success">{comVolume.filter(s => s.curvaABC === 'A').length} SKUs</p>
+            </div>
+            <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+              <p className="text-xs text-muted-foreground">Margem Crítica</p>
+              <p className="text-lg font-bold text-destructive">{comVolume.filter(s => s.margem < 30).length} SKUs 🔴</p>
+            </div>
+          </div>
+        )}
+
+        {/* Tabela Principal - COM VOLUME */}
+        <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
+          <div className="px-4 py-2 bg-secondary/30 border-b border-border/30">
+            <p className="text-xs font-semibold text-muted-foreground">📊 PRODUTOS COM VOLUME ({comVolume.length}) — Ordenados por Lucro Total</p>
+          </div>
+          <ScrollArea className="max-h-[400px]">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border/50 bg-secondary/20 sticky top-0 z-10">
+                <th className="text-left py-2 px-3 text-muted-foreground font-medium text-xs">Produto</th>
+                <th className="text-center py-2 px-3 text-muted-foreground font-medium text-xs">ABC</th>
+                <th className="text-right py-2 px-3 text-muted-foreground font-medium text-xs">Preço</th>
+                <th className="text-right py-2 px-3 text-muted-foreground font-medium text-xs">Custo Total</th>
+                <th className="text-right py-2 px-3 text-muted-foreground font-medium text-xs">Lucro Un.</th>
+                <th className="text-center py-2 px-3 text-muted-foreground font-medium text-xs">Vol.</th>
+                <th className="text-right py-2 px-3 text-muted-foreground font-medium text-xs font-bold">Lucro Total</th>
+                <th className="text-center py-2 px-3 text-muted-foreground font-medium text-xs">Margem</th>
+              </tr></thead>
+              <tbody>
+                {comVolume.map((s, i) => (
+                  <tr key={i} className={cn("border-b border-border/30 hover:bg-secondary/30", s.curvaABC === 'A' && s.margem < 30 && 'bg-destructive/5')}>
+                    <td className="py-2 px-3 font-medium text-foreground">{s.sku}</td>
+                    <td className="py-2 px-3 text-center"><Badge className={curvaColor(s.curvaABC)}>{s.curvaABC}</Badge></td>
+                    <td className="py-2 px-3 text-right text-xs">{fmt(s.preco)}</td>
+                    <td className="py-2 px-3 text-right text-xs text-muted-foreground" title={`Mat: ${fmt(s.custoMaterial)} | MO: ${fmt(s.custoMaoObra)} | Ind: ${fmt(s.custoIndireto)} | Imp: ${fmt(s.custoImpostos)} | Com: ${fmt(s.custoComissao)}`}>
+                      {fmt(s.custoTotal)}
+                    </td>
+                    <td className="py-2 px-3 text-right text-xs">{fmt(s.lucroUnitario)}</td>
+                    <td className="py-2 px-3 text-center">{s.volume}</td>
+                    <td className="py-2 px-3 text-right font-bold">{fmt(s.lucroTotal)}</td>
+                    <td className="py-2 px-3 text-center">
+                      <Badge className={margemColor(s.margem)}>{margemDot(s.margem)} {s.margem}%</Badge>
+                    </td>
+                  </tr>
+                ))}
+                {comVolume.length === 0 && (
+                  <tr><td colSpan={8} className="py-6 text-center text-muted-foreground">Nenhum produto com volume registrado</td></tr>
+                )}
+              </tbody>
+            </table>
+          </ScrollArea>
+        </div>
+
+        {/* Tabela Secundária - SEM VOLUME */}
+        {semVolume.length > 0 && (
+          <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden opacity-70">
+            <div className="px-4 py-2 bg-secondary/30 border-b border-border/30">
+              <p className="text-xs font-semibold text-muted-foreground">📦 PRODUTOS SEM VOLUME ({semVolume.length}) — Não influenciam ranking</p>
+            </div>
+            <ScrollArea className="max-h-[200px]">
+              <table className="w-full text-sm">
+                <thead><tr className="border-b border-border/50 bg-secondary/20 sticky top-0 z-10">
+                  <th className="text-left py-2 px-3 text-muted-foreground font-medium text-xs">Produto</th>
+                  <th className="text-right py-2 px-3 text-muted-foreground font-medium text-xs">Preço</th>
+                  <th className="text-right py-2 px-3 text-muted-foreground font-medium text-xs">Custo Total</th>
+                  <th className="text-right py-2 px-3 text-muted-foreground font-medium text-xs">Lucro Un.</th>
+                  <th className="text-center py-2 px-3 text-muted-foreground font-medium text-xs">Margem</th>
+                </tr></thead>
+                <tbody>
+                  {semVolume.map((s, i) => (
+                    <tr key={i} className="border-b border-border/30">
+                      <td className="py-2 px-3 font-medium text-foreground">{s.sku}</td>
+                      <td className="py-2 px-3 text-right text-xs">{fmt(s.preco)}</td>
+                      <td className="py-2 px-3 text-right text-xs text-muted-foreground">{fmt(s.custoTotal)}</td>
+                      <td className="py-2 px-3 text-right text-xs">{fmt(s.lucroUnitario)}</td>
+                      <td className="py-2 px-3 text-center"><Badge className={margemColor(s.margem)}>{margemDot(s.margem)} {s.margem}%</Badge></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </ScrollArea>
+          </div>
+        )}
+
+        {/* Gráfico Lucro Total por SKU */}
+        {comVolume.length > 0 && (
+          <ModuleCard title="Lucro Total por Produto (Ranking)" variant="cif">
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={comVolume.slice(0, 10)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="sku" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v/1000).toFixed(0)}k`} />
+                  <Tooltip formatter={(value: number) => [fmt(value), 'Lucro Total']} />
+                  <Bar dataKey="lucroTotal" radius={[4, 4, 0, 0]}>
+                    {comVolume.slice(0, 10).map((s, i) => <Cell key={i} fill={s.margem >= 60 ? CHART_COLORS.verde : s.margem >= 30 ? CHART_COLORS.amarelo : CHART_COLORS.vermelho} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </ModuleCard>
+        )}
+      </div>
+    );
+  };
 
   const renderAuditoria = () => (
     <div className="space-y-6">
