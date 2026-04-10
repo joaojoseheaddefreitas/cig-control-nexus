@@ -655,6 +655,42 @@ export type Database = {
           },
         ]
       }
+      logs_auditoria: {
+        Row: {
+          acao: string
+          data: string
+          detalhes: string | null
+          entidade: string | null
+          entidade_id: string | null
+          id: string
+          usuario: string
+          valor_antigo: number | null
+          valor_novo: number | null
+        }
+        Insert: {
+          acao?: string
+          data?: string
+          detalhes?: string | null
+          entidade?: string | null
+          entidade_id?: string | null
+          id?: string
+          usuario?: string
+          valor_antigo?: number | null
+          valor_novo?: number | null
+        }
+        Update: {
+          acao?: string
+          data?: string
+          detalhes?: string | null
+          entidade?: string | null
+          entidade_id?: string | null
+          id?: string
+          usuario?: string
+          valor_antigo?: number | null
+          valor_novo?: number | null
+        }
+        Relationships: []
+      }
       lojas: {
         Row: {
           ativo: boolean
@@ -1029,6 +1065,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      orcamentos: {
+        Row: {
+          categoria: string
+          created_at: string
+          id: string
+          mes_ano: string
+          updated_at: string
+          valor_limite: number
+        }
+        Insert: {
+          categoria?: string
+          created_at?: string
+          id?: string
+          mes_ano?: string
+          updated_at?: string
+          valor_limite?: number
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          id?: string
+          mes_ano?: string
+          updated_at?: string
+          valor_limite?: number
+        }
+        Relationships: []
       }
       pedidos: {
         Row: {
@@ -1531,6 +1594,45 @@ export type Database = {
           maquinas_automaticas?: number
           nome?: string
           ordem?: number
+        }
+        Relationships: []
+      }
+      transacoes: {
+        Row: {
+          categoria: string
+          created_at: string
+          data_emissao: string
+          data_vencimento: string
+          descricao: string
+          id: string
+          status: string
+          tipo: string
+          updated_at: string
+          valor: number
+        }
+        Insert: {
+          categoria?: string
+          created_at?: string
+          data_emissao?: string
+          data_vencimento?: string
+          descricao?: string
+          id?: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor?: number
+        }
+        Update: {
+          categoria?: string
+          created_at?: string
+          data_emissao?: string
+          data_vencimento?: string
+          descricao?: string
+          id?: string
+          status?: string
+          tipo?: string
+          updated_at?: string
+          valor?: number
         }
         Relationships: []
       }
