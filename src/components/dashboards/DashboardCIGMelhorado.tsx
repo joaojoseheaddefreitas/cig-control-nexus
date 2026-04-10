@@ -171,8 +171,9 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       const overloaded = setoresProducaoData.filter(s => s.capacidade > 0 && (s.carga / s.capacidade) > 0.9);
       if (overloaded.length > 0) alertas.push(`🟡 ${overloaded.length} setor(es) com carga >90%`);
 
-      if (cifData.margemLiquida < 0) alertas.push(`🔴 EBITDA negativo: margem ${cifData.margemLiquida.toFixed(1)}%`);
-      else if (cifData.margemLiquida < 15) alertas.push(`🟡 Margem abaixo de 15%: ${cifData.margemLiquida.toFixed(1)}%`);
+      const margemLiq = cifData.receita > 0 ? (cifData.ebitda / cifData.receita) * 100 : 0;
+      if (margemLiq < 0) alertas.push(`🔴 EBITDA negativo: margem ${margemLiq.toFixed(1)}%`);
+      else if (margemLiq < 15) alertas.push(`🟡 Margem abaixo de 15%: ${margemLiq.toFixed(1)}%`);
 
       if (alertas.length === 0) alertas.push('✅ Operação normal — sem alertas críticos');
 
@@ -359,10 +360,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
           <div className="p-3 rounded-xl bg-card border border-border/30">
             <p className="text-xs text-muted-foreground">Margem Líquida</p>
-            <p className="text-xl font-bold text-foreground">{kpis.cifData.margemLiquida.toFixed(1)}%</p>
-            <p className={cn('text-xs mt-1', kpis.cifData.margemLiquida >= 15 ? 'text-success' : 'text-warning')}>
-              {kpis.cifData.margemLiquida >= 15 ? 'Meta atingida' : 'Abaixo da meta (15%)'}
-            </p>
+            {(() => { const ml = kpis.cifData.receita > 0 ? (kpis.cifData.ebitda / kpis.cifData.receita) * 100 : 0; return (<><p className="text-xl font-bold text-foreground">{ml.toFixed(1)}%</p><p className={cn('text-xs mt-1', ml >= 15 ? 'text-success' : 'text-warning')}>{ml >= 15 ? 'Meta atingida' : 'Abaixo da meta (15%)'}</p></>); })()}
           </div>
           <div className="p-3 rounded-xl bg-card border border-border/30">
             <p className="text-xs text-muted-foreground">Capacidade × Carga</p>
