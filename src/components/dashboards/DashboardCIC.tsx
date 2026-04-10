@@ -126,12 +126,25 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       const pcAbertos = pedidosCompra
         .filter(p => p.material_id === m.id && !['recebido', 'cancelado'].includes(p.status))
         .reduce((s, p) => s + p.quantidade, 0);
+      const ppCalc = m.ponto_pedido_calculado || m.ponto_pedido;
+      const estoqueDisponivel = Math.max(0, m.estoque_atual - m.estoque_minimo);
       const necessidade = m.consumo_medio_diario * m.lead_time_dias;
       const cobertura = m.estoque_atual + pcAbertos;
       const emRisco = cobertura < necessidade && m.consumo_medio_diario > 0;
       const coberturaPercent = necessidade > 0 ? (cobertura / necessidade) * 100 : 999;
       const coberturaDias = m.consumo_medio_diario > 0 ? m.estoque_atual / m.consumo_medio_diario : 999;
-      const risco = emRisco ? 'risco' : coberturaPercent < 150 ? 'atencao' : 'seguro';
+      
+      // Duas gavetas consuming gaveta2 = forced risco
+      let risco: string;
+      if (m.gaveta2_ativa) {
+        risco = 'risco';
+      } else if (emRisco) {
+        risco = 'risco';
+      } else if (coberturaPercent < 150) {
+        risco = 'atencao';
+      } else {
+        risco = 'seguro';
+      }
       
       // Data de ruptura
       let dataRuptura: string | null = null;
@@ -141,7 +154,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
         dataRuptura = dr.toLocaleDateString('pt-BR');
       }
       
-      return { ...m, pcAbertos, necessidade, coberturaTotal: cobertura, risco, coberturaPercent, coberturaDias, dataRuptura };
+      return { ...m, pcAbertos, necessidade, coberturaTotal: cobertura, risco, coberturaPercent, coberturaDias, dataRuptura, estoqueDisponivel, ppCalc };
     }).filter(m => m.consumo_medio_diario > 0);
   }, [materiais, pedidosCompra]);
 
@@ -506,11 +519,13 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
         {/* RISCO DE PARADA — Lista detalhada */}
         <ModuleCard title="⚠ Materiais — Análise de Risco de Parada de Produção" variant="cic">
           <ScrollArea className="max-h-[300px]">
-            <table className="w-full text-sm">
+         <table className="w-full text-sm">
               <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
                 <th className="text-left py-2 px-3 text-muted-foreground font-medium text-xs">Material</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Tipo</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Disponível</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Pto Pedido</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">PC Abertos</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Consumo/Dia</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Cobertura (d)</th>
@@ -521,14 +536,23 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
               </tr></thead>
               <tbody>
                 {riscoSorted.length === 0 ? (
-                  <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">Sem dados cadastrados – insira dados para iniciar o monitoramento</td></tr>
+                  <tr><td colSpan={12} className="py-8 text-center text-muted-foreground">Sem dados cadastrados – insira dados para iniciar o monitoramento</td></tr>
                 ) : riscoSorted.map(m => (
                   <tr key={m.id} className={cn("border-b border-border/30",
                     m.risco === 'risco' ? "bg-destructive/5" : m.risco === 'atencao' ? "bg-warning/5" : ""
                   )}>
-                    <td className="py-2 px-3 font-medium text-xs">{m.nome}</td>
+                    <td className="py-2 px-3 font-medium text-xs">
+                      {m.nome}
+                      {m.gaveta2_ativa && <span className="ml-1 text-[9px] text-destructive font-bold">(G2)</span>}
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      <Badge className={cn("text-[9px]", m.tipo_controle === 'DUAS_GAVETAS' ? 'bg-purple-500/20 text-purple-400' : 'bg-secondary text-muted-foreground')}>
+                        {m.tipo_controle === 'DUAS_GAVETAS' ? '2GAV' : 'MRP'}
+                      </Badge>
+                    </td>
                     <td className="py-2 px-2 text-center text-xs">{m.estoque_atual} {m.unidade}</td>
-                    <td className="py-2 px-2 text-center text-xs text-muted-foreground">{Math.max(0, m.estoque_atual - (m.estoque_minimo || 0))} {m.unidade}</td>
+                    <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.estoqueDisponivel} {m.unidade}</td>
+                    <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.ppCalc.toFixed(0)}</td>
                     <td className="py-2 px-2 text-center text-xs">{m.pcAbertos || '—'}</td>
                     <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.consumo_medio_diario}</td>
                     <td className={cn("py-2 px-2 text-center font-bold text-xs",
