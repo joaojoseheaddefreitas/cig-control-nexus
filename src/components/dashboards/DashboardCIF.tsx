@@ -712,39 +712,73 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     );
   };
 
-  const renderAuditoria = () => (
-    <div className="space-y-6">
-      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria</strong> — Registro imutável de todas as operações financeiras.</p>
+  const renderAuditoria = () => {
+    const acaoBadge = (acao: string) => {
+      if (acao.includes('CRIAR') || acao.includes('CRIACAO')) return 'bg-success/20 text-success border-success/30';
+      if (acao.includes('EDITAR') || acao.includes('ALTERACAO')) return 'bg-warning/20 text-warning border-warning/30';
+      if (acao.includes('PAGAMENTO') || acao.includes('BAIXA')) return 'bg-primary/20 text-primary border-primary/30';
+      return 'bg-muted text-muted-foreground';
+    };
+    const acaoIcon = (acao: string) => {
+      if (acao.includes('CRIAR') || acao.includes('CRIACAO')) return '➕';
+      if (acao.includes('EDITAR') || acao.includes('ALTERACAO')) return '✏️';
+      if (acao.includes('PAGAMENTO') || acao.includes('BAIXA')) return '✅';
+      return '📋';
+    };
+    return (
+      <div className="space-y-6">
+        <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
+          <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria & Compliance</strong> — Registro imutável e automático de todas as operações financeiras. Atualização em tempo real.</p>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+            <p className="text-xs text-muted-foreground">Total Registros</p>
+            <p className="text-lg font-bold text-foreground">{data!.logs.length}</p>
+          </div>
+          <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+            <p className="text-xs text-muted-foreground">Criações</p>
+            <p className="text-lg font-bold text-success">{data!.logs.filter(l => l.acao.includes('CRIAR') || l.acao.includes('CRIACAO')).length}</p>
+          </div>
+          <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+            <p className="text-xs text-muted-foreground">Edições</p>
+            <p className="text-lg font-bold text-warning">{data!.logs.filter(l => l.acao.includes('EDITAR') || l.acao.includes('ALTERACAO')).length}</p>
+          </div>
+          <div className="p-3 rounded-lg border border-border/30 bg-card/80">
+            <p className="text-xs text-muted-foreground">Pagamentos</p>
+            <p className="text-lg font-bold text-primary">{data!.logs.filter(l => l.acao.includes('PAGAMENTO') || l.acao.includes('BAIXA')).length}</p>
+          </div>
+        </div>
+        <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
+          <ScrollArea className="max-h-[500px]">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
+                <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground">Data</th>
+                <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground">Ação</th>
+                <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground">Entidade</th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">Valor Anterior</th>
+                <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">Valor Novo</th>
+                <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground">Detalhes</th>
+              </tr></thead>
+              <tbody>
+                {data!.logs.length === 0 ? (
+                  <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">Nenhum log de auditoria registrado.</td></tr>
+                ) : data!.logs.map((log, i) => (
+                  <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
+                    <td className="py-3 px-4 text-xs text-muted-foreground whitespace-nowrap">{new Date(log.data).toLocaleString('pt-BR')}</td>
+                    <td className="py-3 px-4 text-center"><Badge className={acaoBadge(log.acao)}>{acaoIcon(log.acao)} {log.acao}</Badge></td>
+                    <td className="py-3 px-4 text-center"><Badge variant="outline" className="text-xs">{log.entidade || '-'}</Badge></td>
+                    <td className="py-3 px-4 text-right text-muted-foreground">{log.valor_antigo != null ? fmt(log.valor_antigo) : '-'}</td>
+                    <td className="py-3 px-4 text-right font-medium">{log.valor_novo != null ? fmt(log.valor_novo) : '-'}</td>
+                    <td className="py-3 px-4 text-xs text-muted-foreground max-w-[200px] truncate" title={log.detalhes || ''}>{log.detalhes || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollArea>
+        </div>
       </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden max-h-[500px]">
-        <ScrollArea className="h-full">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-              <th className="text-left py-3 px-4">Data</th>
-              <th className="text-center py-3 px-4">Ação</th>
-              <th className="text-right py-3 px-4">Valor Anterior</th>
-              <th className="text-right py-3 px-4">Valor Novo</th>
-              <th className="text-left py-3 px-4">Detalhes</th>
-            </tr></thead>
-            <tbody>
-              {data!.logs.length === 0 ? (
-                <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">Nenhum log de auditoria registrado.</td></tr>
-              ) : data!.logs.map((log, i) => (
-                <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
-                  <td className="py-3 px-4 text-muted-foreground">{new Date(log.data).toLocaleString('pt-BR')}</td>
-                  <td className="py-3 px-4 text-center"><Badge variant="outline">{log.acao}</Badge></td>
-                  <td className="py-3 px-4 text-right">{log.valor_antigo != null ? fmt(log.valor_antigo) : '-'}</td>
-                  <td className="py-3 px-4 text-right font-medium">{log.valor_novo != null ? fmt(log.valor_novo) : '-'}</td>
-                  <td className="py-3 px-4 text-xs text-muted-foreground">{log.detalhes || '-'}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </ScrollArea>
-      </div>
-    </div>
-  );
+    );
+  };
 
   const renderAnalytics = () => (
     <div className="space-y-6">
