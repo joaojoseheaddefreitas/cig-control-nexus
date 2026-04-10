@@ -215,6 +215,30 @@ export type Database = {
         }
         Relationships: []
       }
+      configuracoes_financeiras: {
+        Row: {
+          comissoes_percentual: number
+          created_at: string
+          id: string
+          impostos_percentual: number
+          updated_at: string
+        }
+        Insert: {
+          comissoes_percentual?: number
+          created_at?: string
+          id?: string
+          impostos_percentual?: number
+          updated_at?: string
+        }
+        Update: {
+          comissoes_percentual?: number
+          created_at?: string
+          id?: string
+          impostos_percentual?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       contas_pagar: {
         Row: {
           categoria: string

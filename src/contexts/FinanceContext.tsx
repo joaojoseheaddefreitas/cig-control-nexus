@@ -44,6 +44,7 @@ export const FinanceProvider = ({ children }: { children: ReactNode }) => {
     const ch = supabase.channel('finance-global')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'transacoes' }, () => reload())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orcamentos' }, () => reload())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'configuracoes_financeiras' }, () => reload())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
