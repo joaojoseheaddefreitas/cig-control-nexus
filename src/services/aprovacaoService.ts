@@ -219,11 +219,10 @@ export async function aprovarPedido(
           qtyThisOp += remainder;
         }
 
-        // Dynamic mask: single OP = order number, multiple = order-A, order-B...
-        const suffix = String.fromCharCode(64 + globalSequence); // A=65
+        // Dynamic mask: single OP = order number, multiple = order 1/N, 2/N...
         const numeroOp = totalOPsPedido === 1
           ? codigoPedido
-          : `${codigoPedido}-${suffix}`;
+          : `${codigoPedido} ${globalSequence}/${totalOPsPedido}`;
 
         opsToInsert.push({
           familia_op_id: familia.id,
