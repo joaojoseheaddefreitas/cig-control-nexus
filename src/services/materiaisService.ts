@@ -19,12 +19,19 @@ export interface Material {
   fornecedor_nome: string | null;
   ultima_entrada: string | null;
   ativo: boolean;
+  tipo_controle: string;
+  margem_seguranca_percentual: number;
   // Calculated
   alcance_estoque?: number;
   alcance_projetado?: number;
   valor_estoque?: number;
   proposta_compra?: number;
   status?: 'normal' | 'atencao' | 'critico';
+  ponto_pedido_calculado?: number;
+  estoque_seguranca_calculado?: number;
+  gaveta1?: number;
+  gaveta2?: number;
+  gaveta2_ativa?: boolean;
 }
 
 export interface MovimentacaoMaterial {
@@ -63,9 +70,25 @@ export async function fetchMateriais(): Promise<Material[]> {
 
   return (data as Material[]).map(mat => {
     const alcance = calcularAlcance(mat.estoque_atual, mat.consumo_medio_diario);
-    const deficit = Math.max(0, mat.ponto_pedido - mat.estoque_atual);
+    const margem = (mat.margem_seguranca_percentual || 20) / 100;
+
+    // PP calculation: consumo_diario × lead_time × (1 + margem)
+    const estoqueSegCalc = (mat.consumo_medio_diario * mat.lead_time_dias) * margem;
+    const pontoPedidoCalc = mat.consumo_medio_diario * mat.lead_time_dias * (1 + margem);
+
+    // Duas gavetas logic
+    const isDuasGavetas = mat.tipo_controle === 'DUAS_GAVETAS';
+    const gaveta2 = isDuasGavetas ? mat.consumo_medio_diario * mat.lead_time_dias : 0;
+    const gaveta1 = isDuasGavetas ? Math.max(0, mat.estoque_atual - gaveta2) : 0;
+    const gaveta2Ativa = isDuasGavetas && gaveta1 <= 0;
+
+    const deficit = Math.max(0, pontoPedidoCalc - mat.estoque_atual);
     const proposta = deficit > 0 ? Math.max(deficit, mat.lote_economico) : 0;
     const alcanceProjetado = calcularAlcance(mat.estoque_atual + proposta, mat.consumo_medio_diario);
+
+    // Status: duas gavetas consuming gaveta2 = critico
+    let status = calcularStatus(mat);
+    if (gaveta2Ativa) status = 'critico';
 
     return {
       ...mat,
@@ -73,7 +96,12 @@ export async function fetchMateriais(): Promise<Material[]> {
       alcance_projetado: Number(alcanceProjetado.toFixed(2)),
       valor_estoque: mat.estoque_atual * mat.valor_unitario,
       proposta_compra: proposta,
-      status: calcularStatus(mat),
+      status,
+      ponto_pedido_calculado: Number(pontoPedidoCalc.toFixed(2)),
+      estoque_seguranca_calculado: Number(estoqueSegCalc.toFixed(2)),
+      gaveta1: Number(gaveta1.toFixed(2)),
+      gaveta2: Number(gaveta2.toFixed(2)),
+      gaveta2_ativa: gaveta2Ativa,
     };
   });
 }
