@@ -273,6 +273,7 @@ export function CICEstoqueMateriais() {
                               <Input type="number" className="h-7 text-xs w-16" value={editData.estoque_atual}
                                 onChange={e => setEditData({ ...editData, estoque_atual: e.target.value })} />
                             ) : <>{m.estoque_atual} {m.unidade}</>}
+                          </td>
                           <td className="py-1.5 px-2 text-center text-xs text-muted-foreground">{Math.max(0, m.estoque_atual - m.estoque_minimo)} {m.unidade}</td>
                           <td className="py-1.5 px-2 text-center text-xs">
                             {isEditing ? (
