@@ -24,13 +24,12 @@ interface MaterialFalta { nome: string; necessidade: number; estoque: number; fa
 
 function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNome, canal, itens, totalOPs, valorTotal, observacoesGerais, getPreviewOPMask }: {
   cargaTotalHoras: number; clienteBloqueado: boolean; codigoManual: string; clienteNome: string; canal: string;
-  itens: ItemForm[]; totalOPs: number; valorTotal: number; observacoesGerais: string; getPreviewOPMask: (seq: number) => string;
+  itens: ItemForm[]; totalOPs: number; valorTotal: number; observacoesGerais: string; getPreviewOPMask: (seq: number, total: number) => string;
 }) {
-  const [prazoData, setPrazoData] = useState<string>('Calculando...');
-  const [prazoDias, setPrazoDias] = useState<number>(0);
-  const [loadingPrazo, setLoadingPrazo] = useState(true);
+  const { capacidade, loading: loadingCapacidade } = useCapacidadeIndustrial();
   const [materiaisFaltantes, setMateriaisFaltantes] = useState<MaterialFalta[]>([]);
   const [diasExtras, setDiasExtras] = useState(0);
+  const [loadingMateriais, setLoadingMateriais] = useState(true);
 
   // Loss factors
   const PERDA: Record<string, number> = { 'madeira': 0.18, 'tecido': 0.12, 'espuma': 0.10, 'fibra': 0.05, 'percinta': 0.05 };
@@ -43,71 +42,66 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
     return 0.05;
   };
 
+  // BOM material check only
   useEffect(() => {
-    const calc = async () => {
-      setLoadingPrazo(true);
-      try {
-        const config = await fetchConfigCapacidade();
-        const { data: carteira } = await supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle();
-        const horasCarteira = Number(carteira?.total_horas_acumuladas) || 0;
-        const totalHoras = horasCarteira + cargaTotalHoras;
-        const dias = calcularDiasProducao(totalHoras, config.capacidade_produtiva_diaria);
+    const checkMaterials = async () => {
+      setLoadingMateriais(true);
+      const produtoIds = itens.filter(i => i.produtoId).map(i => i.produtoId!);
+      let maxLeadExtra = 0;
+      const faltasList: MaterialFalta[] = [];
 
-        // BOM material check
-        const produtoIds = itens.filter(i => i.produtoId).map(i => i.produtoId!);
-        let maxLeadExtra = 0;
-        const faltasList: MaterialFalta[] = [];
+      if (produtoIds.length > 0) {
+        const [bomRes, matRes] = await Promise.all([
+          supabase.from('bom_produto').select('produto_id, material_id, quantidade_por_unidade').in('produto_id', produtoIds),
+          supabase.from('materiais').select('id, nome, estoque_atual, categoria, lead_time_dias'),
+        ]);
+        const bom = bomRes.data || [];
+        const mats = matRes.data || [];
+        const matMap = new Map(mats.map(m => [m.id, m]));
 
-        if (produtoIds.length > 0) {
-          const [bomRes, matRes] = await Promise.all([
-            supabase.from('bom_produto').select('produto_id, material_id, quantidade_por_unidade').in('produto_id', produtoIds),
-            supabase.from('materiais').select('id, nome, estoque_atual, categoria, lead_time_dias'),
-          ]);
-          const bom = bomRes.data || [];
-          const mats = matRes.data || [];
-          const matMap = new Map(mats.map(m => [m.id, m]));
-
-          // Aggregate needs per material
-          const needs: Record<string, number> = {};
-          itens.forEach(item => {
-            if (!item.produtoId) return;
-            const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
-            const bomEntries = bom.filter(b => b.produto_id === item.produtoId);
-            bomEntries.forEach(b => {
-              const mat = matMap.get(b.material_id);
-              const loss = mat ? getLossFactor(mat.categoria) : 0.05;
-              const need = Number(b.quantidade_por_unidade) * qty * (1 + loss);
-              needs[b.material_id] = (needs[b.material_id] || 0) + need;
-            });
+        const needs: Record<string, number> = {};
+        itens.forEach(item => {
+          if (!item.produtoId) return;
+          const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
+          const bomEntries = bom.filter(b => b.produto_id === item.produtoId);
+          bomEntries.forEach(b => {
+            const mat = matMap.get(b.material_id);
+            const loss = mat ? getLossFactor(mat.categoria) : 0.05;
+            const need = Number(b.quantidade_por_unidade) * qty * (1 + loss);
+            needs[b.material_id] = (needs[b.material_id] || 0) + need;
           });
+        });
 
-          Object.entries(needs).forEach(([matId, need]) => {
-            const mat = matMap.get(matId);
-            if (!mat) return;
-            const estoque = Number(mat.estoque_atual) || 0;
-            if (need > estoque) {
-              const falta = need - estoque;
-              const lt = Number(mat.lead_time_dias) || 7;
-              faltasList.push({ nome: mat.nome, necessidade: need, estoque, falta, leadTime: lt });
-              if (lt > maxLeadExtra) maxLeadExtra = lt;
-            }
-          });
-        }
-
-        setMateriaisFaltantes(faltasList);
-        setDiasExtras(maxLeadExtra);
-
-        const diasTotal = dias + maxLeadExtra;
-        const dataEntrega = calcularDataEntrega(new Date(), diasTotal, config.considerar_sabado);
-        setPrazoDias(diasTotal);
-        setPrazoData(dataEntrega.toLocaleDateString('pt-BR'));
-      } catch {
-        setPrazoData('Erro no cálculo');
+        Object.entries(needs).forEach(([matId, need]) => {
+          const mat = matMap.get(matId);
+          if (!mat) return;
+          const estoque = Number(mat.estoque_atual) || 0;
+          if (need > estoque) {
+            const falta = need - estoque;
+            const lt = Number(mat.lead_time_dias) || 7;
+            faltasList.push({ nome: mat.nome, necessidade: need, estoque, falta, leadTime: lt });
+            if (lt > maxLeadExtra) maxLeadExtra = lt;
+          }
+        });
       }
-      setLoadingPrazo(false);
+
+      setMateriaisFaltantes(faltasList);
+      setDiasExtras(maxLeadExtra);
+      setLoadingMateriais(false);
     };
-    calc();
-  }, [cargaTotalHoras, itens]);
+    checkMaterials();
+  }, [itens]);
+
+  // Prazo from hook: bottleneck sector days + folga + material lead time
+  const prazoVendasDias = capacidade?.prazoVendasDias ?? 0;
+  const prazoDiasTotal = prazoVendasDias + diasExtras;
+
+  const dataEntrega = useMemo(() => {
+    if (!capacidade) return null;
+    return calcularDataEntrega(new Date(), prazoDiasTotal, false);
+  }, [capacidade, prazoDiasTotal]);
+
+  const loadingPrazo = loadingCapacidade || loadingMateriais;
 
   return (
     <div className="space-y-4 animate-fade-in">
