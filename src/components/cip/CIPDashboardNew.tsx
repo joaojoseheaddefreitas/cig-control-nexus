@@ -9,9 +9,8 @@ import { CargaSetorChart } from './dashboard/CargaSetorChart';
 import { ProducaoMensalChart } from './dashboard/ProducaoMensalChart';
 import { Badge } from '@/components/ui/badge';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useCapacidadeIndustrial } from '@/hooks/useCapacidadeIndustrial';
 import {
-  calcularCapacidadeFabrica,
-  getOcupacaoStatus,
   getEficienciaLabel,
   type CapacidadeFabrica,
 } from '@/services/capacidadeIndustrialService';
@@ -32,18 +31,14 @@ interface OPDB {
 export function CIPDashboardNew() {
   const isMobile = useIsMobile();
   const [showAllSetores, setShowAllSetores] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [capacidade, setCapacidade] = useState<CapacidadeFabrica | null>(null);
+  const { capacidade, loading: capLoading } = useCapacidadeIndustrial();
   const [ops, setOps] = useState<OPDB[]>([]);
   const [tracking, setTracking] = useState<{ op_id: string; setor_id: string; status: string }[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const loadData = async () => {
+  const loadOps = async () => {
     setLoading(true);
-    const [capResult, opsRes] = await Promise.all([
-      calcularCapacidadeFabrica(),
-      supabase.from('ops').select('id, numero_op, produto_nome, quantidade, tempo_total, status_producao, current_sector, data_programada, pedido_id, prazo_entrega').order('created_at', { ascending: false }),
-    ]);
-    setCapacidade(capResult);
+    const opsRes = await supabase.from('ops').select('id, numero_op, produto_nome, quantidade, tempo_total, status_producao, current_sector, data_programada, pedido_id, prazo_entrega').order('created_at', { ascending: false });
     const opsData = (opsRes.data || []) as OPDB[];
     setOps(opsData);
 
@@ -57,12 +52,12 @@ export function CIPDashboardNew() {
     setLoading(false);
   };
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadOps(); }, []);
 
   useEffect(() => {
-    const ch = supabase.channel('dash-cip')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'ops' }, () => loadData())
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'setor_rastreamento' }, () => loadData())
+    const ch = supabase.channel('dash-cip-ops')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ops' }, () => loadOps())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'setor_rastreamento' }, () => loadOps())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
@@ -175,7 +170,7 @@ export function CIPDashboardNew() {
   const displayedSetores = showAllSetores ? setorCapacidade : setorCapacidade.slice(0, isMobile ? 4 : 7);
   const efLabel = getEficienciaLabel(eficienciaMedia);
 
-  if (loading) {
+  if (loading || capLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-8 w-8 animate-spin text-cip" />
