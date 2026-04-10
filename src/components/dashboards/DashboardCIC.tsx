@@ -115,6 +115,18 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
   useEffect(() => { loadData(); }, []);
 
+  // Realtime: auto-refresh dashboard when key tables change
+  useEffect(() => {
+    const channel = supabase
+      .channel('cic-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'materiais' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_compra' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes_materiais' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'contas_pagar' }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   // Derived data
   const materiaisCriticos = materiais.filter(m => m.status === 'critico');
   const materiaisAtencao = materiais.filter(m => m.status === 'atencao');
