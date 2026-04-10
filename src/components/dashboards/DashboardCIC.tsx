@@ -630,8 +630,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
     </div>
   );
 
-  // === COMPRAS ===
-  const renderCompras = () => {
+  // Compras, Fornecedores, MRP, IA, Analytics are now separate components
     const comprasPendentes = materiais.filter(m => (m.proposta_compra || 0) > 0);
     return (
       <div className="space-y-6">
