@@ -7,6 +7,9 @@ interface CargaSetorData {
   setor: string;
   carga: number;
   status: 'verde' | 'amarelo' | 'vermelho' | 'azul' | 'laranja';
+  cap?: number;
+  nec?: number;
+  diasGargalo?: number;
 }
 
 interface CargaSetorChartProps {
@@ -26,7 +29,7 @@ export function CargaSetorChart({ data }: CargaSetorChartProps) {
     <div className="rounded-xl border border-border/30 bg-card/80 p-4">
       <div className="mb-4">
         <h3 className="font-display font-bold text-foreground">Carga por Setor</h3>
-        <p className="text-xs text-muted-foreground">Percentual de ocupação por setor</p>
+        <p className="text-xs text-muted-foreground">Percentual de ocupação e dias de carga por setor</p>
         
         {/* Legend */}
         <div className="flex items-center gap-3 mt-2 flex-wrap">
@@ -77,7 +80,16 @@ export function CargaSetorChart({ data }: CargaSetorChartProps) {
                 border: '1px solid #333', 
                 borderRadius: '8px' 
               }}
-              formatter={(value: number) => [`${value}%`, 'Carga']}
+              formatter={(value: number, _name: string, entry: any) => {
+                const d = entry?.payload;
+                const dias = d?.diasGargalo != null
+                  ? d.diasGargalo.toFixed(1)
+                  : '—';
+                return [
+                  `${value}% ocupação · ${dias} dias${d?.cap ? ` | Cap: ${d.cap}h | Nec: ${d.nec}h` : ''}`,
+                  'Carga',
+                ];
+              }}
             />
             <ReferenceLine x={70} stroke="#3b82f6" strokeDasharray="3 3" />
             <ReferenceLine x={100} stroke="#ef4444" strokeDasharray="3 3" />
