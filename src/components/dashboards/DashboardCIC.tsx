@@ -630,20 +630,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
     </div>
   );
 
-  // Compras, Fornecedores, MRP, IA, Analytics are now separate components
-    const comprasPendentes = materiais.filter(m => (m.proposta_compra || 0) > 0);
-    return (
-      <div className="space-y-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <KPICard title="Propostas Ativas" value={comprasPendentes.length} subtitle="Materiais" icon={<ShoppingCart className="h-5 w-5" />} variant="cic" />
-          <KPICard title="Valor Propostas" value={fmtCurrency(totalPropostaCompra)} subtitle="Total estimado" icon={<DollarSign className="h-5 w-5" />} variant="cic" />
-          <KPICard title="Fornecedores" value={fornecedores.length} subtitle="Ativos" icon={<Users className="h-5 w-5" />} variant="cic" />
-          <KPICard title="Lead Time Méd." value={`${materiais.length > 0 ? Math.round(materiais.reduce((s, m) => s + m.lead_time_dias, 0) / materiais.length) : 0}d`} subtitle="Dias" icon={<Clock className="h-5 w-5" />} variant="cic" />
-        </div>
-        <ModuleCard title="Propostas de Compra Pendentes" variant="cic">
-          <ScrollArea className="max-h-[400px]">
-            <table className="w-full text-sm">
-              <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
+
                 <th className="text-left py-3 px-4 text-muted-foreground font-medium">Material</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Estoque Atual</th>
                 <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ponto Pedido</th>
