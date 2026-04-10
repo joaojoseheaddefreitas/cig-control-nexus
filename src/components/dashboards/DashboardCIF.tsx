@@ -64,6 +64,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const [showConfigEquil, setShowConfigEquil] = useState(false);
   const [configFin, setConfigFin] = useState({ id: '', impostos_percentual: 8.5, comissoes_percentual: 5.0 });
   const [configFinEdit, setConfigFinEdit] = useState({ impostos_percentual: '8.5', comissoes_percentual: '5.0' });
+  const [auditFilter, setAuditFilter] = useState({ acao: '', risco: '' });
   const isMobile = useIsMobile();
 
   const loadData = async () => {
