@@ -259,10 +259,10 @@ export async function marcarComoPago(id: string, valorOriginal: number): Promise
 
   await (supabase as any).from("logs_auditoria").insert({
     usuario: 'sistema',
-    acao: 'BAIXA_PAGAMENTO',
+    acao: 'PAGAMENTO',
     valor_antigo: 0,
     valor_novo: valorOriginal,
-    detalhes: `Transação ${id} marcada como PAGO`,
+    detalhes: `Transação ${id} baixada como PAGO`,
     entidade: 'transacoes',
     entidade_id: id,
   });
@@ -272,13 +272,29 @@ export async function criarTransacao(t: Partial<TransacaoRow>): Promise<void> {
   const { data, error } = await (supabase as any).from("transacoes").insert(t).select().single();
   if (error) throw error;
 
+  const acao = t.tipo === 'DESPESA' ? 'CRIAR_DESPESA' : t.tipo === 'RECEITA' ? 'CRIAR_RECEITA' : 'CRIAR_TRANSACAO';
   await (supabase as any).from("logs_auditoria").insert({
     usuario: 'sistema',
-    acao: 'CRIACAO_TRANSACAO',
+    acao,
     valor_antigo: null,
     valor_novo: Number(t.valor || 0),
-    detalhes: `${t.tipo}: ${t.descricao}`,
+    detalhes: `${t.tipo}: ${t.descricao} | Cat: ${t.categoria} | Status: ${t.status || 'PENDENTE'}`,
     entidade: 'transacoes',
     entidade_id: data?.id,
+  });
+}
+
+export async function editarTransacao(id: string, updates: Partial<TransacaoRow>, valorAntigo: number): Promise<void> {
+  const { error } = await (supabase as any).from("transacoes").update(updates).eq('id', id);
+  if (error) throw error;
+
+  await (supabase as any).from("logs_auditoria").insert({
+    usuario: 'sistema',
+    acao: updates.tipo === 'DESPESA' ? 'EDITAR_DESPESA' : 'EDITAR_RECEITA',
+    valor_antigo: valorAntigo,
+    valor_novo: Number(updates.valor || valorAntigo),
+    detalhes: `Transação ${id} editada | ${updates.descricao || ''}`,
+    entidade: 'transacoes',
+    entidade_id: id,
   });
 }
