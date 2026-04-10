@@ -63,8 +63,19 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
 
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 60000);
-    return () => clearInterval(interval);
+    // Realtime: reload when key tables change
+    const channel = supabase
+      .channel('cig-dashboard-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'ops' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'setores_produtivos' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'materiais' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'op_route_steps' }, () => loadData())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const loadData = async () => {
@@ -187,7 +198,9 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const temDados = kpis.totalPedidos > 0;
   const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
   const cargaPercentual = capacidade ? capacidade.percentualOcupacao : 0;
-  const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : `R$ ${(v / 1000).toFixed(0)}k`;
+  const prazoVendas = capacidade?.prazoVendasDias ?? 0;
+  const gargaloNome = capacidade?.setorGargaloDias ?? 'N/A';
+  const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in h-full overflow-y-auto">
@@ -254,7 +267,21 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       )}
 
       {/* KPIs Row 1 - Vendas & Produção */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        {/* PRAZO DE VENDAS - KPI mestre */}
+        <div className={cn('p-4 rounded-xl border-2 col-span-1',
+          prazoVendas > 20 ? 'bg-destructive/15 border-destructive/50' : prazoVendas > 12 ? 'bg-warning/15 border-warning/50' : 'bg-success/10 border-success/30'
+        )}>
+          <div className="flex items-center justify-between mb-2">
+            <Clock className={cn('h-5 w-5', prazoVendas > 20 ? 'text-destructive' : prazoVendas > 12 ? 'text-warning' : 'text-success')} />
+            <span className="text-xs text-muted-foreground">PRAZO</span>
+          </div>
+          <p className={cn('text-3xl font-bold', prazoVendas > 20 ? 'text-destructive' : prazoVendas > 12 ? 'text-warning' : 'text-success')}>{prazoVendas}d</p>
+          <p className="text-xs text-muted-foreground mt-1">Prazo de Vendas</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Gargalo: {gargaloNome}</p>
+        </div>
+
+        {/* CARTEIRA */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-civ/20 to-civ/5 border border-civ/30">
           <div className="flex items-center justify-between mb-2">
             <TrendingUp className="h-5 w-5 text-civ" />
