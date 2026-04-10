@@ -198,7 +198,9 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const temDados = kpis.totalPedidos > 0;
   const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
   const cargaPercentual = capacidade ? capacidade.percentualOcupacao : 0;
-  const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(1)}M` : `R$ ${(v / 1000).toFixed(0)}k`;
+  const prazoVendas = capacidade?.prazoVendasDias ?? 0;
+  const gargaloNome = capacidade?.setorGargaloDias ?? 'N/A';
+  const fmt = (v: number) => v >= 1000000 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in h-full overflow-y-auto">
