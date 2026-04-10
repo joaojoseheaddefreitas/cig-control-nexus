@@ -161,11 +161,19 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
       )}
 
       {/* IA Critical Capacity Alert in Step 3 */}
-      {capacidade && capacidade.setores.some(s => s.carga_percent >= 95) && (
-        <div className="p-3 rounded-lg bg-destructive/10 border-2 border-destructive/30">
+      {capacidade && capacidade.setores.some(s => s.carga_percent >= 75) && (
+        <div className={cn('p-3 rounded-lg border-2',
+          capacidade.setores.some(s => s.carga_percent >= 95)
+            ? 'bg-destructive/10 border-destructive/30'
+            : 'bg-warning/10 border-warning/30'
+        )}>
           <div className="flex items-center gap-2 mb-2">
-            <Brain className="h-5 w-5 text-destructive" />
-            <span className="text-sm font-bold text-destructive">🧠 IA — Capacidade Crítica Detectada</span>
+            <Brain className={cn('h-5 w-5', capacidade.setores.some(s => s.carga_percent >= 95) ? 'text-destructive' : 'text-warning')} />
+            <span className={cn('text-sm font-bold', capacidade.setores.some(s => s.carga_percent >= 95) ? 'text-destructive' : 'text-warning')}>
+              {capacidade.setores.some(s => s.carga_percent >= 95)
+                ? '🧠 IA — Capacidade Crítica — Ações Urgentes'
+                : '🧠 IA — Providências Preventivas (~15 dias para agir)'}
+            </span>
           </div>
           <IACapacityRecommendations capacidade={capacidade} />
         </div>
