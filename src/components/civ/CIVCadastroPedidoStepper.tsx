@@ -11,7 +11,8 @@ import {
 } from '@/components/ui/select';
 import {
   AlertTriangle, Check, ChevronLeft, ChevronRight,
-  ShieldAlert, ShieldCheck, Package, Calendar, User, Plus, Trash2, Loader2
+  ShieldAlert, ShieldCheck, Package, Calendar, User, Plus, Trash2, Loader2,
+  Brain, TrendingUp, Users, Clock, Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
