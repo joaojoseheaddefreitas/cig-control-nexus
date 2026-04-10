@@ -46,7 +46,7 @@ export function CICEstoqueMateriais() {
   const [motivo, setMotivo] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<Material | null>(null);
   const [tab, setTab] = useState('estoque');
-  // Inline editing
+  // Inline editing (parameters only, NOT estoque_atual)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
 
@@ -69,11 +69,21 @@ export function CICEstoqueMateriais() {
 
   useEffect(() => { loadData(); }, []);
 
-  // Inline edit handlers
+  // Realtime: auto-refresh when materiais or movimentacoes change
+  useEffect(() => {
+    const channel = supabase
+      .channel('cic-estoque-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'materiais' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes_materiais' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_compra' }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
+  // Inline edit handlers — estoque_atual is NOT editable (only via movimentação)
   const startEdit = (m: Material) => {
     setEditingId(m.id);
     setEditData({
-      estoque_atual: m.estoque_atual,
       valor_unitario: m.valor_unitario,
       lead_time_dias: m.lead_time_dias,
       categoria: m.categoria,
@@ -89,10 +99,10 @@ export function CICEstoqueMateriais() {
 
   const saveEdit = async () => {
     if (!editingId) return;
+    // NOTE: estoque_atual is NOT updated here — only via movimentações
     const { error } = await (supabase as any)
       .from('materiais')
       .update({
-        estoque_atual: Number(editData.estoque_atual) || 0,
         valor_unitario: Number(editData.valor_unitario) || 0,
         lead_time_dias: Number(editData.lead_time_dias) || 0,
         categoria: editData.categoria || 'geral',
@@ -268,11 +278,8 @@ export function CICEstoqueMateriais() {
                                 onChange={e => setEditData({ ...editData, categoria: e.target.value })} />
                             ) : m.categoria}
                           </td>
-                          <td className="py-1.5 px-2 text-center font-semibold text-xs">
-                            {isEditing ? (
-                              <Input type="number" className="h-7 text-xs w-16" value={editData.estoque_atual}
-                                onChange={e => setEditData({ ...editData, estoque_atual: e.target.value })} />
-                            ) : <>{m.estoque_atual} {m.unidade}</>}
+                          <td className="py-1.5 px-2 text-center font-semibold text-xs" title="Estoque só é alterado via movimentação (Entrada/Saída)">
+                            {m.estoque_atual} {m.unidade}
                           </td>
                           <td className="py-1.5 px-2 text-center text-xs text-muted-foreground">{Math.max(0, m.estoque_atual - m.estoque_minimo)} {m.unidade}</td>
                           <td className="py-1.5 px-2 text-center text-xs">
