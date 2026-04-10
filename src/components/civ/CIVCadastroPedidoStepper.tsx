@@ -312,6 +312,7 @@ const emptyItem = (): ItemForm => ({
 });
 
 export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }: StepperProps) {
+  const { capacidade } = useCapacidadeIndustrial();
   const [currentStep, setCurrentStep] = useState(1);
   const [clienteId, setClienteId] = useState('');
   const [clienteNome, setClienteNome] = useState('');
