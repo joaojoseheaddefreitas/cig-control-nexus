@@ -80,6 +80,8 @@ export function CICEstoqueMateriais() {
       fornecedor_nome: m.fornecedor_nome || '',
       estoque_minimo: m.estoque_minimo,
       estoque_maximo: m.estoque_maximo,
+      tipo_controle: m.tipo_controle || 'MRP',
+      margem_seguranca_percentual: m.margem_seguranca_percentual || 20,
     });
   };
 
@@ -97,6 +99,8 @@ export function CICEstoqueMateriais() {
         fornecedor_nome: editData.fornecedor_nome || null,
         estoque_minimo: Number(editData.estoque_minimo) || 0,
         estoque_maximo: Number(editData.estoque_maximo) || 0,
+        tipo_controle: editData.tipo_controle || 'MRP',
+        margem_seguranca_percentual: Number(editData.margem_seguranca_percentual) || 20,
       })
       .eq('id', editingId);
 
@@ -218,10 +222,14 @@ export function CICEstoqueMateriais() {
                     <tr className="border-b border-border/50 bg-secondary/30">
                       <th className="text-left py-3 px-2 text-muted-foreground font-medium text-xs">Código</th>
                       <th className="text-left py-3 px-2 text-muted-foreground font-medium text-xs">Material</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Tipo</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Categoria</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Disponível</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Mín</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Máx</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">PP Calc.</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
                       <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Total</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Lead Time</th>
@@ -241,6 +249,19 @@ export function CICEstoqueMateriais() {
                         )}>
                           <td className="py-1.5 px-2 font-mono text-xs">{m.codigo}</td>
                           <td className="py-1.5 px-2 font-medium text-xs max-w-[140px] truncate">{m.nome}</td>
+                          <td className="py-1.5 px-2 text-center text-xs">
+                            {isEditing ? (
+                              <select className="h-7 text-xs bg-background border rounded px-1" value={editData.tipo_controle}
+                                onChange={e => setEditData({ ...editData, tipo_controle: e.target.value })}>
+                                <option value="MRP">MRP</option>
+                                <option value="DUAS_GAVETAS">2 Gavetas</option>
+                              </select>
+                            ) : (
+                              <Badge className={cn("text-[9px]", m.tipo_controle === 'DUAS_GAVETAS' ? 'bg-purple-500/20 text-purple-400' : 'bg-secondary text-muted-foreground')}>
+                                {m.tipo_controle === 'DUAS_GAVETAS' ? '2GAV' : 'MRP'}
+                              </Badge>
+                            )}
+                          </td>
                           <td className="py-1.5 px-2 text-center text-xs">
                             {isEditing ? (
                               <Input className="h-7 text-xs w-20" value={editData.categoria}
