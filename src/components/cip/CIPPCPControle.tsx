@@ -680,6 +680,26 @@ export function CIPPCPControle() {
             <span className="text-xs text-muted-foreground">Total Horas:</span>
             <span className="text-sm font-bold text-cip">{totalHoras.toFixed(1)}h</span>
           </div>
+          <div className={cn(
+            'flex items-center gap-2 px-3 py-1.5 rounded-lg border',
+            prazoVendasDias > 25 ? 'border-destructive/50 bg-destructive/10' :
+            prazoVendasDias > 15 ? 'border-orange-400/50 bg-orange-400/10' :
+            prazoVendasDias > 8  ? 'border-success/50 bg-success/10' : 'border-blue-400/50 bg-blue-400/10'
+          )}>
+            <Gauge className="h-4 w-4" />
+            <span className="text-xs text-muted-foreground">Prazo:</span>
+            <span className={cn(
+              'text-sm font-bold font-mono',
+              prazoVendasDias > 25 ? 'text-destructive' :
+              prazoVendasDias > 15 ? 'text-orange-400' :
+              prazoVendasDias > 8  ? 'text-success' : 'text-blue-400'
+            )}>
+              {prazoVendasDias}d
+            </span>
+            <span className="text-[10px] text-muted-foreground">
+              ({setorGargaloDias?.nome?.substring(0, 10) || '—'})
+            </span>
+          </div>
 
           {/* Manual scanner input */}
           <div className="flex items-center gap-1 ml-auto">
