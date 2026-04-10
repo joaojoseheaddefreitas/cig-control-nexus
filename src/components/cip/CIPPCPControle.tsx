@@ -86,6 +86,7 @@ function statusLabel(s: string): { label: string; color: string } {
 
 // ─── Component ───────────────────────────────────────────────────────
 export function CIPPCPControle() {
+  const { capacidade: capUnificada, loading: capLoading } = useCapacidadeIndustrial();
   const [ops, setOps] = useState<OPRow[]>([]);
   const [setores, setSetores] = useState<SetorComCapacidade[]>([]);
   const [routeSteps, setRouteSteps] = useState<RouteStep[]>([]);
