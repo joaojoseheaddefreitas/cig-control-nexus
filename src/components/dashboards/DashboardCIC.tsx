@@ -23,12 +23,12 @@ import {
 } from '@/components/ui/dialog';
 import {
   Package, AlertTriangle, ShoppingCart, BarChart2,
-  Warehouse, Users, Brain, Activity, Home, Zap,
-  ArrowUpCircle, ClipboardList, DollarSign,
-  Search, Plus, Edit, Clock, TrendingUp,
-  CheckCircle2, FileText, ChevronLeft, ChevronRight, Menu, X, RefreshCw,
+  Warehouse, Users, Brain, Home, Zap,
+  ClipboardList, DollarSign,
+  Search, Clock, TrendingUp,
+  CheckCircle2, ChevronLeft, ChevronRight, Menu, X, RefreshCw,
   Download, Truck, AlertCircle, Ban, Timer, CircleDollarSign,
-  Shield, OctagonAlert,
+  OctagonAlert,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
@@ -73,7 +73,6 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   const [contasPagar, setContasPagar] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchMat, setSearchMat] = useState('');
-  const [searchForn, setSearchForn] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [drilldownOpen, setDrilldownOpen] = useState(false);
@@ -131,8 +130,18 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       const cobertura = m.estoque_atual + pcAbertos;
       const emRisco = cobertura < necessidade && m.consumo_medio_diario > 0;
       const coberturaPercent = necessidade > 0 ? (cobertura / necessidade) * 100 : 999;
+      const coberturaDias = m.consumo_medio_diario > 0 ? m.estoque_atual / m.consumo_medio_diario : 999;
       const risco = emRisco ? 'risco' : coberturaPercent < 150 ? 'atencao' : 'seguro';
-      return { ...m, pcAbertos, necessidade, coberturaTotal: cobertura, risco, coberturaPercent };
+      
+      // Data de ruptura
+      let dataRuptura: string | null = null;
+      if (m.consumo_medio_diario > 0 && coberturaDias < 999) {
+        const dr = new Date();
+        dr.setDate(dr.getDate() + Math.floor(coberturaDias));
+        dataRuptura = dr.toLocaleDateString('pt-BR');
+      }
+      
+      return { ...m, pcAbertos, necessidade, coberturaTotal: cobertura, risco, coberturaPercent, coberturaDias, dataRuptura };
     }).filter(m => m.consumo_medio_diario > 0);
   }, [materiais, pedidosCompra]);
 
@@ -203,7 +212,6 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
 
   // === SUPERDASHBOARD ===
   const renderDashboard = () => {
-    // Pipeline data
     const pipelineStatuses = ['emitido', 'aprovado', 'em_producao', 'em_transporte', 'recebido', 'atrasado'];
     const pipelineLabels: Record<string, string> = {
       emitido: 'Emitido', aprovado: 'Aprovado', em_producao: 'Em Produção',
@@ -215,7 +223,6 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       recebido: CHART_COLORS.verde, atrasado: CHART_COLORS.vermelho,
     };
 
-    // Mark overdue as atrasado for pipeline
     const pcWithOverdue = filteredPC.map(p => {
       if (p.data_previsao && p.data_previsao < hoje && !['recebido', 'cancelado'].includes(p.status)) {
         return { ...p, pipelineStatus: 'atrasado' };
@@ -229,7 +236,6 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       fill: pipelineColors[s] || CHART_COLORS.azulClaro,
     }));
 
-    // Atrasos por fornecedor
     const atrasosPorFornecedor = new Map<string, number>();
     pedidosAtrasados.forEach(p => {
       const nome = p.fornecedor_nome || 'Sem Fornecedor';
@@ -239,14 +245,12 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       .map(([nome, qtd]) => ({ nome: nome.substring(0, 18), qtd }))
       .sort((a, b) => b.qtd - a.qtd).slice(0, 8);
 
-    // Financial chart
     const financeiroData = [
       { name: 'A Pagar', valor: valorAPagar, fill: CHART_COLORS.amarelo },
       { name: 'Pagos', valor: valorPago, fill: CHART_COLORS.verde },
       { name: 'Vencidos', valor: valorVencido, fill: CHART_COLORS.vermelho },
     ];
 
-    // Performance fornecedores (OTIF)
     const fornPerf = new Map<string, { total: number; onTime: number; inFull: number; leadTimes: number[] }>();
     pedidosCompra.filter(p => p.status === 'recebido').forEach(p => {
       const nome = p.fornecedor_nome || 'Sem Nome';
@@ -268,13 +272,11 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       }))
       .sort((a, b) => b.otif - a.otif).slice(0, 8);
 
-    // Estoque por categoria (existing)
     const cats = new Map<string, number>();
     materiais.forEach(m => cats.set(m.categoria, (cats.get(m.categoria) || 0) + (m.valor_estoque || 0)));
     const pieColors = [CHART_COLORS.azulMarinho, CHART_COLORS.verde, CHART_COLORS.amarelo, CHART_COLORS.laranja, CHART_COLORS.vermelho, CHART_COLORS.azulClaro];
     const pieData = Array.from(cats.entries()).map(([cat, val], i) => ({ name: cat, value: val, color: pieColors[i % pieColors.length] }));
 
-    // Materiais sorted by coverage for risk list
     const riscoSorted = [...materiaisComRisco].sort((a, b) => a.coberturaPercent - b.coberturaPercent);
 
     return (
@@ -358,7 +360,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
           </div>
         </div>
 
-        {/* LINHA 2 — Estoque (existente) */}
+        {/* LINHA 2 — Estoque */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
           <KPICard title="Valor Estoque" value={fmtCurrency(valorEstoqueTotal)} subtitle="Total valorizado" icon={<Warehouse className="h-4 w-4" />} variant="cic" />
           <KPICard title="Materiais Ativos" value={materiais.length} subtitle="Cadastrados" icon={<Package className="h-4 w-4" />} variant="cic" />
@@ -421,7 +423,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
           </ModuleCard>
         </div>
 
-        {/* LINHA 4 — Compras: Pipeline + Atrasos por Fornecedor */}
+        {/* LINHA 4 — Compras */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ModuleCard title="Pipeline de Compras" variant="cic">
             <div className="h-56">
@@ -460,14 +462,12 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
           </ModuleCard>
         </div>
 
-        {/* LINHA 5 — Fornecedores Performance + Financeiro */}
+        {/* LINHA 5 — Fornecedores + Financeiro */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <ModuleCard title="Performance Fornecedores (OTIF %)" variant="cic">
             <div className="h-56">
               {perfData.length === 0 ? (
-                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">
-                  Nenhum pedido recebido para avaliar
-                </div>
+                <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Nenhum pedido recebido para avaliar</div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={perfData}>
@@ -504,44 +504,55 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
         </div>
 
         {/* RISCO DE PARADA — Lista detalhada */}
-        {riscoSorted.filter(m => m.risco !== 'seguro').length > 0 && (
-          <ModuleCard title="⚠ Materiais com Risco de Parada de Produção" variant="cic">
-            <ScrollArea className="max-h-[250px]">
-              <table className="w-full text-sm">
-                <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-                  <th className="text-left py-2 px-3 text-muted-foreground font-medium text-xs">Material</th>
-                  <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
-                  <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">PC Abertos</th>
-                  <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Cobertura</th>
-                  <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Necessidade</th>
-                  <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Cobertura %</th>
-                  <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Risco</th>
-                </tr></thead>
-                <tbody>
-                  {riscoSorted.filter(m => m.risco !== 'seguro').map(m => (
-                    <tr key={m.id} className={cn("border-b border-border/30", m.risco === 'risco' ? "bg-destructive/5" : "bg-warning/5")}>
-                      <td className="py-2 px-3 font-medium text-xs">{m.nome}</td>
-                      <td className="py-2 px-2 text-center text-xs">{m.estoque_atual} {m.unidade}</td>
-                      <td className="py-2 px-2 text-center text-xs">{m.pcAbertos}</td>
-                      <td className="py-2 px-2 text-center font-semibold text-xs">{m.coberturaTotal.toFixed(1)}</td>
-                      <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.necessidade.toFixed(1)}</td>
-                      <td className="py-2 px-2 text-center text-xs">
-                        <span className={cn("font-bold", m.risco === 'risco' ? "text-destructive" : "text-warning")}>
-                          {m.coberturaPercent.toFixed(0)}%
-                        </span>
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        <Badge className={cn("text-[10px]", m.risco === 'risco' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning')}>
-                          {m.risco === 'risco' ? '🔴 RISCO' : '🟡 Atenção'}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </ScrollArea>
-          </ModuleCard>
-        )}
+        <ModuleCard title="⚠ Materiais — Análise de Risco de Parada de Produção" variant="cic">
+          <ScrollArea className="max-h-[300px]">
+            <table className="w-full text-sm">
+              <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
+                <th className="text-left py-2 px-3 text-muted-foreground font-medium text-xs">Material</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">PC Abertos</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Consumo/Dia</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Cobertura (d)</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Data Ruptura</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Necessidade</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Cobertura %</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Risco</th>
+              </tr></thead>
+              <tbody>
+                {riscoSorted.length === 0 ? (
+                  <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Sem dados cadastrados – insira dados para iniciar o monitoramento</td></tr>
+                ) : riscoSorted.map(m => (
+                  <tr key={m.id} className={cn("border-b border-border/30",
+                    m.risco === 'risco' ? "bg-destructive/5" : m.risco === 'atencao' ? "bg-warning/5" : ""
+                  )}>
+                    <td className="py-2 px-3 font-medium text-xs">{m.nome}</td>
+                    <td className="py-2 px-2 text-center text-xs">{m.estoque_atual} {m.unidade}</td>
+                    <td className="py-2 px-2 text-center text-xs">{m.pcAbertos || '—'}</td>
+                    <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.consumo_medio_diario}</td>
+                    <td className={cn("py-2 px-2 text-center font-bold text-xs",
+                      m.risco === 'risco' ? "text-destructive" : m.risco === 'atencao' ? "text-warning" : "text-success"
+                    )}>{m.coberturaDias < 999 ? m.coberturaDias.toFixed(1) : '∞'}</td>
+                    <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.dataRuptura || '—'}</td>
+                    <td className="py-2 px-2 text-center text-xs">{m.necessidade.toFixed(1)}</td>
+                    <td className="py-2 px-2 text-center text-xs">
+                      <span className={cn("font-bold",
+                        m.coberturaPercent < 100 ? "text-destructive" : m.coberturaPercent < 150 ? "text-warning" : "text-success"
+                      )}>{m.coberturaPercent < 999 ? `${m.coberturaPercent.toFixed(0)}%` : '∞'}</span>
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      <Badge className={cn("text-[10px]",
+                        m.risco === 'risco' ? 'bg-destructive/20 text-destructive' :
+                        m.risco === 'atencao' ? 'bg-warning/20 text-warning' : 'bg-success/20 text-success'
+                      )}>
+                        {m.risco === 'risco' ? '🔴 RISCO' : m.risco === 'atencao' ? '🟡 Atenção' : '🟢 OK'}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollArea>
+        </ModuleCard>
       </div>
     );
   };
@@ -586,9 +597,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
                     <span className={cn("font-bold",
                       (m.alcance_estoque || 0) < 1 ? "text-destructive" :
                       (m.alcance_estoque || 0) < 3 ? "text-warning" : "text-success"
-                    )}>
-                      {(m.alcance_estoque || 0).toFixed(1)}d
-                    </span>
+                    )}>{(m.alcance_estoque || 0).toFixed(1)}d</span>
                   </td>
                   <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.ponto_pedido}</td>
                   <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.lote_economico}</td>
@@ -601,9 +610,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
                   <td className="py-2 px-2 text-center text-xs">
                     <span className={cn("font-semibold",
                       (m.alcance_projetado || 0) >= 5 ? "text-success" : "text-warning"
-                    )}>
-                      {(m.alcance_projetado || 0).toFixed(1)}d
-                    </span>
+                    )}>{(m.alcance_projetado || 0).toFixed(1)}d</span>
                   </td>
                   <td className="py-2 px-2 text-right text-muted-foreground text-xs">R$ {m.valor_unitario.toFixed(2)}</td>
                   <td className="py-2 px-2 text-right font-semibold text-xs">R$ {((m.valor_estoque || 0) / 1000).toFixed(1)}k</td>
@@ -626,169 +633,6 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
             </tbody>
           </table>
         </ScrollArea>
-      </div>
-    </div>
-  );
-
-
-                <th className="text-left py-3 px-4 text-muted-foreground font-medium">Material</th>
-                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Estoque Atual</th>
-                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ponto Pedido</th>
-                <th className="text-center py-3 px-4 text-muted-foreground font-medium">Qtd Proposta</th>
-                <th className="text-right py-3 px-4 text-muted-foreground font-medium">Valor Estimado</th>
-                <th className="text-left py-3 px-4 text-muted-foreground font-medium">Fornecedor</th>
-              </tr></thead>
-              <tbody>
-                {comprasPendentes.length === 0 ? (
-                  <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">Nenhuma proposta de compra pendente.</td></tr>
-                ) : comprasPendentes.map(m => (
-                  <tr key={m.id} className="border-b border-border/30 hover:bg-secondary/30">
-                    <td className="py-3 px-4 font-medium text-foreground">{m.nome}</td>
-                    <td className="py-3 px-4 text-center">{m.estoque_atual} {m.unidade}</td>
-                    <td className="py-3 px-4 text-center text-muted-foreground">{m.ponto_pedido}</td>
-                    <td className="py-3 px-4 text-center font-bold text-warning">{m.proposta_compra} {m.unidade}</td>
-                    <td className="py-3 px-4 text-right font-semibold text-cic">R$ {((m.proposta_compra || 0) * m.valor_unitario).toLocaleString('pt-BR')}</td>
-                    <td className="py-3 px-4 text-muted-foreground">{m.fornecedor_nome || '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </ScrollArea>
-        </ModuleCard>
-      </div>
-    );
-  };
-
-  // === FORNECEDORES ===
-  const renderFornecedores = () => <CICFornecedores />;
-
-  // === MRP ===
-  const renderMRP = () => {
-    const necessidades = materiais.filter(m => (m.proposta_compra || 0) > 0 || m.status === 'critico');
-    return (
-      <div className="space-y-6">
-        <div className="p-3 rounded-lg bg-warning/10 border border-warning/30">
-          <div className="flex items-start gap-3">
-            <ClipboardList className="h-5 w-5 text-warning flex-shrink-0 mt-0.5" />
-            <div className="text-sm">
-              <strong className="text-warning">Necessidades (MRP)</strong>
-              <p className="text-muted-foreground mt-1">Cálculo automático: materiais abaixo do ponto de pedido ou com alcance crítico.</p>
-            </div>
-          </div>
-        </div>
-        <ScrollArea className="max-h-[500px]">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-              <th className="text-left py-3 px-4 text-muted-foreground font-medium">Material</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Estoque</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Ponto Pedido</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Déficit</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Proposta</th>
-              <th className="text-center py-3 px-4 text-muted-foreground font-medium">Urgência</th>
-            </tr></thead>
-            <tbody>
-              {necessidades.map(m => {
-                const deficit = Math.max(0, m.ponto_pedido - m.estoque_atual);
-                return (
-                  <tr key={m.id} className="border-b border-border/30 hover:bg-secondary/30">
-                    <td className="py-3 px-4 font-medium text-foreground">{m.nome}</td>
-                    <td className="py-3 px-4 text-center">{m.estoque_atual} {m.unidade}</td>
-                    <td className="py-3 px-4 text-center text-muted-foreground">{m.ponto_pedido}</td>
-                    <td className="py-3 px-4 text-center font-semibold text-destructive">{deficit > 0 ? deficit : '—'}</td>
-                    <td className="py-3 px-4 text-center font-bold text-warning">{m.proposta_compra || '—'} {(m.proposta_compra || 0) > 0 ? m.unidade : ''}</td>
-                    <td className="py-3 px-4 text-center">
-                      <Badge className={cn(m.status === 'critico' ? 'bg-destructive/20 text-destructive' : 'bg-warning/20 text-warning')}>
-                        {m.status === 'critico' ? 'Alta' : 'Média'}
-                      </Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-              {necessidades.length === 0 && (
-                <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">Todos os materiais dentro dos parâmetros.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </ScrollArea>
-      </div>
-    );
-  };
-
-  // === IA ===
-  const renderIA = () => (
-    <div className="space-y-6">
-      <div className="p-3 rounded-lg bg-cic/10 border border-cic/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cic">IA Executiva</strong> — Alertas críticos baseados em dados reais de estoque e produção.</p>
-      </div>
-      {materiaisCriticos.length > 0 ? (
-        <div className="space-y-4">
-          {materiaisCriticos.map(m => (
-            <div key={m.id} className="p-4 rounded-xl border-2 border-destructive/50 bg-destructive/10">
-              <div className="flex items-center gap-3">
-                <Zap className="h-6 w-6 text-destructive" />
-                <div>
-                  <p className="font-bold text-destructive">⚠ {m.nome} — Alcance: {(m.alcance_estoque || 0).toFixed(1)} dias</p>
-                  <p className="text-sm text-muted-foreground">
-                    Estoque: {m.estoque_atual} {m.unidade} | Ponto de Pedido: {m.ponto_pedido} | 
-                    Proposta: {m.proposta_compra || 0} {m.unidade} | Lead Time: {m.lead_time_dias}d
-                  </p>
-                </div>
-              </div>
-            </div>
-          ))}
-          {materiaisAtencao.length > 0 && (
-            <div className="p-4 rounded-xl border border-warning/50 bg-warning/10">
-              <div className="flex items-center gap-3">
-                <AlertTriangle className="h-5 w-5 text-warning" />
-                <p className="text-sm text-muted-foreground">{materiaisAtencao.length} materiais em zona de atenção</p>
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="text-center py-12 text-muted-foreground">
-          <CheckCircle2 className="h-12 w-12 mx-auto mb-3 text-success opacity-50" />
-          <p className="text-lg font-medium text-success">Operação Normal</p>
-          <p className="text-sm mt-1">Todos os materiais dentro dos parâmetros.</p>
-        </div>
-      )}
-    </div>
-  );
-
-  // === ANALYTICS ===
-  const renderAnalytics = () => (
-    <div className="space-y-6">
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="Alcance por Material (dias)" variant="cic">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={materiais.map(m => ({ nome: m.nome.substring(0, 12), alcance: m.alcance_estoque || 0 }))}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="nome" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} angle={-30} textAnchor="end" height={50} />
-                <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(v: number) => [`${v.toFixed(1)} dias`, 'Alcance']} />
-                <Bar dataKey="alcance" radius={[4, 4, 0, 0]}>
-                  {materiais.map((m, i) => (
-                    <Cell key={i} fill={(m.alcance_estoque || 0) < 1 ? CHART_COLORS.vermelho : (m.alcance_estoque || 0) < 3 ? CHART_COLORS.amarelo : CHART_COLORS.verde} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
-        <ModuleCard title="Valor em Estoque por Material" variant="cic">
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={[...materiais].sort((a, b) => (b.valor_estoque || 0) - (a.valor_estoque || 0)).slice(0, 8).map(m => ({ nome: m.nome.substring(0, 10), valor: m.valor_estoque || 0 }))} layout="vertical">
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickFormatter={(v) => fmtCurrency(v)} />
-                <YAxis type="category" dataKey="nome" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 10 }} width={90} />
-                <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Valor']} />
-                <Bar dataKey="valor" fill={CHART_COLORS.azulMarinho} radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </ModuleCard>
       </div>
     </div>
   );
