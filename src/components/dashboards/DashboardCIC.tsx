@@ -601,16 +601,16 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
             <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
               <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Código</th>
               <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Material</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Tipo</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">PP Calc.</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Est. Seg.</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Alcance</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Pto Pedido</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Lote Econ.</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Consumo/dia</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Proposta</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Alc. Proj.</th>
               <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
               <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">R$ Estoque</th>
-              <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">R$ Compra</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Status</th>
             </tr></thead>
             <tbody>
@@ -618,33 +618,29 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
                 <tr key={m.id} className={cn("border-b border-border/30 hover:bg-secondary/30", m.status === 'critico' && "bg-destructive/5")}>
                   <td className="py-2 px-3 font-mono text-foreground text-xs">{m.codigo}</td>
                   <td className="py-2 px-3 font-medium text-foreground text-xs">{m.nome}</td>
+                  <td className="py-2 px-2 text-center">
+                    <Badge className={cn("text-[9px]", m.tipo_controle === 'DUAS_GAVETAS' ? 'bg-purple-500/20 text-purple-400' : 'bg-secondary text-muted-foreground')}>
+                      {m.tipo_controle === 'DUAS_GAVETAS' ? '2GAV' : 'MRP'}
+                    </Badge>
+                  </td>
                   <td className="py-2 px-2 text-center font-semibold text-xs">{m.estoque_atual} {m.unidade}</td>
+                  <td className="py-2 px-2 text-center text-xs font-semibold text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                  <td className="py-2 px-2 text-center text-muted-foreground text-xs">{(m.estoque_seguranca_calculado || 0).toFixed(0)}</td>
                   <td className="py-2 px-2 text-center text-xs">
                     <span className={cn("font-bold",
                       (m.alcance_estoque || 0) < 1 ? "text-destructive" :
                       (m.alcance_estoque || 0) < 3 ? "text-warning" : "text-success"
                     )}>{(m.alcance_estoque || 0).toFixed(1)}d</span>
                   </td>
-                  <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.ponto_pedido}</td>
-                  <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.lote_economico}</td>
                   <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.consumo_medio_diario}</td>
+                  <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.margem_seguranca_percentual}%</td>
                   <td className="py-2 px-2 text-center text-xs">
                     {(m.proposta_compra || 0) > 0 ? (
                       <span className="font-bold text-warning">{m.proposta_compra} {m.unidade}</span>
                     ) : '—'}
                   </td>
-                  <td className="py-2 px-2 text-center text-xs">
-                    <span className={cn("font-semibold",
-                      (m.alcance_projetado || 0) >= 5 ? "text-success" : "text-warning"
-                    )}>{(m.alcance_projetado || 0).toFixed(1)}d</span>
-                  </td>
                   <td className="py-2 px-2 text-right text-muted-foreground text-xs">R$ {m.valor_unitario.toFixed(2)}</td>
                   <td className="py-2 px-2 text-right font-semibold text-xs">R$ {((m.valor_estoque || 0) / 1000).toFixed(1)}k</td>
-                  <td className="py-2 px-2 text-right text-xs">
-                    {(m.proposta_compra || 0) > 0 ? (
-                      <span className="text-warning font-semibold">R$ {(((m.proposta_compra || 0) * m.valor_unitario) / 1000).toFixed(1)}k</span>
-                    ) : '—'}
-                  </td>
                   <td className="py-2 px-2 text-center">
                     <Badge className={cn("text-[10px]",
                       m.status === 'critico' ? 'bg-destructive/20 text-destructive' :
