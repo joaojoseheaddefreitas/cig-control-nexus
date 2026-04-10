@@ -61,6 +61,9 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const [newTx, setNewTx] = useState({ tipo: 'DESPESA', categoria: 'materiais', descricao: '', valor: '', data_vencimento: '' });
   const [newDespesa, setNewDespesa] = useState({ categoria: 'materiais', descricao: '', valor: '', data_emissao: '', status: 'PENDENTE' });
   const [editingBudgets, setEditingBudgets] = useState<Record<string, string>>({});
+  const [showConfigEquil, setShowConfigEquil] = useState(false);
+  const [configFin, setConfigFin] = useState({ id: '', impostos_percentual: 8.5, comissoes_percentual: 5.0 });
+  const [configFinEdit, setConfigFinEdit] = useState({ impostos_percentual: '8.5', comissoes_percentual: '5.0' });
   const isMobile = useIsMobile();
 
   const loadData = async () => {
