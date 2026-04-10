@@ -11,7 +11,8 @@ import {
 } from '@/components/ui/select';
 import {
   AlertTriangle, Check, ChevronLeft, ChevronRight,
-  ShieldAlert, ShieldCheck, Package, Calendar, User, Plus, Trash2, Loader2
+  ShieldAlert, ShieldCheck, Package, Calendar, User, Plus, Trash2, Loader2,
+  Brain, TrendingUp, Users, Clock, Zap
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -159,6 +160,17 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
         </div>
       )}
 
+      {/* IA Critical Capacity Alert in Step 3 */}
+      {capacidade && capacidade.setores.some(s => s.carga_percent >= 95) && (
+        <div className="p-3 rounded-lg bg-destructive/10 border-2 border-destructive/30">
+          <div className="flex items-center gap-2 mb-2">
+            <Brain className="h-5 w-5 text-destructive" />
+            <span className="text-sm font-bold text-destructive">🧠 IA — Capacidade Crítica Detectada</span>
+          </div>
+          <IACapacityRecommendations capacidade={capacidade} />
+        </div>
+      )}
+
       {clienteBloqueado && (
         <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/30 flex items-start gap-3">
           <ShieldAlert className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
@@ -225,6 +237,153 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── Capacity Alert Banner for Salespeople (visible in Step 2) ───
+function CapacityAlertBanner({ capacidade }: { capacidade: import('@/services/capacidadeIndustrialService').CapacidadeFabrica | null }) {
+  if (!capacidade) return null;
+
+  const prazo = capacidade.prazoVendasDias;
+  const gargalo = capacidade.setorGargaloDias;
+  const gargaloDias = capacidade.gargaloEmDias;
+  const ocupacaoGargalo = capacidade.setores.reduce((max, s) => s.carga_percent > max ? s.carga_percent : max, 0);
+
+  const isCritical = ocupacaoGargalo >= 95;
+  const isWarning = ocupacaoGargalo >= 80 && ocupacaoGargalo < 95;
+  const isNormal = ocupacaoGargalo < 80;
+
+  const bgClass = isCritical
+    ? 'bg-destructive/15 border-destructive/50 animate-pulse'
+    : isWarning
+      ? 'bg-warning/15 border-warning/50'
+      : 'bg-success/10 border-success/30';
+
+  const iconColor = isCritical ? 'text-destructive' : isWarning ? 'text-warning' : 'text-success';
+  const statusLabel = isCritical ? '🔴 CAPACIDADE CRÍTICA' : isWarning ? '🟡 ATENÇÃO' : '🟢 DISPONÍVEL';
+
+  return (
+    <div className={cn('p-3 rounded-lg border-2 mb-4', bgClass)}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <AlertTriangle className={cn('h-5 w-5 flex-shrink-0', iconColor)} />
+          <div>
+            <p className={cn('text-sm font-bold', iconColor)}>{statusLabel}</p>
+            <p className="text-xs text-muted-foreground">
+              Gargalo: <strong>{gargalo}</strong> ({gargaloDias.toFixed(1)} dias) | Prazo: <strong>{prazo}d úteis</strong> | Ocupação: <strong>{ocupacaoGargalo}%</strong>
+            </p>
+          </div>
+        </div>
+        <Badge className={cn(
+          'text-xs font-bold whitespace-nowrap',
+          isCritical ? 'bg-destructive text-destructive-foreground' : isWarning ? 'bg-warning text-warning-foreground' : 'bg-success text-success-foreground'
+        )}>
+          {prazo}d
+        </Badge>
+      </div>
+
+      {/* IA Recommendations when critical */}
+      {isCritical && (
+        <div className="mt-3 pt-3 border-t border-destructive/20 space-y-2">
+          <div className="flex items-center gap-2">
+            <Brain className="h-4 w-4 text-destructive" />
+            <span className="text-xs font-bold text-destructive">IA — Ações recomendadas para aumentar capacidade:</span>
+          </div>
+          <IACapacityRecommendations capacidade={capacidade} />
+        </div>
+      )}
+
+      {isWarning && (
+        <div className="mt-2 pt-2 border-t border-warning/20">
+          <p className="text-[10px] text-warning flex items-center gap-1">
+            <Brain className="h-3 w-3" />
+            Fábrica em zona de atenção. Novos pedidos grandes podem elevar prazo significativamente.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── IA-driven recommendations when capacity is critical ───
+function IACapacityRecommendations({ capacidade }: { capacidade: import('@/services/capacidadeIndustrialService').CapacidadeFabrica }) {
+  const recommendations: { icon: React.ReactNode; text: string; priority: 'urgente' | 'alta' | 'media' }[] = [];
+
+  // Find the bottleneck sector
+  const gargaloSetor = capacidade.setores.reduce((max, s) => s.carga_percent > max.carga_percent ? s : max, capacidade.setores[0]);
+
+  if (gargaloSetor) {
+    // Recommendation 1: Add workers to bottleneck
+    const extraWorkers = Math.ceil(gargaloSetor.horas_ocupadas / (gargaloSetor.horas_turno * gargaloSetor.dias_uteis_mensais)) - gargaloSetor.mao_de_obra;
+    if (extraWorkers > 0) {
+      recommendations.push({
+        icon: <Users className="h-3.5 w-3.5 text-destructive" />,
+        text: `Adicionar +${extraWorkers} operador(es) ao setor "${gargaloSetor.nome}" para equilibrar a carga`,
+        priority: 'urgente'
+      });
+    }
+
+    // Recommendation 2: Extra shift
+    if (gargaloSetor.carga_percent > 110) {
+      recommendations.push({
+        icon: <Clock className="h-3.5 w-3.5 text-orange-400" />,
+        text: `Avaliar turno extra no setor "${gargaloSetor.nome}" — déficit de ${Math.abs(gargaloSetor.folgaResidual).toFixed(0)}%`,
+        priority: 'urgente'
+      });
+    }
+
+    // Recommendation 3: Redistribute from idle sectors
+    const idleSectors = capacidade.setores.filter(s => s.carga_percent < 50 && s.mao_de_obra > 1);
+    if (idleSectors.length > 0) {
+      const totalIdleWorkers = idleSectors.reduce((sum, s) => sum + Math.floor(s.mao_de_obra * 0.3), 0);
+      if (totalIdleWorkers > 0) {
+        recommendations.push({
+          icon: <TrendingUp className="h-3.5 w-3.5 text-blue-400" />,
+          text: `Realocar ~${totalIdleWorkers} operador(es) dos setores ociosos (${idleSectors.map(s => s.nome).join(', ')})`,
+          priority: 'alta'
+        });
+      }
+    }
+  }
+
+  // Recommendation 4: Imbalance warning
+  if (capacidade.alertaDesbalanceamento) {
+    recommendations.push({
+      icon: <Zap className="h-3.5 w-3.5 text-amber-400" />,
+      text: `Desbalanceamento: "${capacidade.setorMenosFolgado}" está sobrecarregado vs "${capacidade.setorMaisFolgado}" ocioso`,
+      priority: 'media'
+    });
+  }
+
+  if (recommendations.length === 0) {
+    recommendations.push({
+      icon: <Brain className="h-3.5 w-3.5 text-muted-foreground" />,
+      text: 'Revisar planejamento geral — capacidade saturada em múltiplos setores',
+      priority: 'alta'
+    });
+  }
+
+  const prioColors = {
+    urgente: 'bg-destructive/20 text-destructive border-destructive/30',
+    alta: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    media: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+  };
+
+  return (
+    <div className="space-y-1.5">
+      {recommendations.map((rec, i) => (
+        <div key={i} className="flex items-start gap-2 text-[11px]">
+          <span className="mt-0.5 flex-shrink-0">{rec.icon}</span>
+          <span className="text-foreground flex-1">{rec.text}</span>
+          <Badge variant="outline" className={cn('text-[9px] px-1.5 py-0', prioColors[rec.priority])}>
+            {rec.priority.toUpperCase()}
+          </Badge>
+        </div>
+      ))}
+      <p className="text-[9px] text-muted-foreground mt-1">
+        ⚠️ IA analisa e recomenda — decisão do gestor.
+      </p>
     </div>
   );
 }
@@ -759,6 +918,9 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
           {/* ─── STEP 2: Múltiplos Produtos ─── */}
           {currentStep === 2 && (
             <div className="space-y-4 animate-fade-in">
+              {/* Capacity Alert Banner for Salespeople */}
+              <CapacityAlertBanner capacidade={capacidade} />
+
               <div className="flex items-center justify-between">
                 <label className="text-sm font-bold text-foreground">Itens do Pedido</label>
                 {!isLocked && (
