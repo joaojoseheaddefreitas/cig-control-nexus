@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import {
   Wallet, TrendingUp, TrendingDown, DollarSign, PiggyBank, CreditCard, BarChart2,
   Brain, Home, ChevronLeft, ChevronRight, Menu, X,
-  Target, Shield, Gauge, Activity, Scale, RefreshCw, Plus, Check,
+  Target, Shield, Gauge, Activity, Scale, RefreshCw, Plus, Check, Settings,
 } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { cn } from '@/lib/utils';
