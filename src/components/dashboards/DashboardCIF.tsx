@@ -456,17 +456,35 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
 
   const renderEquilibrio = () => (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="flex justify-between items-center">
+        <h3 className="text-lg font-semibold">Ponto de Equilíbrio</h3>
+        <Button size="sm" variant="outline" onClick={() => setShowConfigEquil(true)}>
+          <Settings className="h-4 w-4 mr-1" />Configurações
+        </Button>
+      </div>
+
+      {margemInvalida && (
+        <div className="p-4 rounded-lg bg-destructive/10 border border-destructive/50">
+          <p className="text-sm font-semibold text-destructive">⚠️ Margem inválida — operação em prejuízo estrutural</p>
+          <p className="text-xs text-muted-foreground mt-1">A margem de contribuição é negativa ou zero. Revise custos variáveis, impostos e comissões.</p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <div className="p-4 rounded-xl bg-card border border-border/30">
           <p className="text-xs text-muted-foreground">Ponto de Equilíbrio</p>
-          <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.pontoEquilibrio)}</p>
+          <p className="text-2xl font-bold text-foreground mt-1">{fmt(pontoEquilibrioCalc)}</p>
         </div>
         <div className="p-4 rounded-xl bg-card border border-border/30">
-          <p className="text-xs text-muted-foreground">Custo Fixo Médio</p>
+          <p className="text-xs text-muted-foreground">Custo Fixo Mensal</p>
           <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.custoFixo)}</p>
         </div>
         <div className="p-4 rounded-xl bg-card border border-border/30">
-          <p className="text-xs text-muted-foreground">Faturamento</p>
+          <p className="text-xs text-muted-foreground">Margem Contribuição</p>
+          <p className={cn("text-2xl font-bold mt-1", margemContribuicao > 0 ? "text-success" : "text-destructive")}>{(margemContribuicao * 100).toFixed(1)}%</p>
+        </div>
+        <div className="p-4 rounded-xl bg-card border border-border/30">
+          <p className="text-xs text-muted-foreground">Faturamento Atual</p>
           <p className="text-2xl font-bold text-foreground mt-1">{fmt(data!.faturamento)}</p>
         </div>
         <div className={cn("p-4 rounded-xl border-2", statusEquilibrio === 'acima' ? "bg-success/10 border-success/50" : "bg-destructive/10 border-destructive/50")}>
@@ -477,16 +495,30 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         </div>
       </div>
 
+      {/* Parâmetros ativos */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 text-center">
+          <p className="text-xs text-muted-foreground">Impostos</p>
+          <p className="text-lg font-bold">{configFin.impostos_percentual}%</p>
+        </div>
+        <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 text-center">
+          <p className="text-xs text-muted-foreground">Comissões</p>
+          <p className="text-lg font-bold">{configFin.comissoes_percentual}%</p>
+        </div>
+        <div className="p-3 rounded-lg bg-secondary/30 border border-border/30 text-center">
+          <p className="text-xs text-muted-foreground">Custos Var. %</p>
+          <p className="text-lg font-bold">{(Math.max(0, custosVariaveisPerc) * 100).toFixed(1)}%</p>
+        </div>
+      </div>
+
       {/* Gauge visual */}
       <ModuleCard title="Velocímetro Break-Even" variant="cif">
         <div className="h-56 flex flex-col items-center justify-center">
           <div className="relative w-48 h-24 overflow-hidden">
             <svg viewBox="0 0 200 100" className="w-full h-full">
-              {/* Background arcs */}
               <path d="M 20 95 A 80 80 0 0 1 100 15" fill="none" stroke={CHART_COLORS.vermelho} strokeWidth="14" strokeLinecap="round" opacity="0.3" />
               <path d="M 100 15 A 80 80 0 0 1 140 30" fill="none" stroke={CHART_COLORS.amarelo} strokeWidth="14" strokeLinecap="round" opacity="0.3" />
               <path d="M 140 30 A 80 80 0 0 1 180 95" fill="none" stroke={CHART_COLORS.verde} strokeWidth="14" strokeLinecap="round" opacity="0.3" />
-              {/* Needle */}
               {(() => {
                 const angle = Math.PI - (Math.min(gaugePercent, 200) / 200) * Math.PI;
                 const nx = 100 + 65 * Math.cos(angle);
@@ -504,6 +536,32 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
           </div>
         </div>
       </ModuleCard>
+
+      {/* Modal Configurações */}
+      <Dialog open={showConfigEquil} onOpenChange={setShowConfigEquil}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>⚙️ Configurações do Ponto de Equilíbrio</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-foreground">% Impostos Médios</label>
+              <Input type="number" min="0" max="100" step="0.1" value={configFinEdit.impostos_percentual}
+                onChange={e => setConfigFinEdit(prev => ({ ...prev, impostos_percentual: e.target.value }))}
+                placeholder="Ex: 8.5" className="mt-1" />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-foreground">% Comissões</label>
+              <Input type="number" min="0" max="100" step="0.1" value={configFinEdit.comissoes_percentual}
+                onChange={e => setConfigFinEdit(prev => ({ ...prev, comissoes_percentual: e.target.value }))}
+                placeholder="Ex: 5.0" className="mt-1" />
+            </div>
+            <div className="p-3 rounded-lg bg-secondary/30 text-xs text-muted-foreground">
+              <p><strong>Fórmula:</strong> Margem = 1 - (Custos Var.% + Impostos% + Comissões%)</p>
+              <p className="mt-1"><strong>Break-Even:</strong> Custo Fixo / Margem de Contribuição</p>
+            </div>
+            <Button className="w-full" onClick={handleSaveConfigFin}>Salvar Configurações</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 
