@@ -192,11 +192,11 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       case 'dashboard': return renderDashboard();
       case 'materiais': return renderMateriais();
       case 'estoques': return <CICEstoqueMateriais />;
-      case 'compras': return renderCompras();
-      case 'fornecedores': return renderFornecedores();
-      case 'mrp': return renderMRP();
-      case 'ia': return renderIA();
-      case 'analytics': return renderAnalytics();
+      case 'compras': return <CICCompras />;
+      case 'fornecedores': return <CICFornecedores />;
+      case 'mrp': return <CICMRP />;
+      case 'ia': return <CIIA />;
+      case 'analytics': return <CICAnalytics />;
       default: return renderDashboard();
     }
   };
