@@ -510,6 +510,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
               <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
                 <th className="text-left py-2 px-3 text-muted-foreground font-medium text-xs">Material</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
+                <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Disponível</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">PC Abertos</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Consumo/Dia</th>
                 <th className="text-center py-2 px-2 text-muted-foreground font-medium text-xs">Cobertura (d)</th>
@@ -520,13 +521,14 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
               </tr></thead>
               <tbody>
                 {riscoSorted.length === 0 ? (
-                  <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Sem dados cadastrados – insira dados para iniciar o monitoramento</td></tr>
+                  <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">Sem dados cadastrados – insira dados para iniciar o monitoramento</td></tr>
                 ) : riscoSorted.map(m => (
                   <tr key={m.id} className={cn("border-b border-border/30",
                     m.risco === 'risco' ? "bg-destructive/5" : m.risco === 'atencao' ? "bg-warning/5" : ""
                   )}>
                     <td className="py-2 px-3 font-medium text-xs">{m.nome}</td>
                     <td className="py-2 px-2 text-center text-xs">{m.estoque_atual} {m.unidade}</td>
+                    <td className="py-2 px-2 text-center text-xs text-muted-foreground">{Math.max(0, m.estoque_atual - (m.estoque_minimo || 0))} {m.unidade}</td>
                     <td className="py-2 px-2 text-center text-xs">{m.pcAbertos || '—'}</td>
                     <td className="py-2 px-2 text-center text-xs text-muted-foreground">{m.consumo_medio_diario}</td>
                     <td className={cn("py-2 px-2 text-center font-bold text-xs",

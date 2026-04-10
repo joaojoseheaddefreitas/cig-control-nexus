@@ -113,7 +113,11 @@ export function CICCompras() {
     }
     const { error } = await atualizarStatusPedidoCompra(selectedPedido.id, newStatus, newStatus === 'recebido' ? extras : undefined);
     if (error) { toast.error(error); return; }
-    toast.success(`Status atualizado para ${STATUS_MAP[newStatus]?.label || newStatus}`);
+    if (newStatus === 'recebido') {
+      toast.success(`Recebimento registrado! Estoque atualizado automaticamente (+${extras.quantidade_recebida || selectedPedido.quantidade} un)`);
+    } else {
+      toast.success(`Status atualizado para ${STATUS_MAP[newStatus]?.label || newStatus}`);
+    }
     setStatusDialogOpen(false);
     setSelectedPedido(null);
     loadData();

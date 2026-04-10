@@ -31,8 +31,11 @@ export async function fetchPedidosCompra(): Promise<PedidoCompra[]> {
   return data as PedidoCompra[];
 }
 
-export async function criarPedidoCompra(pedido: Partial<PedidoCompra>): Promise<{ error: string | null }> {
-  const { error } = await (supabase as any)
+export async function criarPedidoCompra(pedido: Partial<PedidoCompra>): Promise<{ error: string | null; id?: string }> {
+  const valorTotal = (pedido.quantidade || 0) * (pedido.valor_unitario || 0);
+  const dataPrevisao = pedido.data_previsao || null;
+
+  const { data, error } = await (supabase as any)
     .from("pedidos_compra")
     .insert({
       fornecedor_id: pedido.fornecedor_id || null,
@@ -41,21 +44,50 @@ export async function criarPedidoCompra(pedido: Partial<PedidoCompra>): Promise<
       material_nome: pedido.material_nome || '',
       quantidade: pedido.quantidade || 0,
       valor_unitario: pedido.valor_unitario || 0,
-      valor_total: (pedido.quantidade || 0) * (pedido.valor_unitario || 0),
+      valor_total: valorTotal,
       status: pedido.status || 'emitido',
       data_emissao: pedido.data_emissao || new Date().toISOString().split('T')[0],
-      data_previsao: pedido.data_previsao || null,
+      data_previsao: dataPrevisao,
       observacoes: pedido.observacoes || null,
-    });
+    })
+    .select('id')
+    .single();
+
   if (error) return { error: error.message };
-  return { error: null };
+
+  // Auto-generate contas_pagar (previsão)
+  if (data?.id) {
+    await (supabase as any).from("contas_pagar").insert({
+      descricao: `PC ${pedido.material_nome || ''} - ${pedido.fornecedor_nome || ''}`,
+      valor: valorTotal,
+      data_vencimento: dataPrevisao || new Date().toISOString().split('T')[0],
+      status: 'pendente',
+      categoria: 'materiais',
+      fornecedor_id: pedido.fornecedor_id || null,
+    });
+  }
+
+  return { error: null, id: data?.id };
 }
 
 export async function atualizarStatusPedidoCompra(
   id: string,
   status: string,
-  extras?: { data_recebimento?: string; quantidade_recebida?: number; nota_fiscal?: string; on_time?: boolean; in_full?: boolean }
+  extras?: {
+    data_recebimento?: string;
+    quantidade_recebida?: number;
+    nota_fiscal?: string;
+    on_time?: boolean;
+    in_full?: boolean;
+  }
 ): Promise<{ error: string | null }> {
+  // Get current PO data before update
+  const { data: pcData } = await (supabase as any)
+    .from("pedidos_compra")
+    .select("*")
+    .eq("id", id)
+    .single();
+
   const update: any = { status };
   if (extras) Object.assign(update, extras);
   const { error } = await (supabase as any)
@@ -63,6 +95,52 @@ export async function atualizarStatusPedidoCompra(
     .update(update)
     .eq("id", id);
   if (error) return { error: error.message };
+
+  // === AUTO-INTEGRATION: When received, update estoque + financeiro ===
+  if (status === 'recebido' && pcData) {
+    const qtdRecebida = extras?.quantidade_recebida || pcData.quantidade;
+    const valorUnit = pcData.valor_unitario;
+
+    // 1. Create stock entry movement (movimentacoes_materiais)
+    if (pcData.material_id) {
+      await (supabase as any).from("movimentacoes_materiais").insert({
+        material_id: pcData.material_id,
+        tipo: "entrada",
+        quantidade: qtdRecebida,
+        valor_total: qtdRecebida * valorUnit,
+        nota_fiscal: extras?.nota_fiscal || null,
+        motivo: `Recebimento PC - ${pcData.fornecedor_nome}`,
+        usuario: "Sistema",
+      });
+
+      // 2. Update material stock
+      const { data: mat } = await (supabase as any)
+        .from("materiais")
+        .select("estoque_atual")
+        .eq("id", pcData.material_id)
+        .single();
+
+      if (mat) {
+        await (supabase as any)
+          .from("materiais")
+          .update({
+            estoque_atual: Number(mat.estoque_atual) + qtdRecebida,
+            ultima_entrada: extras?.data_recebimento || new Date().toISOString().split('T')[0],
+          })
+          .eq("id", pcData.material_id);
+      }
+    }
+
+    // 3. Log
+    await supabase.from("action_logs").insert({
+      action: "recebimento_compra",
+      entity: "pedidos_compra",
+      entity_id: id,
+      status: "success",
+      details: { quantidade: qtdRecebida, fornecedor: pcData.fornecedor_nome, material: pcData.material_nome } as any,
+    });
+  }
+
   return { error: null };
 }
 
