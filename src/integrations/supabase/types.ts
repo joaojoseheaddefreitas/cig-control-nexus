@@ -1079,6 +1079,87 @@ export type Database = {
           },
         ]
       }
+      pedidos_compra: {
+        Row: {
+          created_at: string
+          data_emissao: string
+          data_previsao: string | null
+          data_recebimento: string | null
+          fornecedor_id: string | null
+          fornecedor_nome: string
+          id: string
+          in_full: boolean | null
+          material_id: string | null
+          material_nome: string
+          nota_fiscal: string | null
+          observacoes: string | null
+          on_time: boolean | null
+          quantidade: number
+          quantidade_recebida: number
+          status: string
+          updated_at: string
+          valor_total: number
+          valor_unitario: number
+        }
+        Insert: {
+          created_at?: string
+          data_emissao?: string
+          data_previsao?: string | null
+          data_recebimento?: string | null
+          fornecedor_id?: string | null
+          fornecedor_nome?: string
+          id?: string
+          in_full?: boolean | null
+          material_id?: string | null
+          material_nome?: string
+          nota_fiscal?: string | null
+          observacoes?: string | null
+          on_time?: boolean | null
+          quantidade?: number
+          quantidade_recebida?: number
+          status?: string
+          updated_at?: string
+          valor_total?: number
+          valor_unitario?: number
+        }
+        Update: {
+          created_at?: string
+          data_emissao?: string
+          data_previsao?: string | null
+          data_recebimento?: string | null
+          fornecedor_id?: string | null
+          fornecedor_nome?: string
+          id?: string
+          in_full?: boolean | null
+          material_id?: string | null
+          material_nome?: string
+          nota_fiscal?: string | null
+          observacoes?: string | null
+          on_time?: boolean | null
+          quantidade?: number
+          quantidade_recebida?: number
+          status?: string
+          updated_at?: string
+          valor_total?: number
+          valor_unitario?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pedidos_compra_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pedidos_compra_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipeline: {
         Row: {
           cliente_id: string | null
