@@ -233,7 +233,7 @@ export function CICMRP() {
                   <td className="py-2 px-2 text-center text-xs">{n.necessidadeCompra > 0 ? n.necessidadeCompra.toFixed(0) : '—'}</td>
                   <td className={cn("py-2 px-2 text-center text-xs font-bold",
                     n.risco === 'alto' ? "text-destructive" : n.risco === 'medio' ? "text-warning" : "text-success"
-                  )}>{n.coberturaDias < 999 ? n.coberturaDias.toFixed(1) : '∞'}</td>
+                  )}>{n.coberturaTotal < 999 ? n.coberturaTotal.toFixed(1) : '∞'}</td>
                   <td className="py-2 px-2 text-center text-xs text-muted-foreground">{fmtDate(n.dataRuptura)}</td>
                   <td className="py-2 px-2 text-center">
                     <Badge className={cn("text-[9px]",
