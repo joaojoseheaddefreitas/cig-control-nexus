@@ -273,7 +273,7 @@ export function CICEstoqueMateriais() {
                               <Input type="number" className="h-7 text-xs w-16" value={editData.estoque_atual}
                                 onChange={e => setEditData({ ...editData, estoque_atual: e.target.value })} />
                             ) : <>{m.estoque_atual} {m.unidade}</>}
-                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs text-muted-foreground">{Math.max(0, m.estoque_atual - m.estoque_minimo)} {m.unidade}</td>
                           <td className="py-1.5 px-2 text-center text-xs">
                             {isEditing ? (
                               <Input type="number" className="h-7 text-xs w-14" value={editData.estoque_minimo}
@@ -285,6 +285,13 @@ export function CICEstoqueMateriais() {
                               <Input type="number" className="h-7 text-xs w-14" value={editData.estoque_maximo}
                                 onChange={e => setEditData({ ...editData, estoque_maximo: e.target.value })} />
                             ) : m.estoque_maximo}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs font-semibold text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-center text-xs">
+                            {isEditing ? (
+                              <Input type="number" className="h-7 text-xs w-14" value={editData.margem_seguranca_percentual}
+                                onChange={e => setEditData({ ...editData, margem_seguranca_percentual: e.target.value })} />
+                            ) : <>{m.margem_seguranca_percentual}%</>}
                           </td>
                           <td className="py-1.5 px-2 text-center text-xs">
                             {isEditing ? (
