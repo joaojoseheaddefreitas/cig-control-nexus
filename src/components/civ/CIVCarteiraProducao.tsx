@@ -293,7 +293,7 @@ export function CIVCarteiraProducao() {
 
       {/* Table */}
       <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-        <ScrollArea className="max-h-[600px]">
+        <div className="max-h-[600px] overflow-y-auto">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -384,7 +384,7 @@ export function CIVCarteiraProducao() {
               </tbody>
             </table>
           </div>
-        </ScrollArea>
+        </div>
       </div>
 
       {/* Stepper */}
