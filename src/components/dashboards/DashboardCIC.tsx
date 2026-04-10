@@ -4,6 +4,7 @@ import {
   PieChart, Pie, Cell, Legend,
 } from 'recharts';
 import { CICEstoqueMateriais } from '@/components/cic/CICEstoqueMateriais';
+import { CICFornecedores } from '@/components/cic/CICFornecedores';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import { ScrollArea } from '@/components/ui/scroll-area';
