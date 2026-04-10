@@ -161,11 +161,19 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
       )}
 
       {/* IA Critical Capacity Alert in Step 3 */}
-      {capacidade && capacidade.setores.some(s => s.carga_percent >= 95) && (
-        <div className="p-3 rounded-lg bg-destructive/10 border-2 border-destructive/30">
+      {capacidade && capacidade.setores.some(s => s.carga_percent >= 75) && (
+        <div className={cn('p-3 rounded-lg border-2',
+          capacidade.setores.some(s => s.carga_percent >= 95)
+            ? 'bg-destructive/10 border-destructive/30'
+            : 'bg-warning/10 border-warning/30'
+        )}>
           <div className="flex items-center gap-2 mb-2">
-            <Brain className="h-5 w-5 text-destructive" />
-            <span className="text-sm font-bold text-destructive">🧠 IA — Capacidade Crítica Detectada</span>
+            <Brain className={cn('h-5 w-5', capacidade.setores.some(s => s.carga_percent >= 95) ? 'text-destructive' : 'text-warning')} />
+            <span className={cn('text-sm font-bold', capacidade.setores.some(s => s.carga_percent >= 95) ? 'text-destructive' : 'text-warning')}>
+              {capacidade.setores.some(s => s.carga_percent >= 95)
+                ? '🧠 IA — Capacidade Crítica — Ações Urgentes'
+                : '🧠 IA — Providências Preventivas (~15 dias para agir)'}
+            </span>
           </div>
           <IACapacityRecommendations capacidade={capacidade} />
         </div>
@@ -251,17 +259,17 @@ function CapacityAlertBanner({ capacidade }: { capacidade: import('@/services/ca
   const ocupacaoGargalo = capacidade.setores.reduce((max, s) => s.carga_percent > max ? s.carga_percent : max, 0);
 
   const isCritical = ocupacaoGargalo >= 95;
-  const isWarning = ocupacaoGargalo >= 80 && ocupacaoGargalo < 95;
-  const isNormal = ocupacaoGargalo < 80;
+  const isPreCritical = ocupacaoGargalo >= 75 && ocupacaoGargalo < 95;
+  const isNormal = ocupacaoGargalo < 75;
 
   const bgClass = isCritical
     ? 'bg-destructive/15 border-destructive/50 animate-pulse'
-    : isWarning
+    : isPreCritical
       ? 'bg-warning/15 border-warning/50'
       : 'bg-success/10 border-success/30';
 
-  const iconColor = isCritical ? 'text-destructive' : isWarning ? 'text-warning' : 'text-success';
-  const statusLabel = isCritical ? '🔴 CAPACIDADE CRÍTICA' : isWarning ? '🟡 ATENÇÃO' : '🟢 DISPONÍVEL';
+  const iconColor = isCritical ? 'text-destructive' : isPreCritical ? 'text-warning' : 'text-success';
+  const statusLabel = isCritical ? '🔴 CAPACIDADE CRÍTICA' : isPreCritical ? '🟡 ATENÇÃO — PROVIDÊNCIAS RECOMENDADAS' : '🟢 DISPONÍVEL';
 
   return (
     <div className={cn('p-3 rounded-lg border-2 mb-4', bgClass)}>
@@ -277,29 +285,24 @@ function CapacityAlertBanner({ capacidade }: { capacidade: import('@/services/ca
         </div>
         <Badge className={cn(
           'text-xs font-bold whitespace-nowrap',
-          isCritical ? 'bg-destructive text-destructive-foreground' : isWarning ? 'bg-warning text-warning-foreground' : 'bg-success text-success-foreground'
+          isCritical ? 'bg-destructive text-destructive-foreground' : isPreCritical ? 'bg-warning text-warning-foreground' : 'bg-success text-success-foreground'
         )}>
           {prazo}d
         </Badge>
       </div>
 
-      {/* IA Recommendations when critical */}
-      {isCritical && (
-        <div className="mt-3 pt-3 border-t border-destructive/20 space-y-2">
+      {/* IA Recommendations from 75%+ */}
+      {(isCritical || isPreCritical) && (
+        <div className={cn('mt-3 pt-3 border-t space-y-2', isCritical ? 'border-destructive/20' : 'border-warning/20')}>
           <div className="flex items-center gap-2">
-            <Brain className="h-4 w-4 text-destructive" />
-            <span className="text-xs font-bold text-destructive">IA — Ações recomendadas para aumentar capacidade:</span>
+            <Brain className={cn('h-4 w-4', isCritical ? 'text-destructive' : 'text-warning')} />
+            <span className={cn('text-xs font-bold', isCritical ? 'text-destructive' : 'text-warning')}>
+              {isCritical
+                ? 'IA — Ações URGENTES para aumentar capacidade:'
+                : 'IA — Providências preventivas recomendadas (janela de ~15 dias):'}
+            </span>
           </div>
           <IACapacityRecommendations capacidade={capacidade} />
-        </div>
-      )}
-
-      {isWarning && (
-        <div className="mt-2 pt-2 border-t border-warning/20">
-          <p className="text-[10px] text-warning flex items-center gap-1">
-            <Brain className="h-3 w-3" />
-            Fábrica em zona de atenção. Novos pedidos grandes podem elevar prazo significativamente.
-          </p>
         </div>
       )}
     </div>
