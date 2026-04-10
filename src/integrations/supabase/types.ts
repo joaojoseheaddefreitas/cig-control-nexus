@@ -396,6 +396,63 @@ export type Database = {
           },
         ]
       }
+      fornecedor_materiais: {
+        Row: {
+          codigo_material_fornecedor: string
+          created_at: string
+          fornecedor_id: string
+          fornecedor_preferencial: boolean
+          id: string
+          lead_time_dias: number
+          material_id: string
+          preco_atual: number
+          quantidade_minima: number
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          codigo_material_fornecedor?: string
+          created_at?: string
+          fornecedor_id: string
+          fornecedor_preferencial?: boolean
+          id?: string
+          lead_time_dias?: number
+          material_id: string
+          preco_atual?: number
+          quantidade_minima?: number
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          codigo_material_fornecedor?: string
+          created_at?: string
+          fornecedor_id?: string
+          fornecedor_preferencial?: boolean
+          id?: string
+          lead_time_dias?: number
+          material_id?: string
+          preco_atual?: number
+          quantidade_minima?: number
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fornecedor_materiais_fornecedor_id_fkey"
+            columns: ["fornecedor_id"]
+            isOneToOne: false
+            referencedRelation: "fornecedores"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fornecedor_materiais_material_id_fkey"
+            columns: ["material_id"]
+            isOneToOne: false
+            referencedRelation: "materiais"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       fornecedores: {
         Row: {
           ativo: boolean
