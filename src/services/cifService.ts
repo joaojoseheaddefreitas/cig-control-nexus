@@ -31,6 +31,22 @@ export interface LogAuditoriaRow {
   data: string;
 }
 
+export interface RentabilidadeSKU {
+  sku: string;
+  preco: number;
+  custoMaterial: number;
+  custoMaoObra: number;
+  custoIndireto: number;
+  custoImpostos: number;
+  custoComissao: number;
+  custoTotal: number;
+  margem: number;
+  lucroUnitario: number;
+  volume: number;
+  lucroTotal: number;
+  curvaABC: 'A' | 'B' | 'C';
+}
+
 export interface CIFDashboardData {
   receita: number;
   despesa: number;
@@ -45,7 +61,7 @@ export interface CIFDashboardData {
   receitaMensal: { mes: string; receita: number; despesa: number; resultado: number }[];
   fluxoProjetado: { dia: string; saldo: number }[];
   custosPorCategoria: { categoria: string; valor: number; limite: number; percentual: number }[];
-  rentabilidadeSKU: { sku: string; preco: number; custo: number; margem: number; volume: number }[];
+  rentabilidadeSKU: RentabilidadeSKU[];
   pontoEquilibrio: number;
   custoFixo: number;
   faturamento: number;
