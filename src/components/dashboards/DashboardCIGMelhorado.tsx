@@ -282,6 +282,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
 
         {/* CARTEIRA */}
+        <div className="p-4 rounded-xl bg-gradient-to-br from-civ/20 to-civ/5 border border-civ/30">
+          <div className="flex items-center justify-between mb-2">
             <TrendingUp className="h-5 w-5 text-civ" />
             <span className="text-xs text-muted-foreground">CIV</span>
           </div>
