@@ -277,6 +277,8 @@ export async function marcarComoPago(id: string, valorOriginal: number): Promise
     detalhes: `Transação ${id} baixada como PAGO`,
     entidade: 'transacoes',
     entidade_id: id,
+    campo_alterado: 'status',
+    nivel_risco: calcRisco(0, valorOriginal, 'PAGAMENTO'),
   });
 }
 
@@ -293,6 +295,8 @@ export async function criarTransacao(t: Partial<TransacaoRow>): Promise<void> {
     detalhes: `${t.tipo}: ${t.descricao} | Cat: ${t.categoria} | Status: ${t.status || 'PENDENTE'}`,
     entidade: 'transacoes',
     entidade_id: data?.id,
+    campo_alterado: 'valor',
+    nivel_risco: calcRisco(null, Number(t.valor || 0), acao),
   });
 }
 
@@ -300,13 +304,16 @@ export async function editarTransacao(id: string, updates: Partial<TransacaoRow>
   const { error } = await (supabase as any).from("transacoes").update(updates).eq('id', id);
   if (error) throw error;
 
+  const acao2 = updates.tipo === 'DESPESA' ? 'EDITAR_DESPESA' : 'EDITAR_RECEITA';
   await (supabase as any).from("logs_auditoria").insert({
     usuario: 'sistema',
-    acao: updates.tipo === 'DESPESA' ? 'EDITAR_DESPESA' : 'EDITAR_RECEITA',
+    acao: acao2,
     valor_antigo: valorAntigo,
     valor_novo: Number(updates.valor || valorAntigo),
     detalhes: `Transação ${id} editada | ${updates.descricao || ''}`,
     entidade: 'transacoes',
     entidade_id: id,
+    campo_alterado: 'valor',
+    nivel_risco: calcRisco(valorAntigo, Number(updates.valor || valorAntigo), acao2),
   });
 }
