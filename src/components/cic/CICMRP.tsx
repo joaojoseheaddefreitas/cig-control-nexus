@@ -46,9 +46,10 @@ export function CICMRP() {
 
   const necessidades = useMemo(() => {
     return materiais.map(m => {
+      // Pedidos em aberto (emitido, aprovado, transporte) — evita compra duplicada
       const pcAbertos = pedidosCompra
-        .filter(p => p.material_id === m.id && !['recebido', 'cancelado'].includes(p.status))
-        .reduce((s, p) => s + p.quantidade, 0);
+        .filter(p => p.material_id === m.id && ['emitido', 'aprovado', 'transporte'].includes(p.status))
+        .reduce((s, p) => s + (p.quantidade - p.quantidade_recebida), 0);
 
       // Lead time priority: fornecedor preferencial > material padrão
       const fornPref = fornecedorMateriais.find(fm => fm.material_id === m.id && fm.fornecedor_preferencial);
@@ -56,52 +57,71 @@ export function CICMRP() {
       const margem = (m.margem_seguranca_percentual || 20) / 100;
 
       const estoqueDisponivel = Math.max(0, m.estoque_atual - m.estoque_minimo);
-      const coberturaDias = m.consumo_medio_diario > 0 ? m.estoque_atual / m.consumo_medio_diario : 999;
-      const coberturaComPC = m.consumo_medio_diario > 0 ? (m.estoque_atual + pcAbertos) / m.consumo_medio_diario : 999;
+
+      // === COBERTURA TOTAL = (estoque_disponivel + pedidos_em_aberto) / consumo_diario ===
+      const coberturaTotal = m.consumo_medio_diario > 0
+        ? (estoqueDisponivel + pcAbertos) / m.consumo_medio_diario
+        : 999;
+
+      // Cobertura só do estoque físico (para data de ruptura)
+      const coberturaDias = m.consumo_medio_diario > 0 ? estoqueDisponivel / m.consumo_medio_diario : 999;
 
       // PP calculation
       const pontoPedidoCalc = m.consumo_medio_diario * leadTimeEfetivo * (1 + margem);
       const necessidadeLeadTime = m.consumo_medio_diario * leadTimeEfetivo;
 
-      // Necessidade de compra
-      let necessidadeCompra = (m.consumo_medio_diario * leadTimeEfetivo * (1 + margem)) - (estoqueDisponivel + pcAbertos);
+      // Necessidade de compra = PP - (estoque_disponivel + pedidos_em_aberto)
+      let necessidadeCompra = pontoPedidoCalc - (estoqueDisponivel + pcAbertos);
       if (necessidadeCompra < 0) necessidadeCompra = 0;
       const proposta = necessidadeCompra > 0 ? Math.max(necessidadeCompra, m.lote_economico) : 0;
 
-      const coberturaPercent = necessidadeLeadTime > 0 ? ((m.estoque_atual + pcAbertos) / necessidadeLeadTime) * 100 : 999;
-
-      // Status compra
-      let statusCompra: 'COMPRAR' | 'OK' | 'COBERTO' = 'OK';
-      if (estoqueDisponivel <= pontoPedidoCalc && necessidadeCompra > 0) {
-        statusCompra = pcAbertos > 0 ? 'COBERTO' : 'COMPRAR';
+      // === REGRA DE DECISÃO: cobertura_total vs lead_time ===
+      let statusCompra: 'COMPRAR' | 'COBERTO' = 'COBERTO';
+      if (coberturaTotal < leadTimeEfetivo) {
+        statusCompra = 'COMPRAR';
       }
 
-      // Duas gavetas: gaveta1 zerou = COMPRAR
+      // Duas gavetas: gaveta1 zerou = COMPRAR sempre
       if (m.tipo_controle === 'DUAS_GAVETAS' && m.gaveta2_ativa) {
         statusCompra = 'COMPRAR';
       }
 
-      // Data de ruptura
+      // Se tem PC aberto cobrindo a necessidade, status fica COBERTO
+      if (statusCompra === 'COMPRAR' && pcAbertos > 0 && necessidadeCompra <= 0) {
+        statusCompra = 'COBERTO';
+      }
+
+      // Data de ruptura (baseada no estoque físico disponível)
       let dataRuptura: Date | null = null;
       if (m.consumo_medio_diario > 0 && coberturaDias < 999) {
         dataRuptura = new Date(hoje);
         dataRuptura.setDate(dataRuptura.getDate() + Math.floor(coberturaDias));
       }
 
-      // Risco
+      // === RISCO baseado em cobertura_total (inclui PC abertos) ===
       let risco: 'alto' | 'medio' | 'ok' = 'ok';
-      if (coberturaDias < leadTimeEfetivo || m.gaveta2_ativa) risco = 'alto';
-      else if (coberturaDias < leadTimeEfetivo * 1.5) risco = 'medio';
+      if (coberturaTotal < leadTimeEfetivo || m.gaveta2_ativa) risco = 'alto';
+      else if (coberturaTotal < leadTimeEfetivo * 1.5) risco = 'medio';
+
+      // === ANTI-INCONSISTÊNCIA ===
+      // COBERTO nunca pode ter risco alto (se cobertura total é suficiente)
+      if (statusCompra === 'COBERTO' && risco === 'alto' && coberturaTotal >= leadTimeEfetivo) {
+        risco = 'medio';
+      }
+      // COMPRAR nunca pode ter risco ok
+      if (statusCompra === 'COMPRAR' && risco === 'ok') {
+        risco = 'medio';
+      }
 
       return {
-        ...m, pcAbertos, coberturaDias, coberturaComPC, necessidadeLeadTime,
-        pontoPedidoCalc, necessidadeCompra, proposta, coberturaPercent, dataRuptura, risco,
+        ...m, pcAbertos, coberturaDias, coberturaTotal, necessidadeLeadTime,
+        pontoPedidoCalc, necessidadeCompra, proposta, dataRuptura, risco,
         statusCompra, leadTimeEfetivo, estoqueDisponivel, margem,
         fornPref,
       };
     }).sort((a, b) => {
       const riscoOrder = { alto: 0, medio: 1, ok: 2 };
-      return riscoOrder[a.risco] - riscoOrder[b.risco] || a.coberturaDias - b.coberturaDias;
+      return riscoOrder[a.risco] - riscoOrder[b.risco] || a.coberturaTotal - b.coberturaTotal;
     });
   }, [materiais, pedidosCompra, fornecedorMateriais]);
 

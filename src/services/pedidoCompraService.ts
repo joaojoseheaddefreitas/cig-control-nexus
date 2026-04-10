@@ -88,6 +88,17 @@ export async function atualizarStatusPedidoCompra(
     .eq("id", id)
     .single();
 
+  if (!pcData) return { error: "Pedido não encontrado" };
+
+  // === REGRA DE BLOQUEIO: recebimento > 110% do pedido ===
+  if (status === 'recebido' && extras?.quantidade_recebida) {
+    const limiteMaximo = Number(pcData.quantidade) * 1.10;
+    const totalRecebido = Number(pcData.quantidade_recebida) + extras.quantidade_recebida;
+    if (totalRecebido > limiteMaximo) {
+      return { error: `Bloqueado: quantidade recebida (${totalRecebido}) excede 110% do pedido (${limiteMaximo.toFixed(0)}). Máximo permitido: ${(limiteMaximo - Number(pcData.quantidade_recebida)).toFixed(0)} unidades.` };
+    }
+  }
+
   const update: any = { status };
   if (extras) Object.assign(update, extras);
   const { error } = await (supabase as any)
