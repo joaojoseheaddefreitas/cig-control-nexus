@@ -41,6 +41,17 @@ export function CICMRP() {
 
   useEffect(() => { loadData(); }, []);
 
+  // Realtime: auto-refresh MRP when materiais, pedidos_compra or movimentacoes change
+  useEffect(() => {
+    const channel = supabase
+      .channel('cic-mrp-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'materiais' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_compra' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'movimentacoes_materiais' }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const hoje = new Date();
   const hojeStr = hoje.toISOString().split('T')[0];
 

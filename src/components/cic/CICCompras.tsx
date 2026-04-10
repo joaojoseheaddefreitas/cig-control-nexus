@@ -68,6 +68,16 @@ export function CICCompras() {
 
   useEffect(() => { loadData(); }, []);
 
+  // Realtime: auto-refresh when pedidos_compra or materiais change
+  useEffect(() => {
+    const channel = supabase
+      .channel('cic-compras-realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos_compra' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'materiais' }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
+
   const hoje = new Date().toISOString().split('T')[0];
   const pedidosFiltered = pedidos.filter(p => {
     const matchSearch = p.material_nome.toLowerCase().includes(search.toLowerCase()) ||
