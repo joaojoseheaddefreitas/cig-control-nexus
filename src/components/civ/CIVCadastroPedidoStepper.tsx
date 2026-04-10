@@ -909,6 +909,9 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
             <div className="space-y-4 animate-fade-in">
               {/* Capacity Alert Banner for Salespeople */}
               <CapacityAlertBanner capacidade={capacidade} />
+
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-bold text-foreground">Itens do Pedido</label>
                 {!isLocked && (
                   <Button variant="outline" size="sm" onClick={addItem}>
                     <Plus className="h-3 w-3 mr-1" /> Adicionar Produto
