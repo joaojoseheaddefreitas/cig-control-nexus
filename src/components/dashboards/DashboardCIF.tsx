@@ -367,14 +367,17 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         await (supabase as any).from('orcamentos').insert({ categoria, valor_limite: novoValor, mes_ano: mesAno });
       }
       // Log audit
+      const valorAntigo = existing ? Number(existing.valor_limite) : null;
       await (supabase as any).from('logs_auditoria').insert({
         usuario: 'sistema',
         acao: 'EDITAR_ORCAMENTO',
-        valor_antigo: existing ? Number(existing.valor_limite) : null,
+        valor_antigo: valorAntigo,
         valor_novo: novoValor,
         detalhes: `Orçamento ${categoria} alterado para R$ ${novoValor.toLocaleString('pt-BR')}`,
         entidade: 'orcamentos',
         entidade_id: existing?.id || null,
+        campo_alterado: 'valor_limite',
+        nivel_risco: valorAntigo && valorAntigo > 0 && Math.abs((novoValor - valorAntigo) / valorAntigo) > 0.2 ? 'ALTO' : 'MEDIO',
       });
       toast.success(`Orçamento de ${categoria} atualizado`);
       setEditingBudgets(prev => { const n = { ...prev }; delete n[categoria]; return n; });
