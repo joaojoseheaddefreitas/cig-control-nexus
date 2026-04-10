@@ -775,7 +775,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
                   const opsForItem: string[] = [];
                   for (let f = 0; f < fractions; f++) {
                     globalSeq++;
-                    opsForItem.push(getPreviewOPMask(globalSeq));
+                    opsForItem.push(getPreviewOPMask(globalSeq, totalOPs));
                   }
                   const qty = typeof item.quantidade === 'number' ? item.quantidade : 0;
 
