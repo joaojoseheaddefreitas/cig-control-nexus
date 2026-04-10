@@ -554,6 +554,11 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
         fraction_count: Math.max(1, i.fractionCount),
       }));
 
+    // Calculate delivery date from hook's bottleneck days
+    const prazoTotalDias = capacidade?.prazoVendasDias ?? 0;
+    const dataEntregaCalc = calcularDataEntrega(new Date(), prazoTotalDias, false);
+    const prazoISO = dataEntregaCalc.toISOString().split('T')[0];
+
     onSave({
       codigo: codigoManual,
       cliente: clienteNome,
@@ -562,7 +567,7 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
       canal,
       margem: margemNum,
       valorTotal,
-      prazoEntrega: '',
+      prazoEntrega: prazoISO,
       dataEntrada: new Date().toISOString().split('T')[0],
       status: 'aguardando',
       observacoesGerais,
