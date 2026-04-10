@@ -286,32 +286,117 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     </div>
   );
 
+  const handleCriarDespesa = async () => {
+    if (!newDespesa.descricao || !newDespesa.valor) { toast.error('Preencha descrição e valor'); return; }
+    const valor = Number(newDespesa.valor);
+    // Check budget overshoot
+    const orcCat = data!.custosPorCategoria.find(c => c.categoria === newDespesa.categoria);
+    if (orcCat && orcCat.limite > 0 && (orcCat.valor + valor) > orcCat.limite) {
+      toast.warning('⚠️ Atenção: Esta despesa excede o orçamento planejado para este mês');
+    }
+    try {
+      await criarTransacao({
+        tipo: 'DESPESA',
+        categoria: newDespesa.categoria,
+        descricao: newDespesa.descricao,
+        valor,
+        data_emissao: newDespesa.data_emissao || new Date().toISOString().slice(0, 10),
+        data_vencimento: newDespesa.data_emissao || new Date().toISOString().slice(0, 10),
+        status: newDespesa.status as 'PENDENTE' | 'PAGO',
+      });
+      toast.success('Despesa criada com sucesso');
+      setShowNewDespesa(false);
+      setNewDespesa({ categoria: 'materiais', descricao: '', valor: '', data_emissao: '', status: 'PENDENTE' });
+    } catch { toast.error('Erro ao criar despesa'); }
+  };
+
+  const handleSaveBudget = async (categoria: string) => {
+    const novoValor = Number(editingBudgets[categoria]);
+    if (isNaN(novoValor) || novoValor < 0) { toast.error('Valor inválido'); return; }
+    const now = new Date();
+    const mesAno = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    // Check if budget exists for this category+month
+    const existing = data!.orcamentos.find(o => {
+      const d = new Date(o.mes_ano);
+      return o.categoria === categoria && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    });
+    try {
+      if (existing) {
+        await (supabase as any).from('orcamentos').update({ valor_limite: novoValor }).eq('id', existing.id);
+      } else {
+        await (supabase as any).from('orcamentos').insert({ categoria, valor_limite: novoValor, mes_ano: mesAno });
+      }
+      // Log audit
+      await (supabase as any).from('logs_auditoria').insert({
+        usuario: 'sistema',
+        acao: 'ALTERACAO_ORCAMENTO',
+        valor_antigo: existing ? Number(existing.valor_limite) : null,
+        valor_novo: novoValor,
+        detalhes: `Orçamento ${categoria} alterado para R$ ${novoValor}`,
+        entidade: 'orcamentos',
+        entidade_id: existing?.id || null,
+      });
+      toast.success(`Orçamento de ${categoria} atualizado`);
+      setEditingBudgets(prev => { const n = { ...prev }; delete n[categoria]; return n; });
+    } catch { toast.error('Erro ao salvar orçamento'); }
+  };
+
   const renderCustos = () => (
     <div className="space-y-6">
-      <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cif">Custos & Orçamento</strong> — Comparação real vs limite orçamentário por categoria.</p>
+      <div className="flex justify-between items-center">
+        <div className="p-3 rounded-lg bg-cif/10 border border-cif/30 flex-1">
+          <p className="text-sm text-muted-foreground"><strong className="text-cif">Custos & Orçamento</strong> — Edite limites e registre despesas em tempo real.</p>
+        </div>
+        <Button size="sm" className="ml-3" onClick={() => setShowNewDespesa(true)}><Plus className="h-4 w-4 mr-1" />Nova Despesa</Button>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {data!.custosPorCategoria.map((c, i) => (
-          <div key={i} className="p-4 rounded-xl bg-card border border-border/30">
-            <div className="flex justify-between items-center mb-2">
-              <span className="text-sm font-medium capitalize">{c.categoria.replace('_', ' ')}</span>
-              <Badge className={cn(
-                c.percentual <= 80 ? 'bg-success/20 text-success' :
-                c.percentual <= 100 ? 'bg-warning/20 text-warning' :
-                'bg-destructive/20 text-destructive'
-              )}>{c.percentual.toFixed(0)}%</Badge>
+        {data!.custosPorCategoria.map((c, i) => {
+          const isEditing = editingBudgets[c.categoria] !== undefined;
+          return (
+            <div key={i} className="p-4 rounded-xl bg-card border border-border/30">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium capitalize">{c.categoria.replace('_', ' ')}</span>
+                <Badge className={cn(
+                  c.percentual <= 80 ? 'bg-success/20 text-success' :
+                  c.percentual <= 100 ? 'bg-warning/20 text-warning' :
+                  'bg-destructive/20 text-destructive'
+                )}>{c.percentual.toFixed(0)}%</Badge>
+              </div>
+              <Progress value={Math.min(100, c.percentual)} className={cn(
+                "h-3",
+                c.percentual > 100 ? '[&>div]:bg-destructive' : c.percentual > 80 ? '[&>div]:bg-warning' : '[&>div]:bg-success'
+              )} />
+              <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
+                <span>Real: {fmt(c.valor)}</span>
+                {isEditing ? (
+                  <div className="flex items-center gap-1">
+                    <span>Limite: R$</span>
+                    <Input
+                      type="number"
+                      className="h-6 w-20 text-xs px-1"
+                      value={editingBudgets[c.categoria]}
+                      onChange={(e) => setEditingBudgets(prev => ({ ...prev, [c.categoria]: e.target.value }))}
+                      onKeyDown={(e) => e.key === 'Enter' && handleSaveBudget(c.categoria)}
+                    />
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => handleSaveBudget(c.categoria)}>
+                      <Check className="h-3 w-3 text-success" />
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-6 w-6 p-0" onClick={() => setEditingBudgets(prev => { const n = { ...prev }; delete n[c.categoria]; return n; })}>
+                      <X className="h-3 w-3 text-destructive" />
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    className="hover:text-foreground transition-colors cursor-pointer underline decoration-dashed"
+                    onClick={() => setEditingBudgets(prev => ({ ...prev, [c.categoria]: String(c.limite) }))}
+                  >
+                    Limite: {fmt(c.limite)} ✏️
+                  </button>
+                )}
+              </div>
             </div>
-            <Progress value={Math.min(100, c.percentual)} className={cn(
-              "h-3",
-              c.percentual > 100 ? '[&>div]:bg-destructive' : c.percentual > 80 ? '[&>div]:bg-warning' : '[&>div]:bg-success'
-            )} />
-            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-              <span>Real: {fmt(c.valor)}</span>
-              <span>Limite: {fmt(c.limite)}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       <ModuleCard title="Composição de Custos" variant="cif">
         <div className="h-64">
