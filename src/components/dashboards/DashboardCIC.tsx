@@ -595,11 +595,81 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
     );
   };
 
+  // === Gestão Materiais - handlers ===
+  const startMatEdit = (m: Material) => {
+    setMatEditId(m.id);
+    setMatEditData({
+      codigo: m.codigo, nome: m.nome, categoria: m.categoria, unidade: m.unidade,
+      tipo_controle: m.tipo_controle || 'MRP', lead_time_dias: m.lead_time_dias,
+      margem_seguranca_percentual: m.margem_seguranca_percentual || 20,
+      valor_unitario: m.valor_unitario, estoque_minimo: m.estoque_minimo,
+      estoque_maximo: m.estoque_maximo, consumo_medio_diario: m.consumo_medio_diario,
+      lote_economico: m.lote_economico,
+    });
+  };
+
+  const saveMatEdit = async () => {
+    if (!matEditId) return;
+    const { error } = await (supabase as any).from('materiais').update({
+      codigo: matEditData.codigo,
+      nome: matEditData.nome,
+      categoria: matEditData.categoria,
+      unidade: matEditData.unidade,
+      tipo_controle: matEditData.tipo_controle,
+      lead_time_dias: Number(matEditData.lead_time_dias) || 7,
+      margem_seguranca_percentual: Number(matEditData.margem_seguranca_percentual) || 20,
+      valor_unitario: Number(matEditData.valor_unitario) || 0,
+      estoque_minimo: Number(matEditData.estoque_minimo) || 0,
+      estoque_maximo: Number(matEditData.estoque_maximo) || 0,
+      consumo_medio_diario: Number(matEditData.consumo_medio_diario) || 0,
+      lote_economico: Number(matEditData.lote_economico) || 0,
+    }).eq('id', matEditId);
+    if (error) { toast.error('Erro ao salvar: ' + error.message); return; }
+    toast.success('Material atualizado!');
+    setMatEditId(null);
+    setMatEditData({});
+    loadData();
+  };
+
+  const createNewMaterial = async () => {
+    if (!matNewData.codigo || !matNewData.nome) { toast.error('Código e Nome são obrigatórios'); return; }
+    const { error } = await (supabase as any).from('materiais').insert({
+      ...matNewData,
+      lead_time_dias: Number(matNewData.lead_time_dias) || 7,
+      margem_seguranca_percentual: Number(matNewData.margem_seguranca_percentual) || 20,
+      valor_unitario: Number(matNewData.valor_unitario) || 0,
+      estoque_minimo: Number(matNewData.estoque_minimo) || 0,
+      estoque_maximo: Number(matNewData.estoque_maximo) || 0,
+      consumo_medio_diario: Number(matNewData.consumo_medio_diario) || 0,
+      lote_economico: Number(matNewData.lote_economico) || 0,
+      estoque_atual: Number(matNewData.estoque_atual) || 0,
+    });
+    if (error) { toast.error('Erro ao criar: ' + error.message); return; }
+    toast.success('Material criado!');
+    setMatNewOpen(false);
+    setMatNewData({ codigo: '', nome: '', categoria: 'geral', unidade: 'un', tipo_controle: 'MRP', lead_time_dias: 7, margem_seguranca_percentual: 20, valor_unitario: 0, estoque_minimo: 0, estoque_maximo: 0, consumo_medio_diario: 0, lote_economico: 0, estoque_atual: 0, estoque_seguranca: 0, ponto_pedido: 0 });
+    loadData();
+  };
+
+  const deleteMatSoft = async (id: string) => {
+    const { error } = await (supabase as any).from('materiais').update({ ativo: false }).eq('id', id);
+    if (error) { toast.error('Erro ao excluir'); return; }
+    toast.success('Material desativado');
+    loadData();
+  };
+
   // === GESTÃO DE MATERIAIS ===
-  const renderMateriais = () => (
+  const renderMateriais = () => {
+    const isEditing = (id: string) => matEditId === id;
+    return (
     <div className="space-y-4">
-      <div className="p-3 rounded-lg bg-cic/10 border border-cic/30">
-        <p className="text-sm text-muted-foreground"><strong className="text-cic">Gestão de Materiais</strong> — Alcance, Ponto de Pedido, Proposta de Compra. Dados reais do banco.</p>
+      <div className="flex items-center justify-between">
+        <div className="p-3 rounded-lg bg-cic/10 border border-cic/30 flex-1 mr-3">
+          <p className="text-sm text-muted-foreground"><strong className="text-cic">Gestão de Materiais</strong> — Edite inline, crie ou exclua materiais. Dados persistidos no banco.</p>
+        </div>
+        <Button onClick={() => setMatNewOpen(true)} className="bg-cic hover:bg-cic/80 text-white gap-2">
+          <Plus className="h-4 w-4" /> Novo Material
+        </Button>
       </div>
       <div className="flex gap-2 max-w-md">
         <div className="relative flex-1">
@@ -613,54 +683,83 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
             <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
               <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Código</th>
               <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Material</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Categoria</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Unidade</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Tipo</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Lead Time</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">PP Calc.</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Est. Seg.</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Alcance</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Consumo/dia</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Proposta</th>
               <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
-              <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">R$ Estoque</th>
               <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Status</th>
+              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Ações</th>
             </tr></thead>
             <tbody>
               {filteredMateriais.map(m => (
                 <tr key={m.id} className={cn("border-b border-border/30 hover:bg-secondary/30", m.status === 'critico' && "bg-destructive/5")}>
-                  <td className="py-2 px-3 font-mono text-foreground text-xs">{m.codigo}</td>
-                  <td className="py-2 px-3 font-medium text-foreground text-xs">{m.nome}</td>
-                  <td className="py-2 px-2 text-center">
-                    <Badge className={cn("text-[9px]", m.tipo_controle === 'DUAS_GAVETAS' ? 'bg-purple-500/20 text-purple-400' : 'bg-secondary text-muted-foreground')}>
-                      {m.tipo_controle === 'DUAS_GAVETAS' ? '2GAV' : 'MRP'}
-                    </Badge>
+                  <td className="py-1 px-2">
+                    {isEditing(m.id) ? <Input value={matEditData.codigo} onChange={e => setMatEditData(p => ({...p, codigo: e.target.value}))} className="h-7 text-xs w-24" /> : <span className="font-mono text-foreground text-xs px-1">{m.codigo}</span>}
                   </td>
-                  <td className="py-2 px-2 text-center font-semibold text-xs">{m.estoque_atual} {m.unidade}</td>
-                  <td className="py-2 px-2 text-center text-xs font-semibold text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
-                  <td className="py-2 px-2 text-center text-muted-foreground text-xs">{(m.estoque_seguranca_calculado || 0).toFixed(0)}</td>
-                  <td className="py-2 px-2 text-center text-xs">
+                  <td className="py-1 px-2">
+                    {isEditing(m.id) ? <Input value={matEditData.nome} onChange={e => setMatEditData(p => ({...p, nome: e.target.value}))} className="h-7 text-xs w-40" /> : <span className="font-medium text-foreground text-xs">{m.nome}</span>}
+                  </td>
+                  <td className="py-1 px-2 text-center">
+                    {isEditing(m.id) ? <Input value={matEditData.categoria} onChange={e => setMatEditData(p => ({...p, categoria: e.target.value}))} className="h-7 text-xs w-20 text-center" /> : <span className="text-xs text-muted-foreground">{m.categoria}</span>}
+                  </td>
+                  <td className="py-1 px-2 text-center">
+                    {isEditing(m.id) ? <Input value={matEditData.unidade} onChange={e => setMatEditData(p => ({...p, unidade: e.target.value}))} className="h-7 text-xs w-12 text-center" /> : <span className="text-xs text-muted-foreground">{m.unidade}</span>}
+                  </td>
+                  <td className="py-1 px-2 text-center">
+                    {isEditing(m.id) ? (
+                      <select value={matEditData.tipo_controle} onChange={e => setMatEditData(p => ({...p, tipo_controle: e.target.value}))} className="h-7 text-xs rounded border border-border bg-background px-1">
+                        <option value="MRP">MRP</option>
+                        <option value="DUAS_GAVETAS">2 Gavetas</option>
+                      </select>
+                    ) : (
+                      <Badge className={cn("text-[9px]", m.tipo_controle === 'DUAS_GAVETAS' ? 'bg-purple-500/20 text-purple-400' : 'bg-secondary text-muted-foreground')}>
+                        {m.tipo_controle === 'DUAS_GAVETAS' ? '2GAV' : 'MRP'}
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="py-1 px-2 text-center">
+                    {isEditing(m.id) ? <Input type="number" value={matEditData.lead_time_dias} onChange={e => setMatEditData(p => ({...p, lead_time_dias: e.target.value}))} className="h-7 text-xs w-14 text-center" /> : <span className="text-xs text-muted-foreground">{m.lead_time_dias}d</span>}
+                  </td>
+                  <td className="py-1 px-2 text-center">
+                    {isEditing(m.id) ? <Input type="number" value={matEditData.margem_seguranca_percentual} onChange={e => setMatEditData(p => ({...p, margem_seguranca_percentual: e.target.value}))} className="h-7 text-xs w-14 text-center" /> : <span className="text-xs text-muted-foreground">{m.margem_seguranca_percentual}%</span>}
+                  </td>
+                  <td className="py-1 px-2 text-center font-semibold text-xs">{m.estoque_atual} {m.unidade}</td>
+                  <td className="py-1 px-2 text-center text-xs font-semibold text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                  <td className="py-1 px-2 text-center text-xs">
                     <span className={cn("font-bold",
                       (m.alcance_estoque || 0) < 1 ? "text-destructive" :
                       (m.alcance_estoque || 0) < 3 ? "text-warning" : "text-success"
                     )}>{(m.alcance_estoque || 0).toFixed(1)}d</span>
                   </td>
-                  <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.consumo_medio_diario}</td>
-                  <td className="py-2 px-2 text-center text-muted-foreground text-xs">{m.margem_seguranca_percentual}%</td>
-                  <td className="py-2 px-2 text-center text-xs">
-                    {(m.proposta_compra || 0) > 0 ? (
-                      <span className="font-bold text-warning">{m.proposta_compra} {m.unidade}</span>
-                    ) : '—'}
+                  <td className="py-1 px-2 text-right">
+                    {isEditing(m.id) ? <Input type="number" step="0.01" value={matEditData.valor_unitario} onChange={e => setMatEditData(p => ({...p, valor_unitario: e.target.value}))} className="h-7 text-xs w-20 text-right" /> : <span className="text-xs text-muted-foreground">R$ {m.valor_unitario.toFixed(2)}</span>}
                   </td>
-                  <td className="py-2 px-2 text-right text-muted-foreground text-xs">R$ {m.valor_unitario.toFixed(2)}</td>
-                  <td className="py-2 px-2 text-right font-semibold text-xs">R$ {((m.valor_estoque || 0) / 1000).toFixed(1)}k</td>
-                  <td className="py-2 px-2 text-center">
+                  <td className="py-1 px-2 text-center">
                     <Badge className={cn("text-[10px]",
                       m.status === 'critico' ? 'bg-destructive/20 text-destructive' :
                       m.status === 'atencao' ? 'bg-warning/20 text-warning' :
                       'bg-success/20 text-success'
                     )}>
-                      {m.status === 'critico' ? '🔴 Crítico' : m.status === 'atencao' ? '🟡 Atenção' : '🟢 OK'}
+                      {m.status === 'critico' ? '🔴' : m.status === 'atencao' ? '🟡' : '🟢'}
                     </Badge>
+                  </td>
+                  <td className="py-1 px-2 text-center">
+                    {isEditing(m.id) ? (
+                      <div className="flex gap-1 justify-center">
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-success" onClick={saveMatEdit}><Save className="h-3.5 w-3.5" /></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-muted-foreground" onClick={() => { setMatEditId(null); setMatEditData({}); }}><X className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    ) : (
+                      <div className="flex gap-1 justify-center">
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-cic" onClick={() => startMatEdit(m)}><Pencil className="h-3.5 w-3.5" /></Button>
+                        <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => deleteMatSoft(m.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -668,8 +767,73 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
           </table>
         </ScrollArea>
       </div>
+
+      {/* Dialog Novo Material */}
+      <Dialog open={matNewOpen} onOpenChange={setMatNewOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>Novo Material</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto py-2">
+            <div>
+              <Label className="text-xs">Código *</Label>
+              <Input value={matNewData.codigo} onChange={e => setMatNewData(p => ({...p, codigo: e.target.value}))} placeholder="MAT-031" />
+            </div>
+            <div>
+              <Label className="text-xs">Nome *</Label>
+              <Input value={matNewData.nome} onChange={e => setMatNewData(p => ({...p, nome: e.target.value}))} placeholder="Descrição do material" />
+            </div>
+            <div>
+              <Label className="text-xs">Categoria</Label>
+              <Input value={matNewData.categoria} onChange={e => setMatNewData(p => ({...p, categoria: e.target.value}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Unidade</Label>
+              <Input value={matNewData.unidade} onChange={e => setMatNewData(p => ({...p, unidade: e.target.value}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Tipo Controle</Label>
+              <select value={matNewData.tipo_controle} onChange={e => setMatNewData(p => ({...p, tipo_controle: e.target.value}))} className="w-full h-10 rounded-md border border-input bg-background px-3 text-sm">
+                <option value="MRP">MRP</option>
+                <option value="DUAS_GAVETAS">Duas Gavetas</option>
+              </select>
+            </div>
+            <div>
+              <Label className="text-xs">Lead Time (dias)</Label>
+              <Input type="number" value={matNewData.lead_time_dias} onChange={e => setMatNewData(p => ({...p, lead_time_dias: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Margem Segurança %</Label>
+              <Input type="number" value={matNewData.margem_seguranca_percentual} onChange={e => setMatNewData(p => ({...p, margem_seguranca_percentual: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Valor Unitário</Label>
+              <Input type="number" step="0.01" value={matNewData.valor_unitario} onChange={e => setMatNewData(p => ({...p, valor_unitario: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Estoque Inicial</Label>
+              <Input type="number" value={matNewData.estoque_atual} onChange={e => setMatNewData(p => ({...p, estoque_atual: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Estoque Mínimo</Label>
+              <Input type="number" value={matNewData.estoque_minimo} onChange={e => setMatNewData(p => ({...p, estoque_minimo: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Estoque Máximo</Label>
+              <Input type="number" value={matNewData.estoque_maximo} onChange={e => setMatNewData(p => ({...p, estoque_maximo: Number(e.target.value)}))} />
+            </div>
+            <div>
+              <Label className="text-xs">Consumo Diário</Label>
+              <Input type="number" step="0.1" value={matNewData.consumo_medio_diario} onChange={e => setMatNewData(p => ({...p, consumo_medio_diario: Number(e.target.value)}))} />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setMatNewOpen(false)}>Cancelar</Button>
+            <Button onClick={createNewMaterial} className="bg-cic hover:bg-cic/80 text-white gap-2"><Save className="h-4 w-4" /> Salvar</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
+  };
 
   // === SIDEBAR ===
   const SidebarContent = ({ isCollapsed = false }: { isCollapsed?: boolean }) => (
