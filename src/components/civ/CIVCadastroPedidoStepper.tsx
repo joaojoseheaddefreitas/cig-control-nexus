@@ -483,10 +483,9 @@ export function CIVCadastroPedidoStepper({ open, onOpenChange, pedido, onSave }:
     }));
   }, [margemNum, produtos]);
 
-  const getPreviewOPMask = (globalSeq: number) => {
-    if (totalOPs === 1) return codigoManual;
-    const suffix = String.fromCharCode(64 + globalSeq);
-    return `${codigoManual}-${suffix}`;
+  const getPreviewOPMask = (globalSeq: number, totalOPsCount: number) => {
+    if (totalOPsCount === 1) return codigoManual;
+    return `${codigoManual} ${globalSeq}/${totalOPsCount}`;
   };
 
   const canProceedStep1 = clienteNome && canal && codigoManual;
