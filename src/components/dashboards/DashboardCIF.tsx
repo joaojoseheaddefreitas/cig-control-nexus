@@ -56,8 +56,11 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<CIFDashboardData | null>(null);
   const [showNewTx, setShowNewTx] = useState(false);
+  const [showNewDespesa, setShowNewDespesa] = useState(false);
   const [hoverCard, setHoverCard] = useState<string | null>(null);
   const [newTx, setNewTx] = useState({ tipo: 'DESPESA', categoria: 'materiais', descricao: '', valor: '', data_vencimento: '' });
+  const [newDespesa, setNewDespesa] = useState({ categoria: 'materiais', descricao: '', valor: '', data_emissao: '', status: 'PENDENTE' });
+  const [editingBudgets, setEditingBudgets] = useState<Record<string, string>>({});
   const isMobile = useIsMobile();
 
   const loadData = async () => {
