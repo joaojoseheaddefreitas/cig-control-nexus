@@ -114,9 +114,9 @@ function Step3Prazo({ cargaTotalHoras, clienteBloqueado, codigoManual, clienteNo
               <div className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm">Calculando prazo...</span></div>
             ) : (
               <>
-                <p className="text-2xl font-bold text-foreground">{prazoData}</p>
+                <p className="text-2xl font-bold text-foreground">{dataEntrega ? dataEntrega.toLocaleDateString('pt-BR') : '—'}</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {prazoDias} dias úteis | Carga deste pedido: {cargaTotalHoras.toFixed(1)}h
+                  {prazoDiasTotal} dias úteis | Gargalo: {capacidade?.setorGargaloDias || '—'} ({prazoVendasDias}d)
                   {diasExtras > 0 && <span className="text-destructive font-bold"> (+{diasExtras}d compras)</span>}
                 </p>
               </>
