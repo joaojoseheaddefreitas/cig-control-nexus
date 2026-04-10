@@ -64,6 +64,7 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
   const [showConfigEquil, setShowConfigEquil] = useState(false);
   const [configFin, setConfigFin] = useState({ id: '', impostos_percentual: 8.5, comissoes_percentual: 5.0 });
   const [configFinEdit, setConfigFinEdit] = useState({ impostos_percentual: '8.5', comissoes_percentual: '5.0' });
+  const [auditFilter, setAuditFilter] = useState({ acao: '', risco: '' });
   const isMobile = useIsMobile();
 
   const loadData = async () => {
@@ -367,14 +368,17 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
         await (supabase as any).from('orcamentos').insert({ categoria, valor_limite: novoValor, mes_ano: mesAno });
       }
       // Log audit
+      const valorAntigo = existing ? Number(existing.valor_limite) : null;
       await (supabase as any).from('logs_auditoria').insert({
         usuario: 'sistema',
         acao: 'EDITAR_ORCAMENTO',
-        valor_antigo: existing ? Number(existing.valor_limite) : null,
+        valor_antigo: valorAntigo,
         valor_novo: novoValor,
         detalhes: `Orçamento ${categoria} alterado para R$ ${novoValor.toLocaleString('pt-BR')}`,
         entidade: 'orcamentos',
         entidade_id: existing?.id || null,
+        campo_alterado: 'valor_limite',
+        nivel_risco: valorAntigo && valorAntigo > 0 && Math.abs((novoValor - valorAntigo) / valorAntigo) > 0.2 ? 'ALTO' : 'MEDIO',
       });
       toast.success(`Orçamento de ${categoria} atualizado`);
       setEditingBudgets(prev => { const n = { ...prev }; delete n[categoria]; return n; });
@@ -725,12 +729,27 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
       if (acao.includes('PAGAMENTO') || acao.includes('BAIXA')) return '✅';
       return '📋';
     };
+    const riscoBadge = (r: string) => {
+      if (r === 'ALTO') return 'bg-destructive/20 text-destructive border-destructive/30';
+      if (r === 'MEDIO') return 'bg-warning/20 text-warning border-warning/30';
+      return 'bg-muted text-muted-foreground';
+    };
+    const riscoIcon = (r: string) => r === 'ALTO' ? '🔴' : r === 'MEDIO' ? '🟡' : '⚪';
+
+    const uniqueAcoes = [...new Set(data!.logs.map(l => l.acao))];
+    const filteredLogs = data!.logs.filter(l => {
+      if (auditFilter.acao && l.acao !== auditFilter.acao) return false;
+      if (auditFilter.risco && (l.nivel_risco || 'BAIXO') !== auditFilter.risco) return false;
+      return true;
+    });
+    const altoRiscoCount = data!.logs.filter(l => (l.nivel_risco || 'BAIXO') === 'ALTO').length;
+
     return (
       <div className="space-y-6">
         <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
-          <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria & Compliance</strong> — Registro imutável e automático de todas as operações financeiras. Atualização em tempo real.</p>
+          <p className="text-sm text-muted-foreground"><strong className="text-cif">Auditoria & Compliance</strong> — Registro imutável com classificação de risco e rastreabilidade completa.</p>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <div className="p-3 rounded-lg border border-border/30 bg-card/80">
             <p className="text-xs text-muted-foreground">Total Registros</p>
             <p className="text-lg font-bold text-foreground">{data!.logs.length}</p>
@@ -747,31 +766,66 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
             <p className="text-xs text-muted-foreground">Pagamentos</p>
             <p className="text-lg font-bold text-primary">{data!.logs.filter(l => l.acao.includes('PAGAMENTO') || l.acao.includes('BAIXA')).length}</p>
           </div>
+          <div className={cn("p-3 rounded-lg border bg-card/80", altoRiscoCount > 0 ? 'border-destructive/50' : 'border-border/30')}>
+            <p className="text-xs text-muted-foreground">Risco ALTO 🔴</p>
+            <p className={cn("text-lg font-bold", altoRiscoCount > 0 ? 'text-destructive' : 'text-foreground')}>{altoRiscoCount}</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <Select value={auditFilter.acao} onValueChange={(v) => setAuditFilter(p => ({ ...p, acao: v === '__all__' ? '' : v }))}>
+            <SelectTrigger className="w-[200px] h-8 text-xs"><SelectValue placeholder="Filtrar por ação" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todas as ações</SelectItem>
+              {uniqueAcoes.map(a => <SelectItem key={a} value={a}>{a}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={auditFilter.risco} onValueChange={(v) => setAuditFilter(p => ({ ...p, risco: v === '__all__' ? '' : v }))}>
+            <SelectTrigger className="w-[180px] h-8 text-xs"><SelectValue placeholder="Filtrar por risco" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">Todos os riscos</SelectItem>
+              <SelectItem value="BAIXO">⚪ BAIXO</SelectItem>
+              <SelectItem value="MEDIO">🟡 MÉDIO</SelectItem>
+              <SelectItem value="ALTO">🔴 ALTO</SelectItem>
+            </SelectContent>
+          </Select>
+          {(auditFilter.acao || auditFilter.risco) && (
+            <Button variant="ghost" size="sm" className="h-8 text-xs" onClick={() => setAuditFilter({ acao: '', risco: '' })}>
+              <X className="h-3 w-3 mr-1" />Limpar filtros
+            </Button>
+          )}
+          <span className="text-xs text-muted-foreground self-center ml-auto">{filteredLogs.length} registro(s)</span>
         </div>
         <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
           <ScrollArea className="max-h-[500px]">
             <table className="w-full text-sm">
               <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-                <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground">Data</th>
-                <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground">Ação</th>
-                <th className="text-center py-3 px-4 text-xs font-medium text-muted-foreground">Entidade</th>
-                <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">Valor Anterior</th>
-                <th className="text-right py-3 px-4 text-xs font-medium text-muted-foreground">Valor Novo</th>
-                <th className="text-left py-3 px-4 text-xs font-medium text-muted-foreground">Detalhes</th>
+                <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">Data</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">Risco</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">Ação</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">Entidade</th>
+                <th className="text-center py-2 px-3 text-xs font-medium text-muted-foreground">Campo</th>
+                <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Anterior</th>
+                <th className="text-right py-2 px-3 text-xs font-medium text-muted-foreground">Novo</th>
+                <th className="text-left py-2 px-3 text-xs font-medium text-muted-foreground">Detalhes</th>
               </tr></thead>
               <tbody>
-                {data!.logs.length === 0 ? (
-                  <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">Nenhum log de auditoria registrado.</td></tr>
-                ) : data!.logs.map((log, i) => (
-                  <tr key={i} className="border-b border-border/30 hover:bg-secondary/30">
-                    <td className="py-3 px-4 text-xs text-muted-foreground whitespace-nowrap">{new Date(log.data).toLocaleString('pt-BR')}</td>
-                    <td className="py-3 px-4 text-center"><Badge className={acaoBadge(log.acao)}>{acaoIcon(log.acao)} {log.acao}</Badge></td>
-                    <td className="py-3 px-4 text-center"><Badge variant="outline" className="text-xs">{log.entidade || '-'}</Badge></td>
-                    <td className="py-3 px-4 text-right text-muted-foreground">{log.valor_antigo != null ? fmt(log.valor_antigo) : '-'}</td>
-                    <td className="py-3 px-4 text-right font-medium">{log.valor_novo != null ? fmt(log.valor_novo) : '-'}</td>
-                    <td className="py-3 px-4 text-xs text-muted-foreground max-w-[200px] truncate" title={log.detalhes || ''}>{log.detalhes || '-'}</td>
-                  </tr>
-                ))}
+                {filteredLogs.length === 0 ? (
+                  <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Nenhum registro encontrado.</td></tr>
+                ) : filteredLogs.map((log, i) => {
+                  const risco = log.nivel_risco || 'BAIXO';
+                  return (
+                    <tr key={i} className={cn("border-b border-border/30 hover:bg-secondary/30", risco === 'ALTO' && 'bg-destructive/5')}>
+                      <td className="py-2 px-3 text-xs text-muted-foreground whitespace-nowrap">{new Date(log.data).toLocaleString('pt-BR')}</td>
+                      <td className="py-2 px-3 text-center"><Badge className={cn('text-xs', riscoBadge(risco))}>{riscoIcon(risco)} {risco}</Badge></td>
+                      <td className="py-2 px-3 text-center"><Badge className={cn('text-xs', acaoBadge(log.acao))}>{acaoIcon(log.acao)} {log.acao}</Badge></td>
+                      <td className="py-2 px-3 text-center"><Badge variant="outline" className="text-xs">{log.entidade || '-'}</Badge></td>
+                      <td className="py-2 px-3 text-center text-xs text-muted-foreground">{log.campo_alterado || '-'}</td>
+                      <td className="py-2 px-3 text-right text-xs text-muted-foreground">{log.valor_antigo != null ? fmt(log.valor_antigo) : '-'}</td>
+                      <td className="py-2 px-3 text-right text-xs font-medium">{log.valor_novo != null ? fmt(log.valor_novo) : '-'}</td>
+                      <td className="py-2 px-3 text-xs text-muted-foreground max-w-[180px] truncate" title={log.detalhes || ''}>{log.detalhes || '-'}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </ScrollArea>

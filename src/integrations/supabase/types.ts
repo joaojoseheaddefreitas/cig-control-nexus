@@ -682,33 +682,39 @@ export type Database = {
       logs_auditoria: {
         Row: {
           acao: string
+          campo_alterado: string | null
           data: string
           detalhes: string | null
           entidade: string | null
           entidade_id: string | null
           id: string
+          nivel_risco: string
           usuario: string
           valor_antigo: number | null
           valor_novo: number | null
         }
         Insert: {
           acao?: string
+          campo_alterado?: string | null
           data?: string
           detalhes?: string | null
           entidade?: string | null
           entidade_id?: string | null
           id?: string
+          nivel_risco?: string
           usuario?: string
           valor_antigo?: number | null
           valor_novo?: number | null
         }
         Update: {
           acao?: string
+          campo_alterado?: string | null
           data?: string
           detalhes?: string | null
           entidade?: string | null
           entidade_id?: string | null
           id?: string
+          nivel_risco?: string
           usuario?: string
           valor_antigo?: number | null
           valor_novo?: number | null
