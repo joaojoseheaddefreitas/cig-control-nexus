@@ -41,7 +41,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
         src={heroImg}
         alt="CIG CONTROL"
         className={cn(
-          'relative z-10 w-[340px] md:w-[440px] lg:w-[520px] object-contain drop-shadow-[0_0_60px_rgba(245,158,11,0.35)] transition-transform duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]',
+          'relative z-10 w-full h-full object-cover drop-shadow-[0_0_60px_rgba(245,158,11,0.35)] transition-transform duration-[900ms] ease-[cubic-bezier(0.22,1,0.36,1)]',
           exiting && 'scale-150'
         )}
       />
