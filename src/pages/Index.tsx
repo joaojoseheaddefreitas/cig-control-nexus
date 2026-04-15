@@ -45,22 +45,15 @@ const Index = () => {
     <div className="h-screen bg-black flex flex-col overflow-hidden">
       {showSplash && <SplashScreen onComplete={handleSplashComplete} />}
 
-      {/* Tab bar — staggered entrance */}
-      <div className={cn(
-        'transition-all duration-700 ease-out',
-        !showSplash && dashboardReady
-          ? 'opacity-100 translate-y-0'
-          : 'opacity-0 -translate-y-6'
-      )} style={{ transitionDelay: '100ms' }}>
-        <TopModuleTabs activeModule={activeModule} onModuleChange={setActiveModule} />
-      </div>
+      {/* Tab bar — NO transform wrapper (transform breaks position:fixed) */}
+      <TopModuleTabs activeModule={activeModule} onModuleChange={setActiveModule} />
 
-      {/* Dashboard — rises from behind with depth */}
+      {/* Dashboard */}
       <main className={cn(
-        'flex-1 pt-12 overflow-hidden transition-all duration-700 ease-out',
+        'flex-1 pt-12 overflow-hidden transition-opacity duration-700 ease-out',
         !showSplash && dashboardReady
-          ? 'opacity-100 translate-y-0 scale-100'
-          : 'opacity-0 translate-y-10 scale-95'
+          ? 'opacity-100'
+          : 'opacity-0'
       )} style={{ transitionDelay: '300ms' }}>
         <div className="h-full">
           {renderDashboard()}
