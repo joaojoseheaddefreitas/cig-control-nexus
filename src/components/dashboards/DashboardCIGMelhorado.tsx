@@ -1,12 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, ComposedChart, Line, Legend,
+  ComposedChart, Line, Legend, AreaChart, Area, LineChart,
 } from 'recharts';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import {
   LayoutDashboard, TrendingUp, Factory, DollarSign, Clock,
-  AlertTriangle, Activity, RefreshCw, ShoppingCart, Warehouse, Package,
+  AlertTriangle, Activity, RefreshCw, Warehouse, Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -23,6 +23,26 @@ const CHART_COLORS = {
   laranja: 'hsl(30, 90%, 50%)',
   azulClaro: 'hsl(200, 75%, 50%)',
 };
+
+interface PedidoRow {
+  id: string;
+  status: string;
+  status_producao: string;
+  valor_total: number;
+  canal: string;
+  data_entrada: string;
+  quantidade: number;
+}
+
+interface OPRow {
+  id: string;
+  status_producao: string;
+  current_sector: string | null;
+  tempo_total: number | null;
+  created_at: string;
+  quantidade: number;
+  data_programada: string | null;
+}
 
 interface KPIData {
   totalPedidos: number;
@@ -43,10 +63,68 @@ interface KPIData {
   valorEstoque: number;
   totalPropostaCompra: number;
   cifData: CIFDashboardData | null;
+  // New: time series
+  vendasMensal: { mes: string; valor: number; qtd: number }[];
+  vendasDiario: { dia: string; valor: number; qtd: number }[];
+  producaoMensal: { mes: string; qtd: number }[];
+  producaoDiario: { dia: string; qtd: number }[];
+  comparativoMensal: { mes: string; vendido: number; produzido: number }[];
+  pedidosAtrasados: number;
 }
 
 interface DashboardCIGMelhoradoProps {
   onGoHome?: () => void;
+}
+
+// Helper: format month key
+const mesKey = (d: string) => {
+  const dt = new Date(d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+};
+const mesLabel = (k: string) => {
+  const [y, m] = k.split('-');
+  const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+  return `${names[parseInt(m) - 1]}/${y.slice(2)}`;
+};
+const diaKey = (d: string) => d.slice(0, 10);
+const diaLabel = (k: string) => {
+  const [, m, d] = k.split('-');
+  return `${d}/${m}`;
+};
+
+// Generate example data when DB is empty
+function gerarDadosExemplo() {
+  const meses: { mes: string; valor: number; qtd: number; produzido: number }[] = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+    const vendas = Math.round(80000 + Math.random() * 120000);
+    const qtdVendida = Math.round(15 + Math.random() * 35);
+    const qtdProduzida = Math.round(qtdVendida * (0.75 + Math.random() * 0.35));
+    meses.push({ mes: key, valor: vendas, qtd: qtdVendida, produzido: qtdProduzida });
+  }
+
+  const dias: { dia: string; valor: number; qtd: number; produzido: number }[] = [];
+  for (let i = 13; i >= 0; i--) {
+    const dt = new Date();
+    dt.setDate(dt.getDate() - i);
+    const key = dt.toISOString().slice(0, 10);
+    dias.push({
+      dia: key,
+      valor: Math.round(3000 + Math.random() * 15000),
+      qtd: Math.round(1 + Math.random() * 5),
+      produzido: Math.round(1 + Math.random() * 4),
+    });
+  }
+
+  return {
+    vendasMensal: meses.map(m => ({ mes: m.mes, valor: m.valor, qtd: m.qtd })),
+    vendasDiario: dias.map(d => ({ dia: d.dia, valor: d.valor, qtd: d.qtd })),
+    producaoMensal: meses.map(m => ({ mes: m.mes, qtd: m.produzido })),
+    producaoDiario: dias.map(d => ({ dia: d.dia, qtd: d.produzido })),
+    comparativoMensal: meses.map(m => ({ mes: m.mes, vendido: m.qtd, produzido: m.produzido })),
+  };
 }
 
 export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) {
@@ -56,14 +134,16 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     totalSetores: 0, capacidadeDiaria: 8,
     pedidosPorStatus: [], pedidosPorCanal: [], setoresProducao: [], alertas: [],
     materiaisCriticos: [], valorEstoque: 0, totalPropostaCompra: 0, cifData: null,
+    vendasMensal: [], vendasDiario: [], producaoMensal: [], producaoDiario: [],
+    comparativoMensal: [], pedidosAtrasados: 0,
   });
   const [capacidade, setCapacidade] = useState<CapacidadeFabrica | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [usandoExemplo, setUsandoExemplo] = useState(false);
 
   useEffect(() => {
     loadData();
-    // Realtime: reload when key tables change
     const channel = supabase
       .channel('cig-dashboard-realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => loadData())
@@ -73,17 +153,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'op_route_steps' }, () => loadData())
       .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const loadData = async () => {
     setLoading(true);
     try {
       const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes, materiais, cifData, routeStepsRes, capFabrica] = await Promise.all([
-        supabase.from('pedidos').select('id, status, status_producao, valor_total, canal').order('created_at', { ascending: false }),
-        supabase.from('ops').select('id, status_producao, current_sector, tempo_total').neq('status_producao', 'cancelado'),
+        supabase.from('pedidos').select('id, status, status_producao, valor_total, canal, data_entrada, quantidade').order('created_at', { ascending: false }),
+        supabase.from('ops').select('id, status_producao, current_sector, tempo_total, created_at, quantidade, data_programada').neq('status_producao', 'cancelado'),
         supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle(),
         supabase.from('setores_produtivos').select('*').eq('ativo', true).order('ordem'),
         supabase.from('configuracoes_capacidade').select('capacidade_produtiva_diaria').limit(1).maybeSingle(),
@@ -93,15 +171,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         calcularCapacidadeFabrica(),
       ]);
 
-      const pedidos = pedidosRes.data || [];
-      const ops = opsRes.data || [];
-      // Use bottleneck capacity for hours
+      const pedidos = (pedidosRes.data || []) as PedidoRow[];
+      const ops = (opsRes.data || []) as OPRow[];
       const horasCarteira = capFabrica.horasNecessarias;
       const setores = setoresRes.data || [];
       const capacidadeDiaria = capFabrica.capacidadeDiaria > 0 ? capFabrica.capacidadeDiaria : (configRes.data ? Number(configRes.data.capacidade_produtiva_diaria) : 8);
       const routeSteps = routeStepsRes.data || [];
       setCapacidade(capFabrica);
 
+      // Status breakdown
       const statusMap: Record<string, number> = {};
       pedidos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
       const statusLabels: Record<string, string> = {
@@ -112,6 +190,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         .filter(([s]) => s !== 'cancelado')
         .map(([status, count]) => ({ status: statusLabels[status] || status, count }));
 
+      // Canal breakdown
       const canalMap: Record<string, number> = {};
       pedidos.filter(p => p.status !== 'cancelado').forEach(p => {
         const canal = p.canal || 'Outros';
@@ -121,7 +200,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         .map(([canal, valor]) => ({ canal, valor }))
         .sort((a, b) => b.valor - a.valor);
 
-      // Calculate per-sector load from route steps of active (non-finalized) OPs
+      // Sector load
       const activeOpIds = new Set(ops.filter(o => o.status_producao !== 'Producao Finalizada').map(o => o.id));
       const setorCargaMap: Record<string, number> = {};
       (routeSteps as any[]).forEach((step: any) => {
@@ -129,18 +208,10 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           setorCargaMap[step.setor_id] = (setorCargaMap[step.setor_id] || 0) + Number(step.tempo_estimado || 0);
         }
       });
-
       const setoresProducaoData = setores.map((s: any) => {
         const cap = (s.mao_de_obra + s.maquinas_automaticas) * s.horas_turno * s.eficiencia;
-        return {
-          nome: s.nome.replace(' / ', '/').substring(0, 16),
-          opsAtivas: 0,
-          capacidade: cap,
-          carga: setorCargaMap[s.id] || 0,
-        };
+        return { nome: s.nome.replace(' / ', '/').substring(0, 16), opsAtivas: 0, capacidade: cap, carga: setorCargaMap[s.id] || 0 };
       });
-
-      // OPs por setor (current_sector)
       ops.forEach(op => {
         if (op.current_sector) {
           const found = setoresProducaoData.find(s => op.current_sector?.includes(s.nome.substring(0, 8)));
@@ -152,11 +223,92 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       const valorEstoque = materiais.reduce((s, m) => s + (m.valor_estoque || 0), 0);
       const totalPropostaCompra = materiais.reduce((s, m) => s + (m.proposta_compra || 0) * m.valor_unitario, 0);
 
-      // Alertas inteligentes
-      const alertas: string[] = [];
-      const pedidosAtivos = pedidos.filter(p => p.status !== 'cancelado' && p.status !== 'finalizado');
-      const diasCarteira = capacidadeDiaria > 0 ? Math.ceil(horasCarteira / capacidadeDiaria) : 0;
+      // === TIME SERIES ===
+      const pedidosAtivos = pedidos.filter(p => p.status !== 'cancelado');
 
+      // Vendas mensal
+      const vendasMensalMap: Record<string, { valor: number; qtd: number }> = {};
+      pedidosAtivos.forEach(p => {
+        const k = mesKey(p.data_entrada);
+        if (!vendasMensalMap[k]) vendasMensalMap[k] = { valor: 0, qtd: 0 };
+        vendasMensalMap[k].valor += Number(p.valor_total || 0);
+        vendasMensalMap[k].qtd += Number(p.quantidade || 0);
+      });
+      const vendasMensal = Object.entries(vendasMensalMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-6)
+        .map(([mes, d]) => ({ mes, ...d }));
+
+      // Vendas diário (last 14 days)
+      const vendasDiarioMap: Record<string, { valor: number; qtd: number }> = {};
+      pedidosAtivos.forEach(p => {
+        const k = diaKey(p.data_entrada);
+        if (!vendasDiarioMap[k]) vendasDiarioMap[k] = { valor: 0, qtd: 0 };
+        vendasDiarioMap[k].valor += Number(p.valor_total || 0);
+        vendasDiarioMap[k].qtd += Number(p.quantidade || 0);
+      });
+      const vendasDiario = Object.entries(vendasDiarioMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-14)
+        .map(([dia, d]) => ({ dia, ...d }));
+
+      // Produção mensal (OPs finalizadas by created_at)
+      const producaoMensalMap: Record<string, number> = {};
+      ops.forEach(op => {
+        if (op.status_producao === 'Producao Finalizada') {
+          const k = mesKey(op.created_at);
+          producaoMensalMap[k] = (producaoMensalMap[k] || 0) + Number(op.quantidade || 1);
+        }
+      });
+      const producaoMensal = Object.entries(producaoMensalMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-6)
+        .map(([mes, qtd]) => ({ mes, qtd }));
+
+      // Produção diária
+      const producaoDiarioMap: Record<string, number> = {};
+      ops.forEach(op => {
+        if (op.status_producao === 'Producao Finalizada') {
+          const k = diaKey(op.created_at);
+          producaoDiarioMap[k] = (producaoDiarioMap[k] || 0) + Number(op.quantidade || 1);
+        }
+      });
+      const producaoDiario = Object.entries(producaoDiarioMap)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .slice(-14)
+        .map(([dia, qtd]) => ({ dia, qtd }));
+
+      // Comparativo vendido vs produzido (mensal)
+      const allMonths = new Set([...Object.keys(vendasMensalMap), ...Object.keys(producaoMensalMap)]);
+      const comparativoMensal = Array.from(allMonths)
+        .sort()
+        .slice(-6)
+        .map(mes => ({
+          mes,
+          vendido: vendasMensalMap[mes]?.qtd || 0,
+          produzido: producaoMensalMap[mes] || 0,
+        }));
+
+      // Pedidos atrasados
+      const hoje = new Date().toISOString().slice(0, 10);
+      const pedidosAtrasados = pedidos.filter(p =>
+        p.status !== 'cancelado' && p.status !== 'finalizado' &&
+        p.status_producao !== 'Producao Finalizada'
+      ).length; // simplified: count active non-finalized
+
+      // Check if we have enough data for charts
+      const temDadosGraficos = vendasMensal.length > 0 || producaoMensal.length > 0;
+      let dadosExemplo: ReturnType<typeof gerarDadosExemplo> | null = null;
+      if (!temDadosGraficos) {
+        dadosExemplo = gerarDadosExemplo();
+        setUsandoExemplo(true);
+      } else {
+        setUsandoExemplo(false);
+      }
+
+      // Alertas
+      const alertas: string[] = [];
+      const diasCarteira = capacidadeDiaria > 0 ? Math.ceil(horasCarteira / capacidadeDiaria) : 0;
       if (diasCarteira > 15) alertas.push(`🔴 Sobrecarga: ${diasCarteira} dias de carteira (>15 dias)`);
       else if (diasCarteira > 10) alertas.push(`🟡 Carga alta: ${diasCarteira} dias de carteira`);
 
@@ -167,7 +319,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       if (materiaisCriticos.length > 3) alertas.push(`🔴 ${materiaisCriticos.length} materiais em nível CRÍTICO`);
       else if (materiaisCriticos.length > 0) alertas.push(`🟡 ${materiaisCriticos.length} material(is) em nível crítico`);
 
-      // Sector overload
       const overloaded = setoresProducaoData.filter(s => s.capacidade > 0 && (s.carga / s.capacidade) > 0.9);
       if (overloaded.length > 0) alertas.push(`🟡 ${overloaded.length} setor(es) com carga >90%`);
 
@@ -178,7 +329,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       if (alertas.length === 0) alertas.push('✅ Operação normal — sem alertas críticos');
 
       setKpis({
-        totalPedidos: pedidos.filter(p => p.status !== 'cancelado').length,
+        totalPedidos: pedidosAtivos.length,
         pedidosEmProducao: pedidos.filter(p => p.status === 'programado' || p.status === 'em_producao').length,
         pedidosAguardando: aguardando,
         pedidosFinalizados: pedidos.filter(p => p.status === 'finalizado').length,
@@ -188,6 +339,12 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         totalSetores: setores.length, capacidadeDiaria,
         pedidosPorStatus, pedidosPorCanal, setoresProducao: setoresProducaoData,
         alertas, materiaisCriticos, valorEstoque, totalPropostaCompra, cifData,
+        vendasMensal: dadosExemplo ? dadosExemplo.vendasMensal : vendasMensal,
+        vendasDiario: dadosExemplo ? dadosExemplo.vendasDiario : vendasDiario,
+        producaoMensal: dadosExemplo ? dadosExemplo.producaoMensal : producaoMensal,
+        producaoDiario: dadosExemplo ? dadosExemplo.producaoDiario : producaoDiario,
+        comparativoMensal: dadosExemplo ? dadosExemplo.comparativoMensal : comparativoMensal,
+        pedidosAtrasados,
       });
       setLastUpdate(new Date());
     } catch (e) {
@@ -196,12 +353,14 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     setLoading(false);
   };
 
-  const temDados = kpis.totalPedidos > 0;
+  const temDados = kpis.totalPedidos > 0 || usandoExemplo;
   const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
   const cargaPercentual = capacidade ? capacidade.percentualOcupacao : 0;
   const prazoVendas = capacidade?.prazoVendasDias ?? 0;
   const gargaloNome = capacidade?.setorGargaloDias ?? 'N/A';
   const fmt = (v: number) => v >= 999500 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
+
+  const tooltipStyle = { backgroundColor: 'hsl(220, 20%, 14%)', border: '1px solid hsl(220, 18%, 22%)', borderRadius: '8px', color: 'hsl(210, 20%, 95%)' };
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in h-full overflow-y-auto">
@@ -223,33 +382,18 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Atualizar
           </Button>
-          <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-success/10 border border-success/30">
-            <div className="w-2 h-2 rounded-full bg-success animate-pulse" />
-            <span className="text-sm text-success font-medium">Dados Reais</span>
+          <div className={cn('flex items-center gap-2 px-4 py-2 rounded-lg border',
+            usandoExemplo
+              ? 'bg-warning/10 border-warning/30'
+              : 'bg-success/10 border-success/30'
+          )}>
+            <div className={cn('w-2 h-2 rounded-full animate-pulse', usandoExemplo ? 'bg-warning' : 'bg-success')} />
+            <span className={cn('text-sm font-medium', usandoExemplo ? 'text-warning' : 'text-success')}>
+              {usandoExemplo ? 'Dados de Exemplo' : 'Dados Reais'}
+            </span>
           </div>
         </div>
       </div>
-
-      {!temDados && !loading && (
-        <div className="p-6 rounded-xl border-2 border-warning/30 bg-warning/10 text-center">
-          <AlertTriangle className="h-8 w-8 text-warning mx-auto mb-2" />
-          <p className="font-medium text-foreground">Sem dados cadastrados – insira dados para iniciar o monitoramento.</p>
-        </div>
-      )}
-
-      {/* Alerta Pulsante – Materiais Críticos */}
-      {kpis.materiaisCriticos.length > 0 && (
-        <div className="p-4 rounded-xl border-2 border-destructive/50 bg-destructive/10 animate-pulse flex items-center gap-3">
-          <AlertTriangle className="h-6 w-6 text-destructive flex-shrink-0" />
-          <div>
-            <p className="font-bold text-destructive text-sm">⚠️ AGUARDANDO COMPRAS — {kpis.materiaisCriticos.length} material(is) em nível crítico</p>
-            <p className="text-xs text-destructive/80 mt-0.5">
-              {kpis.materiaisCriticos.slice(0, 5).map(m => m.nome).join(', ')}
-              {kpis.materiaisCriticos.length > 5 && ` e mais ${kpis.materiaisCriticos.length - 5}...`}
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* Alertas */}
       {kpis.alertas.length > 0 && (
@@ -267,10 +411,10 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       )}
 
-      {/* KPIs Row 1 - Vendas & Produção */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-        {/* PRAZO DE VENDAS - KPI mestre */}
-        <div className={cn('p-4 rounded-xl border-2 col-span-1',
+      {/* KPIs Row 1 */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        {/* PRAZO DE VENDAS */}
+        <div className={cn('p-4 rounded-xl border-2',
           prazoVendas > 20 ? 'bg-destructive/15 border-destructive/50' : prazoVendas > 12 ? 'bg-warning/15 border-warning/50' : 'bg-success/10 border-success/30'
         )}>
           <div className="flex items-center justify-between mb-2">
@@ -282,7 +426,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-[10px] text-muted-foreground mt-0.5">Gargalo: {gargaloNome}</p>
         </div>
 
-        {/* CARTEIRA */}
+        {/* PEDIDOS */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-civ/20 to-civ/5 border border-civ/30">
           <div className="flex items-center justify-between mb-2">
             <TrendingUp className="h-5 w-5 text-civ" />
@@ -293,6 +437,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-xs text-civ mt-1">{kpis.pedidosAguardando} aguardando</p>
         </div>
 
+        {/* EM PRODUÇÃO */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-cip/20 to-cip/5 border border-cip/30">
           <div className="flex items-center justify-between mb-2">
             <Factory className="h-5 w-5 text-cip" />
@@ -303,6 +448,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-xs text-cip mt-1">{kpis.totalOPs} OPs | {kpis.opsEmProducao} ativas</p>
         </div>
 
+        {/* CARTEIRA */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-success/20 to-success/5 border border-success/30">
           <div className="flex items-center justify-between mb-2">
             <DollarSign className="h-5 w-5 text-success" />
@@ -313,16 +459,23 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-xs text-success mt-1">{kpis.pedidosFinalizados} finalizados</p>
         </div>
 
+        {/* CAPACIDADE */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-warning/20 to-warning/5 border border-warning/30">
           <div className="flex items-center justify-between mb-2">
-            <Clock className="h-5 w-5 text-warning" />
-            <span className="text-xs text-muted-foreground">HORAS</span>
+            <Activity className="h-5 w-5 text-warning" />
+            <span className="text-xs text-muted-foreground">CAPAC.</span>
           </div>
-          <p className="text-3xl font-bold text-foreground">{kpis.horasCarteira.toFixed(0)}h</p>
-          <p className="text-xs text-muted-foreground mt-1">Horas Necessárias</p>
-          <p className="text-xs text-warning mt-1">≈ {diasCarteira} dias | Cap: {capacidade?.capacidadeFabrica.toFixed(0) || 0}h</p>
+          <p className={cn('text-3xl font-bold', cargaPercentual > 100 ? 'text-destructive' : cargaPercentual > 80 ? 'text-warning' : 'text-success')}>
+            {cargaPercentual}%
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">Utilizada</p>
+          <div className="w-full h-1.5 rounded-full bg-secondary mt-2 overflow-hidden">
+            <div className={cn('h-full rounded-full transition-all', cargaPercentual > 100 ? 'bg-destructive' : cargaPercentual > 80 ? 'bg-warning' : 'bg-success')}
+              style={{ width: `${Math.min(cargaPercentual, 100)}%` }} />
+          </div>
         </div>
 
+        {/* ESTOQUE */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-cic/20 to-cic/5 border border-cic/30">
           <div className="flex items-center justify-between mb-2">
             <Warehouse className="h-5 w-5 text-cic" />
@@ -331,10 +484,11 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-2xl font-bold text-foreground">{fmt(kpis.valorEstoque)}</p>
           <p className="text-xs text-muted-foreground mt-1">Estoque Total</p>
           <p className={cn('text-xs mt-1', kpis.materiaisCriticos.length > 0 ? 'text-destructive' : 'text-success')}>
-            {kpis.materiaisCriticos.length} material(is) crítico(s)
+            {kpis.materiaisCriticos.length} crítico(s)
           </p>
         </div>
 
+        {/* FINANCEIRO */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-cif/20 to-cif/5 border border-cif/30">
           <div className="flex items-center justify-between mb-2">
             <DollarSign className="h-5 w-5 text-cif" />
@@ -348,117 +502,186 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       </div>
 
-      {/* KPIs Row 2 - Financeiro */}
-      {kpis.cifData && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div className="p-3 rounded-xl bg-card border border-border/30">
-            <p className="text-xs text-muted-foreground">Ponto de Equilíbrio</p>
-            <p className="text-xl font-bold text-foreground">{fmt(kpis.cifData.pontoEquilibrio)}</p>
-            <p className={cn('text-xs mt-1', kpis.cifData.faturamento > kpis.cifData.pontoEquilibrio ? 'text-success' : 'text-destructive')}>
-              {kpis.cifData.faturamento > kpis.cifData.pontoEquilibrio ? '🟢 ACIMA' : '🔴 ABAIXO'}
-            </p>
-          </div>
-          <div className="p-3 rounded-xl bg-card border border-border/30">
-            <p className="text-xs text-muted-foreground">Margem Líquida</p>
-            {(() => { const ml = kpis.cifData.receita > 0 ? (kpis.cifData.ebitda / kpis.cifData.receita) * 100 : 0; return (<><p className="text-xl font-bold text-foreground">{ml.toFixed(1)}%</p><p className={cn('text-xs mt-1', ml >= 15 ? 'text-success' : 'text-warning')}>{ml >= 15 ? 'Meta atingida' : 'Abaixo da meta (15%)'}</p></>); })()}
-          </div>
-          <div className="p-3 rounded-xl bg-card border border-border/30">
-            <p className="text-xs text-muted-foreground">Capacidade × Carga</p>
-            <p className={cn('text-xl font-bold', cargaPercentual > 100 ? 'text-destructive' : cargaPercentual > 80 ? 'text-warning' : 'text-success')}>
-              {cargaPercentual}%
-            </p>
-            <div className="w-full h-2 rounded-full bg-secondary mt-2 overflow-hidden">
-              <div className={cn('h-full rounded-full', cargaPercentual > 100 ? 'bg-destructive' : cargaPercentual > 80 ? 'bg-warning' : 'bg-success')}
-                style={{ width: `${Math.min(cargaPercentual, 100)}%` }} />
-            </div>
-          </div>
-          <div className="p-3 rounded-xl bg-card border border-border/30">
-            <p className="text-xs text-muted-foreground">Proposta Compras</p>
-            <p className="text-xl font-bold text-foreground">{fmt(kpis.totalPropostaCompra)}</p>
-            <p className="text-xs text-cic mt-1">{kpis.materiaisCriticos.length} material(is) crítico(s)</p>
-          </div>
-        </div>
-      )}
-
-      {/* Charts Row 1 */}
+      {/* === VENDAS === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="Pedidos por Status" variant="civ">
+        {/* Vendas Mensal */}
+        <ModuleCard title="📊 Vendas — Mensal (R$)" variant="civ">
           <div className="h-64">
-            {kpis.pedidosPorStatus.length > 0 ? (
+            {kpis.vendasMensal.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={kpis.pedidosPorStatus}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="status" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} />
-                  <Bar dataKey="count" fill={CHART_COLORS.verde} radius={[4, 4, 0, 0]} name="Pedidos" />
-                </BarChart>
+                <AreaChart data={kpis.vendasMensal.map(v => ({ ...v, label: mesLabel(v.mes) }))}>
+                  <defs>
+                    <linearGradient id="gradVendas" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.4} />
+                      <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Valor']} />
+                  <Area type="monotone" dataKey="valor" stroke={CHART_COLORS.verde} fill="url(#gradVendas)" strokeWidth={2.5} name="Vendas" />
+                </AreaChart>
               </ResponsiveContainer>
-            ) : <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Sem dados</div>}
+            ) : <EmptyChart />}
           </div>
         </ModuleCard>
 
-        <ModuleCard title="Valor por Canal de Venda" variant="civ">
+        {/* Vendas Diário */}
+        <ModuleCard title="📈 Vendas — Diário (R$)" variant="civ">
           <div className="h-64">
-            {kpis.pedidosPorCanal.length > 0 ? (
+            {kpis.vendasDiario.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={kpis.pedidosPorCanal}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="canal" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, 'Valor']} />
-                  <Bar dataKey="valor" fill={CHART_COLORS.azulMarinho} radius={[4, 4, 0, 0]} name="Valor" />
+                <BarChart data={kpis.vendasDiario.map(v => ({ ...v, label: diaLabel(v.dia) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Valor']} />
+                  <Bar dataKey="valor" fill={CHART_COLORS.verde} radius={[4, 4, 0, 0]} name="Vendas" />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Sem dados</div>}
+            ) : <EmptyChart />}
           </div>
         </ModuleCard>
       </div>
 
-      {/* Charts Row 2 - Produção & Financeiro */}
+      {/* === PRODUÇÃO === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="Carga por Setor (horas)" variant="cip">
+        {/* Produção Mensal */}
+        <ModuleCard title="🏭 Produção — Mensal (Qtd)" variant="cip">
+          <div className="h-64">
+            {kpis.producaoMensal.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={kpis.producaoMensal.map(v => ({ ...v, label: mesLabel(v.mes) }))}>
+                  <defs>
+                    <linearGradient id="gradProducao" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS.laranja} stopOpacity={0.4} />
+                      <stop offset="95%" stopColor={CHART_COLORS.laranja} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Area type="monotone" dataKey="qtd" stroke={CHART_COLORS.laranja} fill="url(#gradProducao)" strokeWidth={2.5} name="Produzido" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+
+        {/* Produção Diária */}
+        <ModuleCard title="⚡ Produção — Diária (Qtd)" variant="cip">
+          <div className="h-64">
+            {kpis.producaoDiario.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={kpis.producaoDiario.map(v => ({ ...v, label: diaLabel(v.dia) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Bar dataKey="qtd" fill={CHART_COLORS.laranja} radius={[4, 4, 0, 0]} name="Produzido" />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+      </div>
+
+      {/* === ANÁLISE === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Comparativo Vendido vs Produzido */}
+        <ModuleCard title="🔄 Vendido vs Produzido (Mensal)" variant="cig">
+          <div className="h-64">
+            {kpis.comparativoMensal.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={kpis.comparativoMensal.map(v => ({ ...v, label: mesLabel(v.mes) }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                  <Tooltip contentStyle={tooltipStyle} />
+                  <Legend />
+                  <Bar dataKey="vendido" fill={CHART_COLORS.verde} radius={[4, 4, 0, 0]} name="Vendido" />
+                  <Bar dataKey="produzido" fill={CHART_COLORS.laranja} radius={[4, 4, 0, 0]} name="Produzido" />
+                  <Line type="monotone" dataKey="vendido" stroke={CHART_COLORS.verde} strokeWidth={2} dot={false} name="Tendência Vendas" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+
+        {/* Carga por Setor */}
+        <ModuleCard title="⚙️ Carga por Setor (horas)" variant="cip">
           <div className="h-64">
             {kpis.setoresProducao.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={kpis.setoresProducao} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                  <YAxis type="category" dataKey="nome" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 9 }} width={110} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`${value.toFixed(1)}h`, '']} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" horizontal={false} />
+                  <XAxis type="number" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                  <YAxis type="category" dataKey="nome" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 9 }} width={110} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v.toFixed(1)}h`, '']} />
                   <Legend />
-                  <Bar dataKey="carga" fill={CHART_COLORS.laranja} radius={[0, 4, 4, 0]} name="Carga Programada" />
-                  <Bar dataKey="capacidade" fill={CHART_COLORS.azulClaro} radius={[0, 4, 4, 0]} name="Capacidade" opacity={0.4} />
+                  <Bar dataKey="carga" fill={CHART_COLORS.laranja} radius={[0, 4, 4, 0]} name="Carga" />
+                  <Bar dataKey="capacidade" fill={CHART_COLORS.azulClaro} radius={[0, 4, 4, 0]} name="Capacidade" opacity={0.35} />
                 </BarChart>
               </ResponsiveContainer>
-            ) : <div className="h-full flex items-center justify-center text-muted-foreground text-sm">Sem dados</div>}
+            ) : <EmptyChart />}
           </div>
         </ModuleCard>
-
-        {kpis.cifData && kpis.cifData.receitaMensal.some(r => r.receita > 0) ? (
-          <ModuleCard title="Receita × Ponto de Equilíbrio" variant="cif">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={kpis.cifData.receitaMensal.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: kpis.cifData!.pontoEquilibrio }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                  <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} />
-                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }} formatter={(value: number) => [`R$ ${value.toLocaleString('pt-BR')}`, '']} />
-                  <Legend />
-                  <Bar dataKey="faturamento" fill={CHART_COLORS.verde} name="Faturamento" radius={[4, 4, 0, 0]} />
-                  <Line type="monotone" dataKey="equilibrio" stroke={CHART_COLORS.vermelho} strokeWidth={2} strokeDasharray="5 5" name="Ponto Equilíbrio" dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          </ModuleCard>
-        ) : (
-          <ModuleCard title="Resultado Financeiro" variant="cif">
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
-              Sem dados cadastrados – insira dados para iniciar o monitoramento.
-            </div>
-          </ModuleCard>
-        )}
       </div>
+
+      {/* Financeiro Row */}
+      {kpis.cifData && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <p className="text-xs text-muted-foreground">Ponto de Equilíbrio</p>
+              <p className="text-xl font-bold text-foreground">{fmt(kpis.cifData.pontoEquilibrio)}</p>
+              <p className={cn('text-xs mt-1', kpis.cifData.faturamento > kpis.cifData.pontoEquilibrio ? 'text-success' : 'text-destructive')}>
+                {kpis.cifData.faturamento > kpis.cifData.pontoEquilibrio ? '🟢 ACIMA' : '🔴 ABAIXO'}
+              </p>
+            </div>
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <p className="text-xs text-muted-foreground">Margem Líquida</p>
+              {(() => { const ml = kpis.cifData!.receita > 0 ? (kpis.cifData!.ebitda / kpis.cifData!.receita) * 100 : 0; return (<><p className="text-xl font-bold text-foreground">{ml.toFixed(1)}%</p><p className={cn('text-xs mt-1', ml >= 15 ? 'text-success' : 'text-warning')}>{ml >= 15 ? 'Meta atingida' : 'Abaixo da meta (15%)'}</p></>); })()}
+            </div>
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <p className="text-xs text-muted-foreground">Proposta Compras</p>
+              <p className="text-xl font-bold text-foreground">{fmt(kpis.totalPropostaCompra)}</p>
+              <p className="text-xs text-cic mt-1">{kpis.materiaisCriticos.length} crítico(s)</p>
+            </div>
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <p className="text-xs text-muted-foreground">Pedidos Atrasados</p>
+              <p className={cn('text-xl font-bold', kpis.pedidosAtrasados > 5 ? 'text-destructive' : kpis.pedidosAtrasados > 0 ? 'text-warning' : 'text-success')}>
+                {kpis.pedidosAtrasados}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">sem finalizar</p>
+            </div>
+          </div>
+
+          {kpis.cifData.receitaMensal.some(r => r.receita > 0) ? (
+            <ModuleCard title="💰 Receita × Ponto de Equilíbrio" variant="cif">
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={kpis.cifData.receitaMensal.map(r => ({ mes: r.mes, faturamento: r.receita, equilibrio: kpis.cifData!.pontoEquilibrio }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                    <XAxis dataKey="mes" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
+                    <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, '']} />
+                    <Legend />
+                    <Bar dataKey="faturamento" fill={CHART_COLORS.verde} name="Faturamento" radius={[4, 4, 0, 0]} />
+                    <Line type="monotone" dataKey="equilibrio" stroke={CHART_COLORS.vermelho} strokeWidth={2} strokeDasharray="5 5" name="Ponto Equilíbrio" dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </ModuleCard>
+          ) : (
+            <ModuleCard title="💰 Resultado Financeiro" variant="cif">
+              <EmptyChart />
+            </ModuleCard>
+          )}
+        </div>
+      )}
 
       {/* Materiais Críticos */}
       {kpis.materiaisCriticos.length > 0 && (
@@ -487,6 +710,23 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
       )}
+
+      {usandoExemplo && (
+        <div className="text-center py-4 border-t border-border/30">
+          <p className="text-xs text-muted-foreground">
+            📋 Os gráficos de vendas e produção exibem <span className="text-warning font-medium">dados de exemplo</span> para demonstração.
+            Cadastre pedidos e OPs para visualizar dados reais.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EmptyChart() {
+  return (
+    <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
+      Sem dados cadastrados
     </div>
   );
 }
