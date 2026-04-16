@@ -171,7 +171,7 @@ export function GlobalSidebar({ activeModule, onModuleChange }: GlobalSidebarPro
       {/* Botão de colapsar */}
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="absolute -right-5 top-20 w-10 h-10 bg-primary border-2 border-primary/50 rounded-full flex items-center justify-center hover:bg-primary/80 hover:scale-110 transition-all z-50 shadow-lg shadow-primary/30 text-primary-foreground"
+        className="absolute -right-3 top-20 w-7 h-7 bg-primary border border-primary/50 rounded-full flex items-center justify-center hover:bg-primary/80 hover:scale-110 transition-all z-50 shadow-md shadow-primary/20 text-primary-foreground"
       >
         {collapsed ? <ChevronRight className="h-5 w-5" /> : <ChevronLeft className="h-5 w-5" />}
       </button>
