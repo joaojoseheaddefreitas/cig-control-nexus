@@ -91,39 +91,48 @@ const diaLabel = (k: string) => {
   return `${d}/${m}`;
 };
 
-// Generate example data when DB is empty
+// Generate example data when DB is empty — mês corrente, dias úteis (seg-sex)
 function gerarDadosExemplo() {
-  const meses: { mes: string; valor: number; qtd: number; produzido: number }[] = [];
   const now = new Date();
-  for (let i = 5; i >= 0; i--) {
-    const dt = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    const vendas = Math.round(80000 + Math.random() * 120000);
-    const qtdVendida = Math.round(15 + Math.random() * 35);
-    const qtdProduzida = Math.round(qtdVendida * (0.75 + Math.random() * 0.35));
-    meses.push({ mes: key, valor: vendas, qtd: qtdVendida, produzido: qtdProduzida });
-  }
+  const ano = now.getFullYear();
+  const mes = now.getMonth();
+  const ultimoDia = new Date(ano, mes + 1, 0).getDate();
 
-  const dias: { dia: string; valor: number; qtd: number; produzido: number }[] = [];
-  for (let i = 13; i >= 0; i--) {
-    const dt = new Date();
-    dt.setDate(dt.getDate() - i);
+  const vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[] = [];
+  const producaoMesAtual: { dia: string; label: string; qtd: number; horas: number }[] = [];
+
+  for (let d = 1; d <= ultimoDia; d++) {
+    const dt = new Date(ano, mes, d);
+    const dow = dt.getDay();
+    if (dow === 0 || dow === 6) continue; // só dias úteis
     const key = dt.toISOString().slice(0, 10);
-    dias.push({
-      dia: key,
-      valor: Math.round(3000 + Math.random() * 15000),
-      qtd: Math.round(1 + Math.random() * 5),
-      produzido: Math.round(1 + Math.random() * 4),
+    const label = String(d).padStart(2, '0');
+    vendasMesAtual.push({
+      dia: key, label,
+      valor: Math.round(2500 + Math.random() * 12000),
+      qtd: Math.round(1 + Math.random() * 4),
+    });
+    producaoMesAtual.push({
+      dia: key, label,
+      qtd: Math.round(1 + Math.random() * 4),
+      horas: Math.round(20 + Math.random() * 60),
     });
   }
 
-  return {
-    vendasMensal: meses.map(m => ({ mes: m.mes, valor: m.valor, qtd: m.qtd })),
-    vendasDiario: dias.map(d => ({ dia: d.dia, valor: d.valor, qtd: d.qtd })),
-    producaoMensal: meses.map(m => ({ mes: m.mes, qtd: m.produzido })),
-    producaoDiario: dias.map(d => ({ dia: d.dia, qtd: d.produzido })),
-    comparativoMensal: meses.map(m => ({ mes: m.mes, vendido: m.qtd, produzido: m.produzido })),
-  };
+  // Comparativo anual (12 meses)
+  const comparativoAnual: { mes: string; vendido: number; produzido: number }[] = [];
+  for (let i = 11; i >= 0; i--) {
+    const dt = new Date(ano, mes - i, 1);
+    const k = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+    const vendido = Math.round(80000 + Math.random() * 120000);
+    comparativoAnual.push({
+      mes: k,
+      vendido,
+      produzido: Math.round(vendido * (0.75 + Math.random() * 0.30)),
+    });
+  }
+
+  return { vendasMesAtual, producaoMesAtual, comparativoAnual };
 }
 
 export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) {
