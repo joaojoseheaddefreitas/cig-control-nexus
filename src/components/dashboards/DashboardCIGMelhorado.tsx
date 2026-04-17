@@ -63,12 +63,11 @@ interface KPIData {
   valorEstoque: number;
   totalPropostaCompra: number;
   cifData: CIFDashboardData | null;
-  // New: time series
-  vendasMensal: { mes: string; valor: number; qtd: number }[];
-  vendasDiario: { dia: string; valor: number; qtd: number }[];
-  producaoMensal: { mes: string; qtd: number }[];
-  producaoDiario: { dia: string; qtd: number }[];
-  comparativoMensal: { mes: string; vendido: number; produzido: number }[];
+  // Unified series — vendas e produção do mês corrente (por dia útil)
+  vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[];
+  producaoMesAtual: { dia: string; label: string; qtd: number; horas: number }[];
+  // Comparativo anual (vendido vs produzido em valor)
+  comparativoAnual: { mes: string; vendido: number; produzido: number }[];
   pedidosAtrasados: number;
 }
 
