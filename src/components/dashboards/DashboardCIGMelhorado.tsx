@@ -345,34 +345,40 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         setUsandoExemplo(false);
       }
 
-      // === ALERTAS — APENAS BASEADOS EM DADOS REAIS ===
+      // === ALERTAS — ÚNICA FONTE DE VERDADE: capFabrica (mesmo motor do CIP) ===
       const alertas: string[] = [];
-      const diasCarteiraReal = capFabrica.diasNecessarios;
+      // Prazo de vendas = MAX(diasGargalo) + folga — MESMA fonte do KPI "PRAZO" do CIP
+      const prazoVendasReal = capFabrica.prazoVendasDias;
 
-      // Sobrecarga: usa cálculo do PCP 3.0 (mesma fonte do KPI "PRAZO")
-      if (pedidosAtivos.length > 0 && diasCarteiraReal > 15) {
-        alertas.push(`🔴 Sobrecarga: ${diasCarteiraReal} dias de carteira (>15 dias)`);
-      } else if (pedidosAtivos.length > 0 && diasCarteiraReal > 10) {
-        alertas.push(`🟡 Carga alta: ${diasCarteiraReal} dias de carteira`);
+      // Sobrecarga real: baseada no prazo do gargalo (não no cálculo médio)
+      if (pedidosAtivos.length > 0 && prazoVendasReal > 25) {
+        alertas.push(`🔴 Sobrecarga crítica: ${prazoVendasReal}d de prazo (gargalo: ${capFabrica.setorGargaloDias})`);
+      } else if (pedidosAtivos.length > 0 && prazoVendasReal > 18) {
+        alertas.push(`🟡 Carga alta: ${prazoVendasReal}d de prazo (gargalo: ${capFabrica.setorGargaloDias})`);
       }
 
+      // Pedidos aguardando programação — só status 'aguardando' (real)
       const aguardando = pedidos.filter(p => p.status === 'aguardando').length;
-      if (aguardando > 3) alertas.push(`🔴 ${aguardando} pedidos aguardando programação`);
+      if (aguardando > 10) alertas.push(`🔴 ${aguardando} pedidos aguardando programação`);
       else if (aguardando > 0) alertas.push(`🟡 ${aguardando} pedido(s) aguardando programação`);
 
-      // Materiais críticos — apenas se houver materiais cadastrados
-      if (materiais.length > 0) {
-        if (materiaisCriticos.length > 3) alertas.push(`🔴 ${materiaisCriticos.length} materiais em nível CRÍTICO`);
-        else if (materiaisCriticos.length > 0) alertas.push(`🟡 ${materiaisCriticos.length} material(is) em nível crítico`);
+      // Materiais críticos — apenas se realmente existirem materiais com status='critico'
+      if (materiais.length > 0 && materiaisCriticos.length > 0) {
+        if (materiaisCriticos.length > 3) {
+          alertas.push(`🔴 ${materiaisCriticos.length} materiais em nível CRÍTICO`);
+        } else {
+          alertas.push(`🟡 ${materiaisCriticos.length} material(is) em nível crítico`);
+        }
       }
 
-      // Setores sobrecarregados — usa mesma fonte (capFabrica)
-      const setoresSobrecarga = (capFabrica.setores || []).filter((s: any) => s.percentualOcupacao > 90);
+      // Setores sobrecarregados — usa carga_percent (mesma métrica do CIP)
+      const setoresSobrecarga = (capFabrica.setores || []).filter((s: any) => s.carga_percent > 90);
       if (setoresSobrecarga.length > 0) {
-        alertas.push(`🟡 ${setoresSobrecarga.length} setor(es) com carga >90%`);
+        const nomes = setoresSobrecarga.slice(0, 2).map((s: any) => s.nome.split(' ')[0]).join(', ');
+        alertas.push(`🟡 ${setoresSobrecarga.length} setor(es) com carga >90% (${nomes}${setoresSobrecarga.length > 2 ? '...' : ''})`);
       }
 
-      // Pedidos atrasados (prazo vencido)
+      // Pedidos atrasados (prazo de entrega vencido)
       if (pedidosAtrasados > 0) {
         alertas.push(`🔴 ${pedidosAtrasados} pedido(s) com prazo vencido`);
       }
