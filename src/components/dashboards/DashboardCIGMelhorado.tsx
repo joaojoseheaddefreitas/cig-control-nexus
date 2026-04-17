@@ -142,8 +142,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     totalSetores: 0, capacidadeDiaria: 8,
     pedidosPorStatus: [], pedidosPorCanal: [], setoresProducao: [], alertas: [],
     materiaisCriticos: [], valorEstoque: 0, totalPropostaCompra: 0, cifData: null,
-    vendasMensal: [], vendasDiario: [], producaoMensal: [], producaoDiario: [],
-    comparativoMensal: [], pedidosAtrasados: 0,
+    vendasMesAtual: [], producaoMesAtual: [], comparativoAnual: [], pedidosAtrasados: 0,
   });
   const [capacidade, setCapacidade] = useState<CapacidadeFabrica | null>(null);
   const [loading, setLoading] = useState(true);
