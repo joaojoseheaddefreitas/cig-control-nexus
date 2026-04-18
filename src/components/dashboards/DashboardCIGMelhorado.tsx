@@ -291,7 +291,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         qtd: vendasDiaMap[d.dia]?.qtd || 0,
       }));
 
-      // Produção por dia útil do mês corrente (qtd + horas)
+      // Produção por dia útil do mês corrente (qtd + horas + VALOR R$)
+      // Valor produzido derivado: qtd × VALOR_MEDIO_PRODUTO (referência moveleira)
       const producaoDiaMap: Record<string, { qtd: number; horas: number }> = {};
       ops.forEach(op => {
         if (op.status_producao === 'Producao Finalizada') {
@@ -304,11 +305,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           }
         }
       });
-      const producaoMesAtual = diasUteisMesAtual.map(d => ({
-        ...d,
-        qtd: producaoDiaMap[d.dia]?.qtd || 0,
-        horas: producaoDiaMap[d.dia]?.horas || 0,
-      }));
+      const producaoMesAtual = diasUteisMesAtual.map(d => {
+        const qtd = producaoDiaMap[d.dia]?.qtd || 0;
+        return {
+          ...d,
+          qtd,
+          horas: producaoDiaMap[d.dia]?.horas || 0,
+          valor: qtd * VALOR_MEDIO_PRODUTO,
+        };
+      });
 
       // Comparativo anual: vendido vs produzido EM VALOR (R$) — últimos 12 meses
       const vendasMensalMap: Record<string, number> = {};
