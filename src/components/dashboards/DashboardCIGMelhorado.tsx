@@ -406,6 +406,49 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         }
       }
 
+
+      // === DERIVAÇÃO FINANCEIRA (REGRA DE OURO: origem em dado real) ===
+      // 1. Custo fixo mensal vem do CIF (custos_fixos ativos)
+      const { data: custosFixosRows } = await supabase
+        .from('custos_fixos')
+        .select('valor_mensal, ativo')
+        .eq('ativo', true);
+      const custoFixoMensal = (custosFixosRows || []).reduce((s, c) => s + Number(c.valor_mensal || 0), 0);
+
+      // 2. Horas produzidas no mês (já calculado em producaoMesAtual)
+      const horasProduzidasMes = producaoMesAtual.reduce((s, d) => s + d.horas, 0);
+
+      // 3. Custo por hora REAL = custos fixos ÷ horas produzidas
+      // Se não houver produção, custo/hora = 0 (não inventa)
+      const custoPorHoraReal = horasProduzidasMes > 0 ? custoFixoMensal / horasProduzidasMes : 0;
+
+      // 4. Cruza vendas (faturamento) × produção (custo) por dia útil
+      // Cada dia: faturamento real do CIV + custo derivado das horas do CIP
+      const producaoDiaIdx: Record<string, number> = {};
+      producaoMesAtual.forEach(p => { producaoDiaIdx[p.dia] = p.horas; });
+      const derivadoFinanceiroDiario = vendasMesAtual.map(v => {
+        const horasDoDia = producaoDiaIdx[v.dia] || 0;
+        const custo = horasDoDia * custoPorHoraReal;
+        return {
+          dia: v.dia,
+          label: v.label,
+          faturamento: v.valor,
+          custo: Math.round(custo),
+          lucro: Math.round(v.valor - custo),
+        };
+      });
+
+      // 5. Alerta inteligente baseado na derivação real
+      if (custoPorHoraReal > 0 && derivadoFinanceiroDiario.length > 0) {
+        const totalLucro = derivadoFinanceiroDiario.reduce((s, d) => s + d.lucro, 0);
+        const totalFat = derivadoFinanceiroDiario.reduce((s, d) => s + d.faturamento, 0);
+        if (totalFat > 0 && totalLucro < 0) {
+          alertas.unshift(`🔴 Prejuízo derivado: produção × custo > vendas no mês`);
+        } else if (totalFat > 0 && totalLucro / totalFat < 0.10) {
+          alertas.unshift(`🟡 Margem derivada baixa: ${((totalLucro / totalFat) * 100).toFixed(1)}%`);
+        }
+      }
+
       setKpis({
         totalPedidos: pedidosAtivos.length,
         pedidosEmProducao: pedidos.filter(p => p.status === 'programado' || p.status === 'em_producao').length,
@@ -421,6 +464,10 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         producaoMesAtual: dadosExemplo ? dadosExemplo.producaoMesAtual : producaoMesAtual,
         comparativoAnual: dadosExemplo ? dadosExemplo.comparativoAnual : comparativoAnual,
         pedidosAtrasados,
+        derivadoFinanceiroDiario,
+        custoPorHoraReal,
+        custoFixoMensal,
+        horasProduzidasMes,
       });
       setLastUpdate(new Date());
     } catch (e) {
