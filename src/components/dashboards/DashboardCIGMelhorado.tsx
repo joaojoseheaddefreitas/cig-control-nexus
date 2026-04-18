@@ -63,19 +63,18 @@ interface KPIData {
   valorEstoque: number;
   totalPropostaCompra: number;
   cifData: CIFDashboardData | null;
-  // Unified series — vendas e produção do mês corrente (por dia útil)
+  // Unified series — vendas e produção do mês corrente (por dia útil) — TUDO EM R$
   vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[];
-  producaoMesAtual: { dia: string; label: string; qtd: number; horas: number }[];
+  producaoMesAtual: { dia: string; label: string; valor: number; qtd: number; horas: number }[];
   // Comparativo anual (vendido vs produzido em valor)
   comparativoAnual: { mes: string; vendido: number; produzido: number }[];
   pedidosAtrasados: number;
   // === DERIVADO: Receita × Custo × Lucro diário (origem real) ===
-  // faturamento = vendas do dia | custo = horas produzidas × custo/hora real | lucro = faturamento - custo
-  derivadoFinanceiroDiario: { dia: string; label: string; faturamento: number; custo: number; lucro: number }[];
-  custoPorHoraReal: number; // custos_fixos mensais ÷ horas finalizadas no mês
+  derivadoFinanceiroDiario: { dia: string; label: string; faturamento: number; custo: number; lucro: number; lucroAcumulado: number; margem: number }[];
+  custoPorHoraReal: number;
   custoFixoMensal: number;
   horasProduzidasMes: number;
-  custoEstimado: boolean; // true quando custo derivado de fator operacional (sem CIF/produção)
+  custoEstimado: boolean;
 }
 
 interface DashboardCIGMelhoradoProps {
@@ -99,6 +98,8 @@ const diaLabel = (k: string) => {
 };
 
 // Generate example data when DB is empty — mês corrente, dias úteis (seg-sex)
+// Estimativa com TENDÊNCIA DE CRESCIMENTO ao longo do mês (não aleatório puro)
+const VALOR_MEDIO_PRODUTO = 2800; // R$/unidade — referência moveleira
 function gerarDadosExemplo() {
   const now = new Date();
   const ano = now.getFullYear();
@@ -106,36 +107,50 @@ function gerarDadosExemplo() {
   const ultimoDia = new Date(ano, mes + 1, 0).getDate();
 
   const vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[] = [];
-  const producaoMesAtual: { dia: string; label: string; qtd: number; horas: number }[] = [];
+  const producaoMesAtual: { dia: string; label: string; valor: number; qtd: number; horas: number }[] = [];
 
+  // tendência crescente: começa baixo, sobe ao longo do mês
+  let diaUtilIdx = 0;
   for (let d = 1; d <= ultimoDia; d++) {
     const dt = new Date(ano, mes, d);
     const dow = dt.getDay();
     if (dow === 0 || dow === 6) continue; // só dias úteis
     const key = dt.toISOString().slice(0, 10);
     const label = String(d).padStart(2, '0');
-    vendasMesAtual.push({
-      dia: key, label,
-      valor: Math.round(2500 + Math.random() * 12000),
-      qtd: Math.round(1 + Math.random() * 4),
-    });
+
+    // crescimento linear + leve variação (apresentação coerente)
+    const fator = 0.6 + (diaUtilIdx * 0.04); // sobe ~4% ao dia
+    const ruido = 0.85 + Math.random() * 0.30;
+    const valorVendas = Math.round(8000 * fator * ruido);
+    const qtdVendas = Math.max(1, Math.round(valorVendas / VALOR_MEDIO_PRODUTO));
+
+    // produção segue vendas com leve atraso (~90% do valor vendido)
+    const valorProducao = Math.round(valorVendas * (0.82 + Math.random() * 0.20));
+    const qtdProducao = Math.max(1, Math.round(valorProducao / VALOR_MEDIO_PRODUTO));
+
+    vendasMesAtual.push({ dia: key, label, valor: valorVendas, qtd: qtdVendas });
     producaoMesAtual.push({
       dia: key, label,
-      qtd: Math.round(1 + Math.random() * 4),
-      horas: Math.round(20 + Math.random() * 60),
+      valor: valorProducao,
+      qtd: qtdProducao,
+      horas: Math.round(qtdProducao * 8.5),
     });
+    diaUtilIdx++;
   }
 
-  // Comparativo anual (12 meses)
+  // Comparativo anual (12 meses) com crescimento progressivo
   const comparativoAnual: { mes: string; vendido: number; produzido: number }[] = [];
   for (let i = 11; i >= 0; i--) {
     const dt = new Date(ano, mes - i, 1);
     const k = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    const vendido = Math.round(80000 + Math.random() * 120000);
+    // crescimento ano → +3% ao mês com sazonalidade
+    const base = 95000 * (1 + (11 - i) * 0.03);
+    const sazonalidade = 0.88 + Math.random() * 0.24;
+    const vendido = Math.round(base * sazonalidade);
     comparativoAnual.push({
       mes: k,
       vendido,
-      produzido: Math.round(vendido * (0.75 + Math.random() * 0.30)),
+      produzido: Math.round(vendido * (0.82 + Math.random() * 0.18)),
     });
   }
 
@@ -276,7 +291,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         qtd: vendasDiaMap[d.dia]?.qtd || 0,
       }));
 
-      // Produção por dia útil do mês corrente (qtd + horas)
+      // Produção por dia útil do mês corrente (qtd + horas + VALOR R$)
+      // Valor produzido derivado: qtd × VALOR_MEDIO_PRODUTO (referência moveleira)
       const producaoDiaMap: Record<string, { qtd: number; horas: number }> = {};
       ops.forEach(op => {
         if (op.status_producao === 'Producao Finalizada') {
@@ -289,11 +305,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           }
         }
       });
-      const producaoMesAtual = diasUteisMesAtual.map(d => ({
-        ...d,
-        qtd: producaoDiaMap[d.dia]?.qtd || 0,
-        horas: producaoDiaMap[d.dia]?.horas || 0,
-      }));
+      const producaoMesAtual = diasUteisMesAtual.map(d => {
+        const qtd = producaoDiaMap[d.dia]?.qtd || 0;
+        return {
+          ...d,
+          qtd,
+          horas: producaoDiaMap[d.dia]?.horas || 0,
+          valor: qtd * VALOR_MEDIO_PRODUTO,
+        };
+      });
 
       // Comparativo anual: vendido vs produzido EM VALOR (R$) — últimos 12 meses
       const vendasMensalMap: Record<string, number> = {};
@@ -438,17 +458,23 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       (dadosExemplo ? dadosExemplo.producaoMesAtual : producaoMesAtual)
         .forEach(p => { baseProducaoDiariaIdx[p.dia] = p.horas || 0; });
 
+      let acumLucro = 0;
       const derivadoFinanceiroDiario = baseVendasDiaria.map(v => {
         const horasDoDia = baseProducaoDiariaIdx[v.dia] || 0;
         const custo = usarCustoEstimado
           ? Math.round(v.valor * FATOR_CUSTO_ESTIMADO)
           : Math.round(horasDoDia * custoPorHoraReal);
+        const lucro = Math.round(v.valor - custo);
+        acumLucro += lucro;
+        const margem = v.valor > 0 ? (lucro / v.valor) * 100 : 0;
         return {
           dia: v.dia,
           label: v.label,
           faturamento: v.valor,
           custo,
-          lucro: Math.round(v.valor - custo),
+          lucro,
+          lucroAcumulado: acumLucro,
+          margem: Number(margem.toFixed(1)),
         };
       });
 
@@ -493,7 +519,11 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
 
   const temDados = kpis.totalPedidos > 0 || usandoExemplo;
   const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
-  const cargaPercentual = capacidade ? capacidade.percentualOcupacao : 0;
+  // OCUPAÇÃO DO GARGALO (não a média) — coerente com CIP que mostra Acabamento 89%
+  const setorGargaloOcup = capacidade?.setores
+    ? Math.max(...capacidade.setores.map(s => s.carga_percent), 0)
+    : 0;
+  const cargaPercentual = setorGargaloOcup; // mostra a do gargalo, não a média
   const prazoVendas = capacidade?.prazoVendasDias ?? 0;
   const gargaloNome = capacidade?.setorGargaloDias ?? 'N/A';
   const fmt = (v: number) => v >= 999500 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
@@ -659,17 +689,17 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
 
-        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (Qtd/dia útil)`} variant="cip">
+        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (R$/dia útil)`} variant="cip">
           <div className="h-64">
             {kpis.producaoMesAtual.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={kpis.producaoMesAtual}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
-                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
-                  <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => `Dia ${l}`} />
-                  <Bar dataKey="qtd" fill={CHART_COLORS.laranja} radius={[3, 3, 0, 0]} name="Produzido" opacity={0.85} />
-                  <Line type="monotone" dataKey="qtd" stroke={CHART_COLORS.laranja} strokeWidth={2} dot={false} name="Tendência" />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Produção']} labelFormatter={(l) => `Dia ${l}`} />
+                  <Bar dataKey="valor" fill={CHART_COLORS.laranja} radius={[3, 3, 0, 0]} name="Produzido (R$)" opacity={0.85} />
+                  <Line type="monotone" dataKey="valor" stroke={CHART_COLORS.laranja} strokeWidth={2} dot={false} name="Tendência" />
                 </ComposedChart>
               </ResponsiveContainer>
             ) : <EmptyChart />}
@@ -793,7 +823,49 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       </ModuleCard>
 
-      {/* Financeiro Row */}
+      {/* === FINANCEIRO — Lucro Acumulado + Margem Diária (lado a lado) === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ModuleCard title="📈 Lucro Acumulado — Mês corrente (R$)" variant="cif">
+          <div className="h-64">
+            {kpis.derivadoFinanceiroDiario.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={kpis.derivadoFinanceiroDiario}>
+                  <defs>
+                    <linearGradient id="lucroAcum" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.6} />
+                      <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${Number(v).toLocaleString('pt-BR')}`, 'Lucro acum.']} labelFormatter={(l) => `Dia ${l}`} />
+                  <Area type="monotone" dataKey="lucroAcumulado" stroke={CHART_COLORS.verde} strokeWidth={2.5} fill="url(#lucroAcum)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+
+        <ModuleCard title="📊 Margem Diária — % (Lucro ÷ Receita)" variant="cif">
+          <div className="h-64">
+            {kpis.derivadoFinanceiroDiario.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={kpis.derivadoFinanceiroDiario}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${v}%`} domain={[0, 'auto']} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}%`, 'Margem']} labelFormatter={(l) => `Dia ${l}`} />
+                  <Bar dataKey="margem" fill={CHART_COLORS.amarelo} radius={[3, 3, 0, 0]} name="Margem %" opacity={0.85} />
+                  <Line type="monotone" dataKey="margem" stroke={CHART_COLORS.azulMarinho} strokeWidth={2} dot={false} name="Tendência" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+      </div>
+
+
       {kpis.cifData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="grid grid-cols-2 gap-3">
