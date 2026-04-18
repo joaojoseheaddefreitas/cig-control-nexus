@@ -718,6 +718,74 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </ModuleCard>
       </div>
 
+      {/* === FINANCEIRO DERIVADO — Receita × Custo × Lucro (origem real) === */}
+      <ModuleCard
+        title="💰 Financeiro Derivado — Origem: Vendas (CIV) × Produção (CIP) × Custo Fixo (CIF)"
+        variant="cif"
+      >
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4 p-3 rounded-lg bg-muted/20 border border-border/30">
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Custo Fixo Mensal</p>
+            <p className="text-sm font-bold text-foreground">{fmt(kpis.custoFixoMensal)}</p>
+            <p className="text-[9px] text-muted-foreground">CIF · custos_fixos ativos</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Horas Produzidas</p>
+            <p className="text-sm font-bold text-foreground">{kpis.horasProduzidasMes.toFixed(1)}h</p>
+            <p className="text-[9px] text-muted-foreground">CIP · OPs finalizadas no mês</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Custo / Hora Real</p>
+            <p className="text-sm font-bold text-foreground">{fmt(kpis.custoPorHoraReal)}</p>
+            <p className="text-[9px] text-muted-foreground">= Custo Fixo ÷ Horas</p>
+          </div>
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Lucro Acumulado</p>
+            {(() => {
+              const totalLucro = kpis.derivadoFinanceiroDiario.reduce((s, d) => s + d.lucro, 0);
+              return (
+                <>
+                  <p className={cn('text-sm font-bold', totalLucro >= 0 ? 'text-success' : 'text-destructive')}>
+                    {fmt(totalLucro)}
+                  </p>
+                  <p className="text-[9px] text-muted-foreground">= Vendas − Custo derivado</p>
+                </>
+              );
+            })()}
+          </div>
+        </div>
+
+        <div className="h-72">
+          {kpis.derivadoFinanceiroDiario.length > 0 && kpis.custoPorHoraReal > 0 ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={kpis.derivadoFinanceiroDiario}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={0} />
+                <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(v: number, name: string) => [`R$ ${Number(v).toLocaleString('pt-BR')}`, name]}
+                  labelFormatter={(l) => `Dia ${l}`}
+                />
+                <Legend />
+                <Bar dataKey="faturamento" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Receita (vendas reais)" opacity={0.85} />
+                <Bar dataKey="custo" fill={CHART_COLORS.vermelho} radius={[3, 3, 0, 0]} name="Custo (produção × custo/h)" opacity={0.75} />
+                <Line type="monotone" dataKey="lucro" stroke={CHART_COLORS.amarelo} strokeWidth={2.5} dot={{ r: 3 }} name="Lucro derivado" />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-6 gap-2">
+              <AlertTriangle className="h-8 w-8 text-warning" />
+              <p className="text-sm font-medium">Dados insuficientes para derivação</p>
+              <p className="text-xs max-w-md">
+                Para calcular o financeiro derivado é necessário: <strong>custos fixos cadastrados no CIF</strong> e
+                pelo menos uma <strong>OP finalizada no mês</strong> (CIP). Sem essas duas origens, o sistema não inventa números.
+              </p>
+            </div>
+          )}
+        </div>
+      </ModuleCard>
+
       {/* Financeiro Row */}
       {kpis.cifData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
