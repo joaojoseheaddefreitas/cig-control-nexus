@@ -735,9 +735,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <p className="text-[9px] text-muted-foreground">CIP · OPs finalizadas no mês</p>
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Custo / Hora Real</p>
-            <p className="text-sm font-bold text-foreground">{fmt(kpis.custoPorHoraReal)}</p>
-            <p className="text-[9px] text-muted-foreground">= Custo Fixo ÷ Horas</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+              Custo / Hora {kpis.custoEstimado && <span className="text-warning">(estimado)</span>}
+            </p>
+            <p className="text-sm font-bold text-foreground">
+              {kpis.custoEstimado ? '65% s/ vendas' : fmt(kpis.custoPorHoraReal)}
+            </p>
+            <p className="text-[9px] text-muted-foreground">
+              {kpis.custoEstimado ? 'Fator operacional padrão' : '= Custo Fixo ÷ Horas'}
+            </p>
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Lucro Acumulado</p>
@@ -755,12 +761,22 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </div>
 
+        {kpis.custoEstimado && (
+          <div className="mb-3 p-2 rounded-md bg-warning/10 border border-warning/30 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+            <p className="text-xs text-warning">
+              <strong>Custo estimado</strong> (65% s/ vendas — referência moveleira). Para custo real:
+              cadastre <strong>custos fixos no CIF</strong> e <strong>finalize OPs no CIP</strong>.
+            </p>
+          </div>
+        )}
+
         <div className="h-72">
-          {kpis.derivadoFinanceiroDiario.length > 0 && kpis.custoPorHoraReal > 0 ? (
+          {kpis.derivadoFinanceiroDiario.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={kpis.derivadoFinanceiroDiario}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={0} />
+                <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                 <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
                   contentStyle={tooltipStyle}
@@ -768,21 +784,12 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
                   labelFormatter={(l) => `Dia ${l}`}
                 />
                 <Legend />
-                <Bar dataKey="faturamento" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Receita (vendas reais)" opacity={0.85} />
-                <Bar dataKey="custo" fill={CHART_COLORS.vermelho} radius={[3, 3, 0, 0]} name="Custo (produção × custo/h)" opacity={0.75} />
-                <Line type="monotone" dataKey="lucro" stroke={CHART_COLORS.amarelo} strokeWidth={2.5} dot={{ r: 3 }} name="Lucro derivado" />
+                <Bar dataKey="faturamento" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Receita" opacity={0.85} />
+                <Bar dataKey="custo" fill={CHART_COLORS.vermelho} radius={[3, 3, 0, 0]} name={kpis.custoEstimado ? 'Custo (estimado)' : 'Custo (real)'} opacity={0.75} />
+                <Line type="monotone" dataKey="lucro" stroke={CHART_COLORS.amarelo} strokeWidth={2.5} dot={{ r: 3 }} name="Lucro" />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-6 gap-2">
-              <AlertTriangle className="h-8 w-8 text-warning" />
-              <p className="text-sm font-medium">Dados insuficientes para derivação</p>
-              <p className="text-xs max-w-md">
-                Para calcular o financeiro derivado é necessário: <strong>custos fixos cadastrados no CIF</strong> e
-                pelo menos uma <strong>OP finalizada no mês</strong> (CIP). Sem essas duas origens, o sistema não inventa números.
-              </p>
-            </div>
-          )}
+          ) : <EmptyChart />}
         </div>
       </ModuleCard>
 
