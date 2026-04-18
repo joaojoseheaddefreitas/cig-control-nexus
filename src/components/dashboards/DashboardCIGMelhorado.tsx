@@ -99,6 +99,8 @@ const diaLabel = (k: string) => {
 };
 
 // Generate example data when DB is empty — mês corrente, dias úteis (seg-sex)
+// Estimativa com TENDÊNCIA DE CRESCIMENTO ao longo do mês (não aleatório puro)
+const VALOR_MEDIO_PRODUTO = 2800; // R$/unidade — referência moveleira
 function gerarDadosExemplo() {
   const now = new Date();
   const ano = now.getFullYear();
@@ -106,36 +108,50 @@ function gerarDadosExemplo() {
   const ultimoDia = new Date(ano, mes + 1, 0).getDate();
 
   const vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[] = [];
-  const producaoMesAtual: { dia: string; label: string; qtd: number; horas: number }[] = [];
+  const producaoMesAtual: { dia: string; label: string; valor: number; qtd: number; horas: number }[] = [];
 
+  // tendência crescente: começa baixo, sobe ao longo do mês
+  let diaUtilIdx = 0;
   for (let d = 1; d <= ultimoDia; d++) {
     const dt = new Date(ano, mes, d);
     const dow = dt.getDay();
     if (dow === 0 || dow === 6) continue; // só dias úteis
     const key = dt.toISOString().slice(0, 10);
     const label = String(d).padStart(2, '0');
-    vendasMesAtual.push({
-      dia: key, label,
-      valor: Math.round(2500 + Math.random() * 12000),
-      qtd: Math.round(1 + Math.random() * 4),
-    });
+
+    // crescimento linear + leve variação (apresentação coerente)
+    const fator = 0.6 + (diaUtilIdx * 0.04); // sobe ~4% ao dia
+    const ruido = 0.85 + Math.random() * 0.30;
+    const valorVendas = Math.round(8000 * fator * ruido);
+    const qtdVendas = Math.max(1, Math.round(valorVendas / VALOR_MEDIO_PRODUTO));
+
+    // produção segue vendas com leve atraso (~90% do valor vendido)
+    const valorProducao = Math.round(valorVendas * (0.82 + Math.random() * 0.20));
+    const qtdProducao = Math.max(1, Math.round(valorProducao / VALOR_MEDIO_PRODUTO));
+
+    vendasMesAtual.push({ dia: key, label, valor: valorVendas, qtd: qtdVendas });
     producaoMesAtual.push({
       dia: key, label,
-      qtd: Math.round(1 + Math.random() * 4),
-      horas: Math.round(20 + Math.random() * 60),
+      valor: valorProducao,
+      qtd: qtdProducao,
+      horas: Math.round(qtdProducao * 8.5),
     });
+    diaUtilIdx++;
   }
 
-  // Comparativo anual (12 meses)
+  // Comparativo anual (12 meses) com crescimento progressivo
   const comparativoAnual: { mes: string; vendido: number; produzido: number }[] = [];
   for (let i = 11; i >= 0; i--) {
     const dt = new Date(ano, mes - i, 1);
     const k = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    const vendido = Math.round(80000 + Math.random() * 120000);
+    // crescimento ano → +3% ao mês com sazonalidade
+    const base = 95000 * (1 + (11 - i) * 0.03);
+    const sazonalidade = 0.88 + Math.random() * 0.24;
+    const vendido = Math.round(base * sazonalidade);
     comparativoAnual.push({
       mes: k,
       vendido,
-      produzido: Math.round(vendido * (0.75 + Math.random() * 0.30)),
+      produzido: Math.round(vendido * (0.82 + Math.random() * 0.18)),
     });
   }
 
