@@ -823,7 +823,49 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       </ModuleCard>
 
-      {/* Financeiro Row */}
+      {/* === FINANCEIRO — Lucro Acumulado + Margem Diária (lado a lado) === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ModuleCard title="📈 Lucro Acumulado — Mês corrente (R$)" variant="cif">
+          <div className="h-64">
+            {kpis.derivadoFinanceiroDiario.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={kpis.derivadoFinanceiroDiario}>
+                  <defs>
+                    <linearGradient id="lucroAcum" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.6} />
+                      <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${Number(v).toLocaleString('pt-BR')}`, 'Lucro acum.']} labelFormatter={(l) => `Dia ${l}`} />
+                  <Area type="monotone" dataKey="lucroAcumulado" stroke={CHART_COLORS.verde} strokeWidth={2.5} fill="url(#lucroAcum)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+
+        <ModuleCard title="📊 Margem Diária — % (Lucro ÷ Receita)" variant="cif">
+          <div className="h-64">
+            {kpis.derivadoFinanceiroDiario.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={kpis.derivadoFinanceiroDiario}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${v}%`} domain={[0, 'auto']} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v}%`, 'Margem']} labelFormatter={(l) => `Dia ${l}`} />
+                  <Bar dataKey="margem" fill={CHART_COLORS.amarelo} radius={[3, 3, 0, 0]} name="Margem %" opacity={0.85} />
+                  <Line type="monotone" dataKey="margem" stroke={CHART_COLORS.azulMarinho} strokeWidth={2} dot={false} name="Tendência" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+      </div>
+
+
       {kpis.cifData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <div className="grid grid-cols-2 gap-3">
