@@ -689,17 +689,17 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
 
-        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (Qtd/dia útil)`} variant="cip">
+        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (R$/dia útil)`} variant="cip">
           <div className="h-64">
             {kpis.producaoMesAtual.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={kpis.producaoMesAtual}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
-                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
-                  <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => `Dia ${l}`} />
-                  <Bar dataKey="qtd" fill={CHART_COLORS.laranja} radius={[3, 3, 0, 0]} name="Produzido" opacity={0.85} />
-                  <Line type="monotone" dataKey="qtd" stroke={CHART_COLORS.laranja} strokeWidth={2} dot={false} name="Tendência" />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Produção']} labelFormatter={(l) => `Dia ${l}`} />
+                  <Bar dataKey="valor" fill={CHART_COLORS.laranja} radius={[3, 3, 0, 0]} name="Produzido (R$)" opacity={0.85} />
+                  <Line type="monotone" dataKey="valor" stroke={CHART_COLORS.laranja} strokeWidth={2} dot={false} name="Tendência" />
                 </ComposedChart>
               </ResponsiveContainer>
             ) : <EmptyChart />}
