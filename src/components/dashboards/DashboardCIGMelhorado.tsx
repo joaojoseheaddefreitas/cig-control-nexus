@@ -640,21 +640,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       </div>
 
-      {/* === VENDAS — Mensal unificado (dia útil x R$) === */}
-      <div className="grid grid-cols-1 gap-6">
-        <ModuleCard title={`📊 Vendas — ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} (R$ por dia útil)`} variant="civ">
+      {/* === VENDAS + PRODUÇÃO — Lado a lado (50/50) === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ModuleCard title={`📊 Vendas — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (R$/dia útil)`} variant="civ">
           <div className="h-64">
             {kpis.vendasMesAtual.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={kpis.vendasMesAtual}>
-                  <defs>
-                    <linearGradient id="gradVendas" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.45} />
-                      <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={0} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                   <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Vendas']} labelFormatter={(l) => `Dia ${l}`} />
                   <Bar dataKey="valor" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Vendas diárias" opacity={0.85} />
@@ -664,23 +658,14 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             ) : <EmptyChart />}
           </div>
         </ModuleCard>
-      </div>
 
-      {/* === PRODUÇÃO — Mensal unificado (dia útil x qtd) === */}
-      <div className="grid grid-cols-1 gap-6">
-        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} (Qtd por dia útil)`} variant="cip">
+        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (Qtd/dia útil)`} variant="cip">
           <div className="h-64">
             {kpis.producaoMesAtual.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={kpis.producaoMesAtual}>
-                  <defs>
-                    <linearGradient id="gradProducao" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={CHART_COLORS.laranja} stopOpacity={0.45} />
-                      <stop offset="95%" stopColor={CHART_COLORS.laranja} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={0} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                   <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
                   <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => `Dia ${l}`} />
                   <Bar dataKey="qtd" fill={CHART_COLORS.laranja} radius={[3, 3, 0, 0]} name="Produzido" opacity={0.85} />
