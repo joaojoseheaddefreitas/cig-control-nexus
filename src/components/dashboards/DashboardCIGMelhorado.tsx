@@ -63,19 +63,18 @@ interface KPIData {
   valorEstoque: number;
   totalPropostaCompra: number;
   cifData: CIFDashboardData | null;
-  // Unified series — vendas e produção do mês corrente (por dia útil)
+  // Unified series — vendas e produção do mês corrente (por dia útil) — TUDO EM R$
   vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[];
-  producaoMesAtual: { dia: string; label: string; qtd: number; horas: number }[];
+  producaoMesAtual: { dia: string; label: string; valor: number; qtd: number; horas: number }[];
   // Comparativo anual (vendido vs produzido em valor)
   comparativoAnual: { mes: string; vendido: number; produzido: number }[];
   pedidosAtrasados: number;
   // === DERIVADO: Receita × Custo × Lucro diário (origem real) ===
-  // faturamento = vendas do dia | custo = horas produzidas × custo/hora real | lucro = faturamento - custo
-  derivadoFinanceiroDiario: { dia: string; label: string; faturamento: number; custo: number; lucro: number }[];
-  custoPorHoraReal: number; // custos_fixos mensais ÷ horas finalizadas no mês
+  derivadoFinanceiroDiario: { dia: string; label: string; faturamento: number; custo: number; lucro: number; lucroAcumulado: number; margem: number }[];
+  custoPorHoraReal: number;
   custoFixoMensal: number;
   horasProduzidasMes: number;
-  custoEstimado: boolean; // true quando custo derivado de fator operacional (sem CIF/produção)
+  custoEstimado: boolean;
 }
 
 interface DashboardCIGMelhoradoProps {
