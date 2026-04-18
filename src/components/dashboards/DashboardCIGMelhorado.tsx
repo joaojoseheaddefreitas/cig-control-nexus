@@ -75,6 +75,7 @@ interface KPIData {
   custoPorHoraReal: number; // custos_fixos mensais ÷ horas finalizadas no mês
   custoFixoMensal: number;
   horasProduzidasMes: number;
+  custoEstimado: boolean; // true quando custo derivado de fator operacional (sem CIF/produção)
 }
 
 interface DashboardCIGMelhoradoProps {
@@ -150,6 +151,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     materiaisCriticos: [], valorEstoque: 0, totalPropostaCompra: 0, cifData: null,
     vendasMesAtual: [], producaoMesAtual: [], comparativoAnual: [], pedidosAtrasados: 0,
     derivadoFinanceiroDiario: [], custoPorHoraReal: 0, custoFixoMensal: 0, horasProduzidasMes: 0,
+    custoEstimado: false,
   });
   const [capacidade, setCapacidade] = useState<CapacidadeFabrica | null>(null);
   const [loading, setLoading] = useState(true);
@@ -407,7 +409,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       }
 
 
-      // === DERIVAÇÃO FINANCEIRA (REGRA DE OURO: origem em dado real) ===
+      // === DERIVAÇÃO FINANCEIRA (REGRA: origem em dado real, fallback estimado quando faltar) ===
       // 1. Custo fixo mensal vem do CIF (custos_fixos ativos)
       const { data: custosFixosRows } = await supabase
         .from('custos_fixos')
@@ -419,21 +421,33 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       const horasProduzidasMes = producaoMesAtual.reduce((s, d) => s + d.horas, 0);
 
       // 3. Custo por hora REAL = custos fixos ÷ horas produzidas
-      // Se não houver produção, custo/hora = 0 (não inventa)
       const custoPorHoraReal = horasProduzidasMes > 0 ? custoFixoMensal / horasProduzidasMes : 0;
 
-      // 4. Cruza vendas (faturamento) × produção (custo) por dia útil
-      // Cada dia: faturamento real do CIV + custo derivado das horas do CIP
+      // 4. Determinar fonte do custo (REAL ou ESTIMADO)
+      // Se faltar custo fixo OU horas produzidas, usa fator operacional 65% sobre vendas
+      // (referência industrial: custo total ≈ 65% do faturamento em moveleiro)
+      const FATOR_CUSTO_ESTIMADO = 0.65;
+      const usarCustoEstimado = custoPorHoraReal === 0;
+
       const producaoDiaIdx: Record<string, number> = {};
       producaoMesAtual.forEach(p => { producaoDiaIdx[p.dia] = p.horas; });
-      const derivadoFinanceiroDiario = vendasMesAtual.map(v => {
-        const horasDoDia = producaoDiaIdx[v.dia] || 0;
-        const custo = horasDoDia * custoPorHoraReal;
+
+      // Base diária — se não há vendas reais, usar dadosExemplo gerados
+      const baseVendasDiaria = (dadosExemplo ? dadosExemplo.vendasMesAtual : vendasMesAtual);
+      const baseProducaoDiariaIdx: Record<string, number> = {};
+      (dadosExemplo ? dadosExemplo.producaoMesAtual : producaoMesAtual)
+        .forEach(p => { baseProducaoDiariaIdx[p.dia] = p.horas || 0; });
+
+      const derivadoFinanceiroDiario = baseVendasDiaria.map(v => {
+        const horasDoDia = baseProducaoDiariaIdx[v.dia] || 0;
+        const custo = usarCustoEstimado
+          ? Math.round(v.valor * FATOR_CUSTO_ESTIMADO)
+          : Math.round(horasDoDia * custoPorHoraReal);
         return {
           dia: v.dia,
           label: v.label,
           faturamento: v.valor,
-          custo: Math.round(custo),
+          custo,
           lucro: Math.round(v.valor - custo),
         };
       });
@@ -468,6 +482,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         custoPorHoraReal,
         custoFixoMensal,
         horasProduzidasMes,
+        custoEstimado: usarCustoEstimado,
       });
       setLastUpdate(new Date());
     } catch (e) {
@@ -625,21 +640,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       </div>
 
-      {/* === VENDAS — Mensal unificado (dia útil x R$) === */}
-      <div className="grid grid-cols-1 gap-6">
-        <ModuleCard title={`📊 Vendas — ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} (R$ por dia útil)`} variant="civ">
+      {/* === VENDAS + PRODUÇÃO — Lado a lado (50/50) === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <ModuleCard title={`📊 Vendas — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (R$/dia útil)`} variant="civ">
           <div className="h-64">
             {kpis.vendasMesAtual.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={kpis.vendasMesAtual}>
-                  <defs>
-                    <linearGradient id="gradVendas" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.45} />
-                      <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={0} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                   <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                   <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR')}`, 'Vendas']} labelFormatter={(l) => `Dia ${l}`} />
                   <Bar dataKey="valor" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Vendas diárias" opacity={0.85} />
@@ -649,23 +658,14 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             ) : <EmptyChart />}
           </div>
         </ModuleCard>
-      </div>
 
-      {/* === PRODUÇÃO — Mensal unificado (dia útil x qtd) === */}
-      <div className="grid grid-cols-1 gap-6">
-        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })} (Qtd por dia útil)`} variant="cip">
+        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (Qtd/dia útil)`} variant="cip">
           <div className="h-64">
             {kpis.producaoMesAtual.length > 0 ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={kpis.producaoMesAtual}>
-                  <defs>
-                    <linearGradient id="gradProducao" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={CHART_COLORS.laranja} stopOpacity={0.45} />
-                      <stop offset="95%" stopColor={CHART_COLORS.laranja} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={0} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                   <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
                   <Tooltip contentStyle={tooltipStyle} labelFormatter={(l) => `Dia ${l}`} />
                   <Bar dataKey="qtd" fill={CHART_COLORS.laranja} radius={[3, 3, 0, 0]} name="Produzido" opacity={0.85} />
@@ -735,9 +735,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <p className="text-[9px] text-muted-foreground">CIP · OPs finalizadas no mês</p>
           </div>
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Custo / Hora Real</p>
-            <p className="text-sm font-bold text-foreground">{fmt(kpis.custoPorHoraReal)}</p>
-            <p className="text-[9px] text-muted-foreground">= Custo Fixo ÷ Horas</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+              Custo / Hora {kpis.custoEstimado && <span className="text-warning">(estimado)</span>}
+            </p>
+            <p className="text-sm font-bold text-foreground">
+              {kpis.custoEstimado ? '65% s/ vendas' : fmt(kpis.custoPorHoraReal)}
+            </p>
+            <p className="text-[9px] text-muted-foreground">
+              {kpis.custoEstimado ? 'Fator operacional padrão' : '= Custo Fixo ÷ Horas'}
+            </p>
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Lucro Acumulado</p>
@@ -755,12 +761,22 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </div>
 
+        {kpis.custoEstimado && (
+          <div className="mb-3 p-2 rounded-md bg-warning/10 border border-warning/30 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
+            <p className="text-xs text-warning">
+              <strong>Custo estimado</strong> (65% s/ vendas — referência moveleira). Para custo real:
+              cadastre <strong>custos fixos no CIF</strong> e <strong>finalize OPs no CIP</strong>.
+            </p>
+          </div>
+        )}
+
         <div className="h-72">
-          {kpis.derivadoFinanceiroDiario.length > 0 && kpis.custoPorHoraReal > 0 ? (
+          {kpis.derivadoFinanceiroDiario.length > 0 ? (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={kpis.derivadoFinanceiroDiario}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
-                <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={0} />
+                <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                 <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
                 <Tooltip
                   contentStyle={tooltipStyle}
@@ -768,21 +784,12 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
                   labelFormatter={(l) => `Dia ${l}`}
                 />
                 <Legend />
-                <Bar dataKey="faturamento" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Receita (vendas reais)" opacity={0.85} />
-                <Bar dataKey="custo" fill={CHART_COLORS.vermelho} radius={[3, 3, 0, 0]} name="Custo (produção × custo/h)" opacity={0.75} />
-                <Line type="monotone" dataKey="lucro" stroke={CHART_COLORS.amarelo} strokeWidth={2.5} dot={{ r: 3 }} name="Lucro derivado" />
+                <Bar dataKey="faturamento" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Receita" opacity={0.85} />
+                <Bar dataKey="custo" fill={CHART_COLORS.vermelho} radius={[3, 3, 0, 0]} name={kpis.custoEstimado ? 'Custo (estimado)' : 'Custo (real)'} opacity={0.75} />
+                <Line type="monotone" dataKey="lucro" stroke={CHART_COLORS.amarelo} strokeWidth={2.5} dot={{ r: 3 }} name="Lucro" />
               </ComposedChart>
             </ResponsiveContainer>
-          ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center text-muted-foreground p-6 gap-2">
-              <AlertTriangle className="h-8 w-8 text-warning" />
-              <p className="text-sm font-medium">Dados insuficientes para derivação</p>
-              <p className="text-xs max-w-md">
-                Para calcular o financeiro derivado é necessário: <strong>custos fixos cadastrados no CIF</strong> e
-                pelo menos uma <strong>OP finalizada no mês</strong> (CIP). Sem essas duas origens, o sistema não inventa números.
-              </p>
-            </div>
-          )}
+          ) : <EmptyChart />}
         </div>
       </ModuleCard>
 
