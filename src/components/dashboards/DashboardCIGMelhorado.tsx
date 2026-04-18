@@ -69,6 +69,12 @@ interface KPIData {
   // Comparativo anual (vendido vs produzido em valor)
   comparativoAnual: { mes: string; vendido: number; produzido: number }[];
   pedidosAtrasados: number;
+  // === DERIVADO: Receita × Custo × Lucro diário (origem real) ===
+  // faturamento = vendas do dia | custo = horas produzidas × custo/hora real | lucro = faturamento - custo
+  derivadoFinanceiroDiario: { dia: string; label: string; faturamento: number; custo: number; lucro: number }[];
+  custoPorHoraReal: number; // custos_fixos mensais ÷ horas finalizadas no mês
+  custoFixoMensal: number;
+  horasProduzidasMes: number;
 }
 
 interface DashboardCIGMelhoradoProps {
