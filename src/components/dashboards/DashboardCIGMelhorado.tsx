@@ -482,6 +482,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         custoPorHoraReal,
         custoFixoMensal,
         horasProduzidasMes,
+        custoEstimado: usarCustoEstimado,
       });
       setLastUpdate(new Date());
     } catch (e) {
