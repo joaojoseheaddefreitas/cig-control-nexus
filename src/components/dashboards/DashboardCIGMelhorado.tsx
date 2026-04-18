@@ -458,17 +458,23 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       (dadosExemplo ? dadosExemplo.producaoMesAtual : producaoMesAtual)
         .forEach(p => { baseProducaoDiariaIdx[p.dia] = p.horas || 0; });
 
+      let acumLucro = 0;
       const derivadoFinanceiroDiario = baseVendasDiaria.map(v => {
         const horasDoDia = baseProducaoDiariaIdx[v.dia] || 0;
         const custo = usarCustoEstimado
           ? Math.round(v.valor * FATOR_CUSTO_ESTIMADO)
           : Math.round(horasDoDia * custoPorHoraReal);
+        const lucro = Math.round(v.valor - custo);
+        acumLucro += lucro;
+        const margem = v.valor > 0 ? (lucro / v.valor) * 100 : 0;
         return {
           dia: v.dia,
           label: v.label,
           faturamento: v.valor,
           custo,
-          lucro: Math.round(v.valor - custo),
+          lucro,
+          lucroAcumulado: acumLucro,
+          margem: Number(margem.toFixed(1)),
         };
       });
 
