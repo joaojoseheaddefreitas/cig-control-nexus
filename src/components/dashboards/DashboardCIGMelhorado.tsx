@@ -519,7 +519,11 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
 
   const temDados = kpis.totalPedidos > 0 || usandoExemplo;
   const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
-  const cargaPercentual = capacidade ? capacidade.percentualOcupacao : 0;
+  // OCUPAÇÃO DO GARGALO (não a média) — coerente com CIP que mostra Acabamento 89%
+  const setorGargaloOcup = capacidade?.setores
+    ? Math.max(...capacidade.setores.map(s => s.carga_percent), 0)
+    : 0;
+  const cargaPercentual = setorGargaloOcup; // mostra a do gargalo, não a média
   const prazoVendas = capacidade?.prazoVendasDias ?? 0;
   const gargaloNome = capacidade?.setorGargaloDias ?? 'N/A';
   const fmt = (v: number) => v >= 999500 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
