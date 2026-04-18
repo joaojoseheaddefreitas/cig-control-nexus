@@ -407,7 +407,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       }
 
 
-      // === DERIVAÇÃO FINANCEIRA (REGRA DE OURO: origem em dado real) ===
+      // === DERIVAÇÃO FINANCEIRA (REGRA: origem em dado real, fallback estimado quando faltar) ===
       // 1. Custo fixo mensal vem do CIF (custos_fixos ativos)
       const { data: custosFixosRows } = await supabase
         .from('custos_fixos')
@@ -419,21 +419,33 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       const horasProduzidasMes = producaoMesAtual.reduce((s, d) => s + d.horas, 0);
 
       // 3. Custo por hora REAL = custos fixos ÷ horas produzidas
-      // Se não houver produção, custo/hora = 0 (não inventa)
       const custoPorHoraReal = horasProduzidasMes > 0 ? custoFixoMensal / horasProduzidasMes : 0;
 
-      // 4. Cruza vendas (faturamento) × produção (custo) por dia útil
-      // Cada dia: faturamento real do CIV + custo derivado das horas do CIP
+      // 4. Determinar fonte do custo (REAL ou ESTIMADO)
+      // Se faltar custo fixo OU horas produzidas, usa fator operacional 65% sobre vendas
+      // (referência industrial: custo total ≈ 65% do faturamento em moveleiro)
+      const FATOR_CUSTO_ESTIMADO = 0.65;
+      const usarCustoEstimado = custoPorHoraReal === 0;
+
       const producaoDiaIdx: Record<string, number> = {};
       producaoMesAtual.forEach(p => { producaoDiaIdx[p.dia] = p.horas; });
-      const derivadoFinanceiroDiario = vendasMesAtual.map(v => {
-        const horasDoDia = producaoDiaIdx[v.dia] || 0;
-        const custo = horasDoDia * custoPorHoraReal;
+
+      // Base diária — se não há vendas reais, usar dadosExemplo gerados
+      const baseVendasDiaria = (dadosExemplo ? dadosExemplo.vendasMesAtual : vendasMesAtual);
+      const baseProducaoDiariaIdx: Record<string, number> = {};
+      (dadosExemplo ? dadosExemplo.producaoMesAtual : producaoMesAtual)
+        .forEach(p => { baseProducaoDiariaIdx[p.dia] = p.horas || 0; });
+
+      const derivadoFinanceiroDiario = baseVendasDiaria.map(v => {
+        const horasDoDia = baseProducaoDiariaIdx[v.dia] || 0;
+        const custo = usarCustoEstimado
+          ? Math.round(v.valor * FATOR_CUSTO_ESTIMADO)
+          : Math.round(horasDoDia * custoPorHoraReal);
         return {
           dia: v.dia,
           label: v.label,
           faturamento: v.valor,
-          custo: Math.round(custo),
+          custo,
           lucro: Math.round(v.valor - custo),
         };
       });
