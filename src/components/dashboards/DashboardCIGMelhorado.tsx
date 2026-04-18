@@ -75,6 +75,7 @@ interface KPIData {
   custoPorHoraReal: number; // custos_fixos mensais ÷ horas finalizadas no mês
   custoFixoMensal: number;
   horasProduzidasMes: number;
+  custoEstimado: boolean; // true quando custo derivado de fator operacional (sem CIF/produção)
 }
 
 interface DashboardCIGMelhoradoProps {
