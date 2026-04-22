@@ -212,7 +212,7 @@ export function CICEstoqueMateriais() {
       </div>
 
       {/* Ações */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3 items-center relative z-10">
         <Button className="bg-success hover:bg-success/90" onClick={() => openDialog('entrada')}>
           <ArrowUp className="h-4 w-4 mr-2" /> Entrada via NF
         </Button>
@@ -222,6 +222,31 @@ export function CICEstoqueMateriais() {
         <Button variant="ghost" size="sm" onClick={loadData}>
           <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} /> Atualizar
         </Button>
+        <div className="ml-auto flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Alcance em:</span>
+          <div className="inline-flex rounded-md border border-border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setAlcanceUnit('dias')}
+              className={cn(
+                "px-3 py-1 text-xs transition-colors",
+                alcanceUnit === 'dias' ? "bg-cic text-cic-foreground" : "bg-background text-muted-foreground hover:bg-secondary"
+              )}
+            >
+              Dias
+            </button>
+            <button
+              type="button"
+              onClick={() => setAlcanceUnit('meses')}
+              className={cn(
+                "px-3 py-1 text-xs transition-colors border-l border-border",
+                alcanceUnit === 'meses' ? "bg-cic text-cic-foreground" : "bg-background text-muted-foreground hover:bg-secondary"
+              )}
+            >
+              Meses
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
