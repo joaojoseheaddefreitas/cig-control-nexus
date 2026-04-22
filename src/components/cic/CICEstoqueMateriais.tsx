@@ -337,7 +337,22 @@ export function CICEstoqueMateriais() {
                                 onChange={e => setEditData({ ...editData, estoque_maximo: e.target.value })} />
                             ) : m.estoque_maximo}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-xs font-semibold text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-center text-xs font-semibold text-warning" title="PP = CMD × LeadTime × (1 + margem)">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-center text-xs text-muted-foreground" title={`CMM = ${(m.cmm || 0).toFixed(1)} / mês`}>
+                            {(m.cmd || 0).toFixed(2)}
+                          </td>
+                          <td className={cn("py-1.5 px-2 text-center text-xs", corAlcance(m.alcance_meses ?? 999))}>
+                            {alcanceUnit === 'dias'
+                              ? `${(m.alcance_estoque ?? 0).toFixed(1)}d`
+                              : `${(m.alcance_meses ?? 0).toFixed(2)}m`}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs font-semibold">
+                            {(m.proposta_compra || 0) > 0 ? (
+                              <span className="text-cic">{(m.proposta_compra || 0).toFixed(0)} {m.unidade}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
                           <td className="py-1.5 px-2 text-center text-xs">
                             {isEditing ? (
                               <Input type="number" className="h-7 text-xs w-14" value={editData.margem_seguranca_percentual}
