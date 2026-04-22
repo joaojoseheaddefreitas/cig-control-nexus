@@ -277,6 +277,11 @@ export function CICEstoqueMateriais() {
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Mín</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Máx</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">PP Calc.</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs" title="CMD = Consumo Médio Diário">CMD</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs" title="Alcance = Estoque ÷ Consumo">
+                        Alcance ({alcanceUnit === 'dias' ? 'd' : 'm'})
+                      </th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs" title="Proposta = MAX(0, (PP - Estoque) + Lote Econômico)">Proposta</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
                       <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Total</th>
