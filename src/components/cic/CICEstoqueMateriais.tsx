@@ -26,10 +26,21 @@ import {
 } from '@/services/materiaisService';
 
 function getSituacaoEstoque(m: Material) {
+  // Cor baseada em ALCANCE EM MESES (regra oficial CIC):
+  //   < 1.0 mês → Vermelho (Crítico)
+  //   < 1.5 mês → Amarelo  (Atenção)
+  //   >= 1.5 mês → Azul    (Normal/Confortável)
+  const alcMeses = m.alcance_meses ?? 999;
   if (m.estoque_atual <= 0) return { label: 'Falta', color: 'bg-destructive/20 text-destructive', emoji: '🔴' };
-  if (m.estoque_atual <= m.estoque_minimo) return { label: 'Pouco', color: 'bg-warning/20 text-warning', emoji: '🟠' };
-  if (m.estoque_atual > m.estoque_maximo && m.estoque_maximo > 0) return { label: 'Elevado', color: 'bg-blue-500/20 text-blue-400', emoji: '🔵' };
-  return { label: 'Normal', color: 'bg-success/20 text-success', emoji: '🟢' };
+  if (alcMeses < 1.0) return { label: 'Crítico', color: 'bg-destructive/20 text-destructive', emoji: '🔴' };
+  if (alcMeses < 1.5) return { label: 'Atenção', color: 'bg-warning/20 text-warning', emoji: '🟡' };
+  return { label: 'Normal', color: 'bg-blue-500/20 text-blue-400', emoji: '🔵' };
+}
+
+function corAlcance(alcMeses: number): string {
+  if (alcMeses < 1.0) return 'text-destructive font-bold';
+  if (alcMeses < 1.5) return 'text-warning font-semibold';
+  return 'text-blue-400 font-medium';
 }
 
 export function CICEstoqueMateriais() {
