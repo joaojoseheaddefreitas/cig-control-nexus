@@ -57,6 +57,8 @@ export function CICEstoqueMateriais() {
   const [motivo, setMotivo] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<Material | null>(null);
   const [tab, setTab] = useState('estoque');
+  // Visualização de Alcance: dias ou meses
+  const [alcanceUnit, setAlcanceUnit] = useState<'dias' | 'meses'>('dias');
   // Inline editing (parameters only, NOT estoque_atual)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
