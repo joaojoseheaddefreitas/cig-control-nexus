@@ -22,13 +22,16 @@ export interface Material {
   tipo_controle: string;
   margem_seguranca_percentual: number;
   // Calculated
-  alcance_estoque?: number;
+  alcance_estoque?: number;     // dias
+  alcance_meses?: number;       // meses
   alcance_projetado?: number;
   valor_estoque?: number;
   proposta_compra?: number;
   status?: 'normal' | 'atencao' | 'critico';
   ponto_pedido_calculado?: number;
   estoque_seguranca_calculado?: number;
+  cmm?: number;                 // Consumo Médio Mensal
+  cmd?: number;                 // Consumo Médio Diário (= CMM/30)
   gaveta1?: number;
   gaveta2?: number;
   gaveta2_ativa?: boolean;
@@ -52,10 +55,15 @@ function calcularAlcance(estoque: number, consumoDiario: number): number {
   return estoque / consumoDiario;
 }
 
-function calcularStatus(mat: Material): 'normal' | 'atencao' | 'critico' {
-  const alcance = calcularAlcance(mat.estoque_atual, mat.consumo_medio_diario);
-  if (alcance < 1 || mat.estoque_atual < mat.ponto_pedido) return 'critico';
-  if (mat.estoque_atual < mat.estoque_seguranca) return 'atencao';
+/**
+ * Status baseado em ALCANCE EM MESES (regra oficial):
+ *   < 1.0 mês  → crítico (vermelho)
+ *   < 1.5 mês  → atenção (amarelo)
+ *   >= 1.5 mês → normal  (azul)
+ */
+function calcularStatusPorAlcance(alcanceMeses: number): 'normal' | 'atencao' | 'critico' {
+  if (alcanceMeses < 1.0) return 'critico';
+  if (alcanceMeses < 1.5) return 'atencao';
   return 'normal';
 }
 
@@ -69,33 +77,50 @@ export async function fetchMateriais(): Promise<Material[]> {
   if (error || !data) return [];
 
   return (data as Material[]).map(mat => {
-    const alcance = calcularAlcance(mat.estoque_atual, mat.consumo_medio_diario);
-    const margem = (mat.margem_seguranca_percentual || 20) / 100;
+    // CMD/CMM — fonte oficial
+    const cmd = Number(mat.consumo_medio_diario) || 0;   // Consumo Médio Diário
+    const cmm = cmd * 30;                                // Consumo Médio Mensal
 
-    // PP calculation: consumo_diario × lead_time × (1 + margem)
-    const estoqueSegCalc = (mat.consumo_medio_diario * mat.lead_time_dias) * margem;
-    const pontoPedidoCalc = mat.consumo_medio_diario * mat.lead_time_dias * (1 + margem);
+    const margem = (mat.margem_seguranca_percentual || 20) / 100;
+    const leadTime = Number(mat.lead_time_dias) || 0;
+
+    // PP = CMD × (LeadTime × (1 + margem_segurança))
+    //    Lead time + margem como dias adicionais de segurança
+    const estoqueSegCalc = cmd * leadTime * margem;
+    const pontoPedidoCalc = cmd * leadTime * (1 + margem);
 
     // Duas gavetas logic
     const isDuasGavetas = mat.tipo_controle === 'DUAS_GAVETAS';
-    const gaveta2 = isDuasGavetas ? mat.consumo_medio_diario * mat.lead_time_dias : 0;
+    const gaveta2 = isDuasGavetas ? cmd * leadTime : 0;
     const gaveta1 = isDuasGavetas ? Math.max(0, mat.estoque_atual - gaveta2) : 0;
     const gaveta2Ativa = isDuasGavetas && gaveta1 <= 0;
 
-    const deficit = Math.max(0, pontoPedidoCalc - mat.estoque_atual);
-    const proposta = deficit > 0 ? Math.max(deficit, mat.lote_economico) : 0;
-    const alcanceProjetado = calcularAlcance(mat.estoque_atual + proposta, mat.consumo_medio_diario);
+    // PROPOSTA = MAX(0; (PP - Estoque Atual) + Lote Econômico)
+    //   Só propõe compra se Estoque < PP
+    const deficit = pontoPedidoCalc - mat.estoque_atual;
+    const proposta = deficit > 0
+      ? Math.max(0, deficit + (mat.lote_economico || 0))
+      : 0;
 
-    // Status: duas gavetas consuming gaveta2 = critico
-    let status = calcularStatus(mat);
+    // ALCANCE = (Estoque Atual) / CMD (em dias) e CMM (em meses)
+    //   Versão projetada inclui pedidos em aberto (proposta de compra)
+    const alcanceDias = calcularAlcance(mat.estoque_atual, cmd);
+    const alcanceMeses = cmm > 0 ? mat.estoque_atual / cmm : 999;
+    const alcanceProjetadoDias = calcularAlcance(mat.estoque_atual + proposta, cmd);
+
+    // Status oficial baseado em alcance em meses
+    let status = calcularStatusPorAlcance(alcanceMeses);
     if (gaveta2Ativa) status = 'critico';
 
     return {
       ...mat,
-      alcance_estoque: Number(alcance.toFixed(2)),
-      alcance_projetado: Number(alcanceProjetado.toFixed(2)),
+      cmm: Number(cmm.toFixed(2)),
+      cmd: Number(cmd.toFixed(2)),
+      alcance_estoque: Number(alcanceDias.toFixed(2)),
+      alcance_meses: Number(alcanceMeses.toFixed(2)),
+      alcance_projetado: Number(alcanceProjetadoDias.toFixed(2)),
       valor_estoque: mat.estoque_atual * mat.valor_unitario,
-      proposta_compra: proposta,
+      proposta_compra: Number(proposta.toFixed(2)),
       status,
       ponto_pedido_calculado: Number(pontoPedidoCalc.toFixed(2)),
       estoque_seguranca_calculado: Number(estoqueSegCalc.toFixed(2)),
