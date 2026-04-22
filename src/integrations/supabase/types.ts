@@ -767,6 +767,8 @@ export type Database = {
         Row: {
           ativo: boolean
           categoria: string
+          cmm_manual: boolean
+          cmm_override: number | null
           codigo: string
           consumo_medio_diario: number
           created_at: string
@@ -782,6 +784,10 @@ export type Database = {
           margem_seguranca_percentual: number
           nome: string
           ponto_pedido: number
+          ponto_pedido_manual: boolean
+          ponto_pedido_override: number | null
+          proposta_manual: boolean
+          proposta_override: number | null
           tipo_controle: string
           ultima_entrada: string | null
           unidade: string
@@ -791,6 +797,8 @@ export type Database = {
         Insert: {
           ativo?: boolean
           categoria?: string
+          cmm_manual?: boolean
+          cmm_override?: number | null
           codigo: string
           consumo_medio_diario?: number
           created_at?: string
@@ -806,6 +814,10 @@ export type Database = {
           margem_seguranca_percentual?: number
           nome: string
           ponto_pedido?: number
+          ponto_pedido_manual?: boolean
+          ponto_pedido_override?: number | null
+          proposta_manual?: boolean
+          proposta_override?: number | null
           tipo_controle?: string
           ultima_entrada?: string | null
           unidade?: string
@@ -815,6 +827,8 @@ export type Database = {
         Update: {
           ativo?: boolean
           categoria?: string
+          cmm_manual?: boolean
+          cmm_override?: number | null
           codigo?: string
           consumo_medio_diario?: number
           created_at?: string
@@ -830,6 +844,10 @@ export type Database = {
           margem_seguranca_percentual?: number
           nome?: string
           ponto_pedido?: number
+          ponto_pedido_manual?: boolean
+          ponto_pedido_override?: number | null
+          proposta_manual?: boolean
+          proposta_override?: number | null
           tipo_controle?: string
           ultima_entrada?: string | null
           unidade?: string
