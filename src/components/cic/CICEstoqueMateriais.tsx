@@ -374,9 +374,47 @@ export function CICEstoqueMateriais() {
                                 onChange={e => setEditData({ ...editData, estoque_maximo: e.target.value })} />
                             ) : m.estoque_maximo}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-xs font-semibold text-warning" title="PP = CMD × LeadTime × (1 + margem)">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-center text-xs font-semibold" title="PP = CMD × LeadTime × (1 + margem). Clique no badge para alternar Manual/IA.">
+                            {isEditing ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <Input type="number" className="h-6 text-xs w-16" value={editData.ponto_pedido_override}
+                                  disabled={!editData.ponto_pedido_manual}
+                                  onChange={e => setEditData({ ...editData, ponto_pedido_override: e.target.value })} />
+                                <label className="flex items-center gap-1 text-[9px] cursor-pointer">
+                                  <input type="checkbox" checked={!!editData.ponto_pedido_manual}
+                                    onChange={e => setEditData({ ...editData, ponto_pedido_manual: e.target.checked })} />
+                                  Manual
+                                </label>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</span>
+                                <button onClick={() => toggleManual(m, 'ponto_pedido')}
+                                  className={cn("text-[8px] px-1 py-0.5 rounded cursor-pointer hover:opacity-80",
+                                    m.pp_origem === 'manual' ? 'bg-blue-500/20 text-blue-400' : 'bg-cic/20 text-cic')}>
+                                  {m.pp_origem === 'manual' ? '✏ MANUAL' : '🤖 IA'}
+                                </button>
+                              </div>
+                            )}
+                          </td>
                           <td className="py-1.5 px-2 text-center text-xs text-muted-foreground" title={`CMM = ${(m.cmm || 0).toFixed(1)} / mês`}>
-                            {(m.cmd || 0).toFixed(2)}
+                            {isEditing ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <Input type="number" step="0.01" className="h-6 text-xs w-16" value={editData.cmm_override}
+                                  disabled={!editData.cmm_manual}
+                                  onChange={e => setEditData({ ...editData, cmm_override: e.target.value })} />
+                                <label className="flex items-center gap-1 text-[9px] cursor-pointer">
+                                  <input type="checkbox" checked={!!editData.cmm_manual}
+                                    onChange={e => setEditData({ ...editData, cmm_manual: e.target.checked })} />
+                                  CMM Manual
+                                </label>
+                              </div>
+                            ) : (
+                              <>
+                                {(m.cmd || 0).toFixed(2)}
+                                {m.cmm_origem === 'manual' && <span className="block text-[8px] text-blue-400">✏ manual</span>}
+                              </>
+                            )}
                           </td>
                           <td className={cn("py-1.5 px-2 text-center text-xs", corAlcance(m.alcance_meses ?? 999))}>
                             {alcanceUnit === 'dias'
@@ -384,10 +422,30 @@ export function CICEstoqueMateriais() {
                               : `${(m.alcance_meses ?? 0).toFixed(2)}m`}
                           </td>
                           <td className="py-1.5 px-2 text-center text-xs font-semibold">
-                            {(m.proposta_compra || 0) > 0 ? (
-                              <span className="text-cic">{(m.proposta_compra || 0).toFixed(0)} {m.unidade}</span>
+                            {isEditing ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <Input type="number" className="h-6 text-xs w-16" value={editData.proposta_override}
+                                  disabled={!editData.proposta_manual}
+                                  onChange={e => setEditData({ ...editData, proposta_override: e.target.value })} />
+                                <label className="flex items-center gap-1 text-[9px] cursor-pointer">
+                                  <input type="checkbox" checked={!!editData.proposta_manual}
+                                    onChange={e => setEditData({ ...editData, proposta_manual: e.target.checked })} />
+                                  Manual
+                                </label>
+                              </div>
                             ) : (
-                              <span className="text-muted-foreground">—</span>
+                              <div className="flex flex-col items-center gap-0.5">
+                                {(m.proposta_compra || 0) > 0 ? (
+                                  <span className="text-cic">{(m.proposta_compra || 0).toFixed(0)} {m.unidade}</span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                                <button onClick={() => toggleManual(m, 'proposta')}
+                                  className={cn("text-[8px] px-1 py-0.5 rounded cursor-pointer hover:opacity-80",
+                                    m.proposta_origem === 'manual' ? 'bg-blue-500/20 text-blue-400' : 'bg-cic/20 text-cic')}>
+                                  {m.proposta_origem === 'manual' ? '✏ MANUAL' : '🤖 IA'}
+                                </button>
+                              </div>
                             )}
                           </td>
                           <td className="py-1.5 px-2 text-center text-xs">
