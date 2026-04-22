@@ -105,6 +105,13 @@ export function CICEstoqueMateriais() {
       estoque_maximo: m.estoque_maximo,
       tipo_controle: m.tipo_controle || 'MRP',
       margem_seguranca_percentual: m.margem_seguranca_percentual || 20,
+      // Manual overrides
+      ponto_pedido_manual: !!m.ponto_pedido_manual,
+      ponto_pedido_override: m.ponto_pedido_override ?? m.ponto_pedido_calculado ?? 0,
+      proposta_manual: !!m.proposta_manual,
+      proposta_override: m.proposta_override ?? m.proposta_compra ?? 0,
+      cmm_manual: !!m.cmm_manual,
+      cmm_override: m.cmm_override ?? m.cmm ?? 0,
     });
   };
 
@@ -112,7 +119,6 @@ export function CICEstoqueMateriais() {
 
   const saveEdit = async () => {
     if (!editingId) return;
-    // NOTE: estoque_atual is NOT updated here — only via movimentações
     const { error } = await (supabase as any)
       .from('materiais')
       .update({
@@ -124,17 +130,48 @@ export function CICEstoqueMateriais() {
         estoque_maximo: Number(editData.estoque_maximo) || 0,
         tipo_controle: editData.tipo_controle || 'MRP',
         margem_seguranca_percentual: Number(editData.margem_seguranca_percentual) || 20,
+        // Overrides manuais
+        ponto_pedido_manual: !!editData.ponto_pedido_manual,
+        ponto_pedido_override: editData.ponto_pedido_manual ? Number(editData.ponto_pedido_override) || 0 : null,
+        proposta_manual: !!editData.proposta_manual,
+        proposta_override: editData.proposta_manual ? Number(editData.proposta_override) || 0 : null,
+        cmm_manual: !!editData.cmm_manual,
+        cmm_override: editData.cmm_manual ? Number(editData.cmm_override) || 0 : null,
       })
       .eq('id', editingId);
 
     if (error) {
       toast.error('Erro ao salvar: ' + error.message);
     } else {
-      toast.success('Material atualizado!');
+      toast.success('Material atualizado! Recálculo automático aplicado.');
       setEditingId(null);
       setEditData({});
       await loadData();
     }
+  };
+
+  // Toggle rápido manual/auto (sem entrar em modo edição completa)
+  const toggleManual = async (m: Material, campo: 'ponto_pedido' | 'proposta' | 'cmm') => {
+    const manualField = `${campo}_manual` as const;
+    const overrideField = `${campo}_override` as const;
+    const isManualNow = !!(m as any)[manualField];
+    const newManual = !isManualNow;
+    const currentCalc = campo === 'ponto_pedido' ? m.ponto_pedido_calculado :
+                         campo === 'proposta' ? m.proposta_compra : m.cmm;
+
+    const payload: any = { [manualField]: newManual };
+    if (newManual) {
+      // ao ativar manual, preserva o valor automático atual como ponto de partida
+      payload[overrideField] = (m as any)[overrideField] ?? currentCalc ?? 0;
+    } else {
+      // ao desativar manual, limpa o override → volta ao automático
+      payload[overrideField] = null;
+    }
+
+    const { error } = await (supabase as any).from('materiais').update(payload).eq('id', m.id);
+    if (error) toast.error('Erro: ' + error.message);
+    else toast.success(`${campo === 'ponto_pedido' ? 'PP' : campo === 'proposta' ? 'Proposta' : 'CMM'} agora é ${newManual ? 'MANUAL' : 'AUTOMÁTICO (IA)'}.`);
+    await loadData();
   };
 
   const handleRegistrar = async () => {
@@ -337,9 +374,47 @@ export function CICEstoqueMateriais() {
                                 onChange={e => setEditData({ ...editData, estoque_maximo: e.target.value })} />
                             ) : m.estoque_maximo}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-xs font-semibold text-warning" title="PP = CMD × LeadTime × (1 + margem)">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-center text-xs font-semibold" title="PP = CMD × LeadTime × (1 + margem). Clique no badge para alternar Manual/IA.">
+                            {isEditing ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <Input type="number" className="h-6 text-xs w-16" value={editData.ponto_pedido_override}
+                                  disabled={!editData.ponto_pedido_manual}
+                                  onChange={e => setEditData({ ...editData, ponto_pedido_override: e.target.value })} />
+                                <label className="flex items-center gap-1 text-[9px] cursor-pointer">
+                                  <input type="checkbox" checked={!!editData.ponto_pedido_manual}
+                                    onChange={e => setEditData({ ...editData, ponto_pedido_manual: e.target.checked })} />
+                                  Manual
+                                </label>
+                              </div>
+                            ) : (
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</span>
+                                <button onClick={() => toggleManual(m, 'ponto_pedido')}
+                                  className={cn("text-[8px] px-1 py-0.5 rounded cursor-pointer hover:opacity-80",
+                                    m.pp_origem === 'manual' ? 'bg-blue-500/20 text-blue-400' : 'bg-cic/20 text-cic')}>
+                                  {m.pp_origem === 'manual' ? '✏ MANUAL' : '🤖 IA'}
+                                </button>
+                              </div>
+                            )}
+                          </td>
                           <td className="py-1.5 px-2 text-center text-xs text-muted-foreground" title={`CMM = ${(m.cmm || 0).toFixed(1)} / mês`}>
-                            {(m.cmd || 0).toFixed(2)}
+                            {isEditing ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <Input type="number" step="0.01" className="h-6 text-xs w-16" value={editData.cmm_override}
+                                  disabled={!editData.cmm_manual}
+                                  onChange={e => setEditData({ ...editData, cmm_override: e.target.value })} />
+                                <label className="flex items-center gap-1 text-[9px] cursor-pointer">
+                                  <input type="checkbox" checked={!!editData.cmm_manual}
+                                    onChange={e => setEditData({ ...editData, cmm_manual: e.target.checked })} />
+                                  CMM Manual
+                                </label>
+                              </div>
+                            ) : (
+                              <>
+                                {(m.cmd || 0).toFixed(2)}
+                                {m.cmm_origem === 'manual' && <span className="block text-[8px] text-blue-400">✏ manual</span>}
+                              </>
+                            )}
                           </td>
                           <td className={cn("py-1.5 px-2 text-center text-xs", corAlcance(m.alcance_meses ?? 999))}>
                             {alcanceUnit === 'dias'
@@ -347,10 +422,30 @@ export function CICEstoqueMateriais() {
                               : `${(m.alcance_meses ?? 0).toFixed(2)}m`}
                           </td>
                           <td className="py-1.5 px-2 text-center text-xs font-semibold">
-                            {(m.proposta_compra || 0) > 0 ? (
-                              <span className="text-cic">{(m.proposta_compra || 0).toFixed(0)} {m.unidade}</span>
+                            {isEditing ? (
+                              <div className="flex flex-col items-center gap-1">
+                                <Input type="number" className="h-6 text-xs w-16" value={editData.proposta_override}
+                                  disabled={!editData.proposta_manual}
+                                  onChange={e => setEditData({ ...editData, proposta_override: e.target.value })} />
+                                <label className="flex items-center gap-1 text-[9px] cursor-pointer">
+                                  <input type="checkbox" checked={!!editData.proposta_manual}
+                                    onChange={e => setEditData({ ...editData, proposta_manual: e.target.checked })} />
+                                  Manual
+                                </label>
+                              </div>
                             ) : (
-                              <span className="text-muted-foreground">—</span>
+                              <div className="flex flex-col items-center gap-0.5">
+                                {(m.proposta_compra || 0) > 0 ? (
+                                  <span className="text-cic">{(m.proposta_compra || 0).toFixed(0)} {m.unidade}</span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                                <button onClick={() => toggleManual(m, 'proposta')}
+                                  className={cn("text-[8px] px-1 py-0.5 rounded cursor-pointer hover:opacity-80",
+                                    m.proposta_origem === 'manual' ? 'bg-blue-500/20 text-blue-400' : 'bg-cic/20 text-cic')}>
+                                  {m.proposta_origem === 'manual' ? '✏ MANUAL' : '🤖 IA'}
+                                </button>
+                              </div>
                             )}
                           </td>
                           <td className="py-1.5 px-2 text-center text-xs">

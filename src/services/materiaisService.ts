@@ -21,6 +21,13 @@ export interface Material {
   ativo: boolean;
   tipo_controle: string;
   margem_seguranca_percentual: number;
+  // Manual overrides (CIC) — quando *_manual=true, usa *_override em vez do calculado
+  ponto_pedido_manual?: boolean;
+  ponto_pedido_override?: number | null;
+  proposta_manual?: boolean;
+  proposta_override?: number | null;
+  cmm_manual?: boolean;
+  cmm_override?: number | null;
   // Calculated
   alcance_estoque?: number;     // dias
   alcance_meses?: number;       // meses
@@ -30,8 +37,12 @@ export interface Material {
   status?: 'normal' | 'atencao' | 'critico';
   ponto_pedido_calculado?: number;
   estoque_seguranca_calculado?: number;
-  cmm?: number;                 // Consumo Médio Mensal
-  cmd?: number;                 // Consumo Médio Diário (= CMM/30)
+  cmm?: number;                 // Consumo Médio Mensal (efetivo: manual ou calc)
+  cmd?: number;                 // Consumo Médio Diário (efetivo)
+  // Origem dos valores (para badges na UI)
+  pp_origem?: 'manual' | 'auto';
+  proposta_origem?: 'manual' | 'auto';
+  cmm_origem?: 'manual' | 'auto';
   gaveta1?: number;
   gaveta2?: number;
   gaveta2_ativa?: boolean;
@@ -77,17 +88,23 @@ export async function fetchMateriais(): Promise<Material[]> {
   if (error || !data) return [];
 
   return (data as Material[]).map(mat => {
-    // CMD/CMM — fonte oficial
-    const cmd = Number(mat.consumo_medio_diario) || 0;   // Consumo Médio Diário
-    const cmm = cmd * 30;                                // Consumo Médio Mensal
+    // ── CMM/CMD: respeita override manual ──
+    const cmmManual = !!mat.cmm_manual;
+    const cmmOverride = Number(mat.cmm_override) || 0;
+    const cmdBase = Number(mat.consumo_medio_diario) || 0;
+    const cmm = cmmManual && cmmOverride > 0 ? cmmOverride : cmdBase * 30;
+    const cmd = cmm / 30;
 
     const margem = (mat.margem_seguranca_percentual || 20) / 100;
     const leadTime = Number(mat.lead_time_dias) || 0;
 
-    // PP = CMD × (LeadTime × (1 + margem_segurança))
-    //    Lead time + margem como dias adicionais de segurança
+    // ── PONTO DE PEDIDO: respeita override manual ──
+    // Fórmula automática: PP = CMD × LeadTime × (1 + margem_segurança)
     const estoqueSegCalc = cmd * leadTime * margem;
-    const pontoPedidoCalc = cmd * leadTime * (1 + margem);
+    const pontoPedidoCalcAuto = cmd * leadTime * (1 + margem);
+    const ppManual = !!mat.ponto_pedido_manual;
+    const ppOverride = Number(mat.ponto_pedido_override) || 0;
+    const pontoPedidoCalc = ppManual && ppOverride > 0 ? ppOverride : pontoPedidoCalcAuto;
 
     // Duas gavetas logic
     const isDuasGavetas = mat.tipo_controle === 'DUAS_GAVETAS';
@@ -95,15 +112,17 @@ export async function fetchMateriais(): Promise<Material[]> {
     const gaveta1 = isDuasGavetas ? Math.max(0, mat.estoque_atual - gaveta2) : 0;
     const gaveta2Ativa = isDuasGavetas && gaveta1 <= 0;
 
-    // PROPOSTA = MAX(0; (PP - Estoque Atual) + Lote Econômico)
-    //   Só propõe compra se Estoque < PP
+    // ── PROPOSTA: respeita override manual ──
+    // Auto: MAX(0; (PP - Estoque Atual) + Lote Econômico) — só se Estoque < PP
     const deficit = pontoPedidoCalc - mat.estoque_atual;
-    const proposta = deficit > 0
+    const propostaAuto = deficit > 0
       ? Math.max(0, deficit + (mat.lote_economico || 0))
       : 0;
+    const propostaManual = !!mat.proposta_manual;
+    const propostaOverride = Number(mat.proposta_override) || 0;
+    const proposta = propostaManual ? propostaOverride : propostaAuto;
 
     // ALCANCE = (Estoque Atual) / CMD (em dias) e CMM (em meses)
-    //   Versão projetada inclui pedidos em aberto (proposta de compra)
     const alcanceDias = calcularAlcance(mat.estoque_atual, cmd);
     const alcanceMeses = cmm > 0 ? mat.estoque_atual / cmm : 999;
     const alcanceProjetadoDias = calcularAlcance(mat.estoque_atual + proposta, cmd);
@@ -124,6 +143,9 @@ export async function fetchMateriais(): Promise<Material[]> {
       status,
       ponto_pedido_calculado: Number(pontoPedidoCalc.toFixed(2)),
       estoque_seguranca_calculado: Number(estoqueSegCalc.toFixed(2)),
+      pp_origem: ppManual && ppOverride > 0 ? 'manual' : 'auto',
+      proposta_origem: propostaManual ? 'manual' : 'auto',
+      cmm_origem: cmmManual && cmmOverride > 0 ? 'manual' : 'auto',
       gaveta1: Number(gaveta1.toFixed(2)),
       gaveta2: Number(gaveta2.toFixed(2)),
       gaveta2_ativa: gaveta2Ativa,

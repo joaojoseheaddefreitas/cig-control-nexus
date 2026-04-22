@@ -74,7 +74,17 @@ export function CIPDashboardNew() {
   const opsEmProducao = ops.filter(o => o.status_producao === 'em_producao').length;
   const opsProgramadas = ops.filter(o => o.status_producao === 'programada').length;
   const opsFinalizadas = ops.filter(o => o.status_producao === 'Producao Finalizada').length;
-  const ocupacaoGeral = capacidade?.percentualOcupacao || 0;
+  // OCUPAÇÃO REAL = ocupação do GARGALO (setor com maior carga %)
+  // A capacidade fabril é limitada pelo gargalo, não pela média dos setores.
+  const ocupacaoGargalo = setorCapacidade.length > 0
+    ? Math.max(...setorCapacidade.map(s => s.carga_percent))
+    : 0;
+  const setorGargaloOcup = setorCapacidade.length > 0
+    ? setorCapacidade.reduce((max, s) => s.carga_percent > max.carga_percent ? s : max, setorCapacidade[0])
+    : null;
+  const ocupacaoMediaSetores = capacidade?.percentualOcupacao || 0;
+  // Ocupação Geral mostra a do gargalo (limita toda a fábrica)
+  const ocupacaoGeral = ocupacaoGargalo;
 
   // PCP 3.0 — prazo de vendas
   const prazoVendasDias = capacidade?.prazoVendasDias || 0;
@@ -109,31 +119,39 @@ export function CIPDashboardNew() {
 
   const iaAlerts: IAAlert[] = useMemo(() => {
     const alerts: IAAlert[] = [];
-    const gargalos = setorCapacidade.filter(s => s.carga_percent > 100);
-    gargalos.forEach(s => {
+    const horario = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    // Setores com risco de gargalo (>=85%)
+    const sobrecarga = setorCapacidade.filter(s => s.carga_percent >= 85);
+    sobrecarga.forEach(s => {
+      const isGargalo = s.carga_percent > 100;
+      const operadoresExtras = Math.ceil((s.horas_ocupadas - s.horas_disponiveis_mensal) / (s.horas_turno * s.dias_uteis_mensais)) || 1;
       alerts.push({
-        id: `gargalo-${s.id}`,
+        id: `sobrecarga-${s.id}`,
         tipo: 'gargalo',
         prioridade: 'alta',
-        mensagem: `GARGALO: ${s.nome} com ${s.carga_percent}% de ocupação. ${s.diasGargalo.toFixed(1)} dias de carga.`,
+        mensagem: isGargalo
+          ? `🔥 GARGALO em ${s.nome} (${s.carga_percent}%). Sugestão: aumentar lotação em +${Math.max(operadoresExtras, 1)} operador(es) ou adicionar 1 máquina/turno extra para balancear a fábrica.`
+          : `⚠️ ${s.nome} a ${s.carga_percent}% — risco de gargalo. Sugestão: avaliar +1 operador OU realocar carga para setor ocioso (${setorMaisFolgado}).`,
         setor: s.nome,
-        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        horario,
       });
     });
+
     if (opsPendentes > 5) {
       alerts.push({
         id: 'pendentes', tipo: 'sugestao', prioridade: 'media',
         mensagem: `${opsPendentes} OPs aguardando programação.`,
         setor: 'Geral',
-        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        horario,
       });
     }
     if (alertaDesbalanceamento) {
       alerts.push({
         id: 'desbalance', tipo: 'gargalo', prioridade: 'alta',
-        mensagem: `Desbalanceamento: ${setorMenosFolgado} (${folgaMin.toFixed(1)}% folga) vs ${setorMaisFolgado} (${folgaMax.toFixed(1)}% folga). Diferença de ${(folgaMax - folgaMin).toFixed(0)}%.`,
+        mensagem: `⚖️ Desbalanceamento: ${setorMenosFolgado} (${folgaMin.toFixed(1)}% folga) está limitando a fábrica enquanto ${setorMaisFolgado} (${folgaMax.toFixed(1)}% folga) está ocioso. Sugestão: realocar 1-2 operadores do setor ocioso para o gargalo.`,
         setor: 'Geral',
-        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        horario,
       });
     }
     if (alerts.length === 0) {
@@ -141,7 +159,7 @@ export function CIPDashboardNew() {
         id: 'ok', tipo: 'otimizacao', prioridade: 'media',
         mensagem: 'Produção dentro da capacidade. Sem gargalos detectados.',
         setor: 'Geral',
-        horario: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        horario,
       });
     }
     return alerts;
@@ -227,10 +245,10 @@ export function CIPDashboardNew() {
         />
         <KPICardCIP
           title="Gargalo Atual"
-          value={setorGargaloDias.substring(0, 12)}
-          subtitle={`${gargaloEmDias.toFixed(1)} dias · ${ocupacaoGeral}% ocup.`}
+          value={(setorGargaloOcup?.nome || setorGargaloDias).substring(0, 12)}
+          subtitle={`${gargaloEmDias.toFixed(1)}d · ${ocupacaoGargalo}% ocup. (gargalo)`}
           icon={<AlertTriangle className="h-5 w-5" />}
-          variant={ocupacaoGeral > 100 ? 'red' : ocupacaoGeral >= 91 ? 'red' : 'orange'}
+          variant={ocupacaoGargalo > 100 ? 'red' : ocupacaoGargalo >= 85 ? 'red' : ocupacaoGargalo >= 70 ? 'orange' : 'green'}
           size="sm"
         />
       </div>
@@ -259,11 +277,11 @@ export function CIPDashboardNew() {
           variant="blue"
         />
         <KPICardCIP
-          title="Ocupação Geral"
-          value={`${ocupacaoGeral}%`}
-          subtitle={`Saldo: ${saldoGlobalHoras >= 0 ? '+' : ''}${saldoGlobalHoras.toFixed(0)}h`}
+          title="Ocupação Fabril (Gargalo)"
+          value={`${ocupacaoGargalo}%`}
+          subtitle={`Limite real · média: ${ocupacaoMediaSetores}% · saldo ${saldoGlobalHoras >= 0 ? '+' : ''}${saldoGlobalHoras.toFixed(0)}h`}
           icon={<Gauge className="h-5 w-5" />}
-          variant={ocupacaoGeral > 80 ? 'red' : 'green'}
+          variant={ocupacaoGargalo > 100 ? 'red' : ocupacaoGargalo >= 85 ? 'red' : ocupacaoGargalo >= 70 ? 'orange' : 'green'}
         />
       </div>
 
