@@ -105,6 +105,13 @@ export function CICEstoqueMateriais() {
       estoque_maximo: m.estoque_maximo,
       tipo_controle: m.tipo_controle || 'MRP',
       margem_seguranca_percentual: m.margem_seguranca_percentual || 20,
+      // Manual overrides
+      ponto_pedido_manual: !!m.ponto_pedido_manual,
+      ponto_pedido_override: m.ponto_pedido_override ?? m.ponto_pedido_calculado ?? 0,
+      proposta_manual: !!m.proposta_manual,
+      proposta_override: m.proposta_override ?? m.proposta_compra ?? 0,
+      cmm_manual: !!m.cmm_manual,
+      cmm_override: m.cmm_override ?? m.cmm ?? 0,
     });
   };
 
@@ -112,7 +119,6 @@ export function CICEstoqueMateriais() {
 
   const saveEdit = async () => {
     if (!editingId) return;
-    // NOTE: estoque_atual is NOT updated here — only via movimentações
     const { error } = await (supabase as any)
       .from('materiais')
       .update({
@@ -124,17 +130,48 @@ export function CICEstoqueMateriais() {
         estoque_maximo: Number(editData.estoque_maximo) || 0,
         tipo_controle: editData.tipo_controle || 'MRP',
         margem_seguranca_percentual: Number(editData.margem_seguranca_percentual) || 20,
+        // Overrides manuais
+        ponto_pedido_manual: !!editData.ponto_pedido_manual,
+        ponto_pedido_override: editData.ponto_pedido_manual ? Number(editData.ponto_pedido_override) || 0 : null,
+        proposta_manual: !!editData.proposta_manual,
+        proposta_override: editData.proposta_manual ? Number(editData.proposta_override) || 0 : null,
+        cmm_manual: !!editData.cmm_manual,
+        cmm_override: editData.cmm_manual ? Number(editData.cmm_override) || 0 : null,
       })
       .eq('id', editingId);
 
     if (error) {
       toast.error('Erro ao salvar: ' + error.message);
     } else {
-      toast.success('Material atualizado!');
+      toast.success('Material atualizado! Recálculo automático aplicado.');
       setEditingId(null);
       setEditData({});
       await loadData();
     }
+  };
+
+  // Toggle rápido manual/auto (sem entrar em modo edição completa)
+  const toggleManual = async (m: Material, campo: 'ponto_pedido' | 'proposta' | 'cmm') => {
+    const manualField = `${campo}_manual` as const;
+    const overrideField = `${campo}_override` as const;
+    const isManualNow = !!(m as any)[manualField];
+    const newManual = !isManualNow;
+    const currentCalc = campo === 'ponto_pedido' ? m.ponto_pedido_calculado :
+                         campo === 'proposta' ? m.proposta_compra : m.cmm;
+
+    const payload: any = { [manualField]: newManual };
+    if (newManual) {
+      // ao ativar manual, preserva o valor automático atual como ponto de partida
+      payload[overrideField] = (m as any)[overrideField] ?? currentCalc ?? 0;
+    } else {
+      // ao desativar manual, limpa o override → volta ao automático
+      payload[overrideField] = null;
+    }
+
+    const { error } = await (supabase as any).from('materiais').update(payload).eq('id', m.id);
+    if (error) toast.error('Erro: ' + error.message);
+    else toast.success(`${campo === 'ponto_pedido' ? 'PP' : campo === 'proposta' ? 'Proposta' : 'CMM'} agora é ${newManual ? 'MANUAL' : 'AUTOMÁTICO (IA)'}.`);
+    await loadData();
   };
 
   const handleRegistrar = async () => {
