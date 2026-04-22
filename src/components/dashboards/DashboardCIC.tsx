@@ -916,18 +916,21 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       )}
 
       {!isMobile && (
-        <aside className={cn(
-          'h-full border-r border-border/50 bg-card/30 p-4 flex-shrink-0 transition-all duration-300 relative overflow-y-auto',
+        <div className={cn(
+          'relative h-full flex-shrink-0 transition-all duration-300',
           sidebarCollapsed ? 'w-16' : 'w-56'
         )}>
+          <aside className="h-full w-full border-r border-border/50 bg-card/30 p-4 overflow-y-auto overflow-x-hidden">
+            <SidebarContent isCollapsed={sidebarCollapsed} />
+          </aside>
           <button
             onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            className="absolute -right-4 top-6 w-8 h-8 bg-cic border-2 border-cic/50 rounded-full flex items-center justify-center hover:bg-cic/80 hover:scale-110 transition-all z-10 shadow-lg shadow-cic/30 text-white"
+            aria-label={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
+            className="absolute right-0 translate-x-1/2 top-6 w-8 h-8 bg-cic border-2 border-background rounded-full flex items-center justify-center hover:bg-cic/80 hover:scale-110 transition-all z-30 shadow-lg shadow-cic/40 text-white"
           >
             {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
-          <SidebarContent isCollapsed={sidebarCollapsed} />
-        </aside>
+        </div>
       )}
 
       <main className={cn(
