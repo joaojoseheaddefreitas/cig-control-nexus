@@ -26,10 +26,21 @@ import {
 } from '@/services/materiaisService';
 
 function getSituacaoEstoque(m: Material) {
+  // Cor baseada em ALCANCE EM MESES (regra oficial CIC):
+  //   < 1.0 mês → Vermelho (Crítico)
+  //   < 1.5 mês → Amarelo  (Atenção)
+  //   >= 1.5 mês → Azul    (Normal/Confortável)
+  const alcMeses = m.alcance_meses ?? 999;
   if (m.estoque_atual <= 0) return { label: 'Falta', color: 'bg-destructive/20 text-destructive', emoji: '🔴' };
-  if (m.estoque_atual <= m.estoque_minimo) return { label: 'Pouco', color: 'bg-warning/20 text-warning', emoji: '🟠' };
-  if (m.estoque_atual > m.estoque_maximo && m.estoque_maximo > 0) return { label: 'Elevado', color: 'bg-blue-500/20 text-blue-400', emoji: '🔵' };
-  return { label: 'Normal', color: 'bg-success/20 text-success', emoji: '🟢' };
+  if (alcMeses < 1.0) return { label: 'Crítico', color: 'bg-destructive/20 text-destructive', emoji: '🔴' };
+  if (alcMeses < 1.5) return { label: 'Atenção', color: 'bg-warning/20 text-warning', emoji: '🟡' };
+  return { label: 'Normal', color: 'bg-blue-500/20 text-blue-400', emoji: '🔵' };
+}
+
+function corAlcance(alcMeses: number): string {
+  if (alcMeses < 1.0) return 'text-destructive font-bold';
+  if (alcMeses < 1.5) return 'text-warning font-semibold';
+  return 'text-blue-400 font-medium';
 }
 
 export function CICEstoqueMateriais() {
@@ -46,6 +57,8 @@ export function CICEstoqueMateriais() {
   const [motivo, setMotivo] = useState('');
   const [deleteConfirm, setDeleteConfirm] = useState<Material | null>(null);
   const [tab, setTab] = useState('estoque');
+  // Visualização de Alcance: dias ou meses
+  const [alcanceUnit, setAlcanceUnit] = useState<'dias' | 'meses'>('dias');
   // Inline editing (parameters only, NOT estoque_atual)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editData, setEditData] = useState<Record<string, any>>({});
@@ -199,7 +212,7 @@ export function CICEstoqueMateriais() {
       </div>
 
       {/* Ações */}
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3 items-center relative z-10">
         <Button className="bg-success hover:bg-success/90" onClick={() => openDialog('entrada')}>
           <ArrowUp className="h-4 w-4 mr-2" /> Entrada via NF
         </Button>
@@ -209,6 +222,31 @@ export function CICEstoqueMateriais() {
         <Button variant="ghost" size="sm" onClick={loadData}>
           <RefreshCw className={cn("h-4 w-4 mr-2", loading && "animate-spin")} /> Atualizar
         </Button>
+        <div className="ml-auto flex items-center gap-2 text-xs">
+          <span className="text-muted-foreground">Alcance em:</span>
+          <div className="inline-flex rounded-md border border-border overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setAlcanceUnit('dias')}
+              className={cn(
+                "px-3 py-1 text-xs transition-colors",
+                alcanceUnit === 'dias' ? "bg-cic text-cic-foreground" : "bg-background text-muted-foreground hover:bg-secondary"
+              )}
+            >
+              Dias
+            </button>
+            <button
+              type="button"
+              onClick={() => setAlcanceUnit('meses')}
+              className={cn(
+                "px-3 py-1 text-xs transition-colors border-l border-border",
+                alcanceUnit === 'meses' ? "bg-cic text-cic-foreground" : "bg-background text-muted-foreground hover:bg-secondary"
+              )}
+            >
+              Meses
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -239,6 +277,11 @@ export function CICEstoqueMateriais() {
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Mín</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Máx</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">PP Calc.</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs" title="CMD = Consumo Médio Diário">CMD</th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs" title="Alcance = Estoque ÷ Consumo">
+                        Alcance ({alcanceUnit === 'dias' ? 'd' : 'm'})
+                      </th>
+                      <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs" title="Proposta = MAX(0, (PP - Estoque) + Lote Econômico)">Proposta</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
                       <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
                       <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Total</th>
@@ -294,7 +337,22 @@ export function CICEstoqueMateriais() {
                                 onChange={e => setEditData({ ...editData, estoque_maximo: e.target.value })} />
                             ) : m.estoque_maximo}
                           </td>
-                          <td className="py-1.5 px-2 text-center text-xs font-semibold text-warning">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-center text-xs font-semibold text-warning" title="PP = CMD × LeadTime × (1 + margem)">{(m.ponto_pedido_calculado || 0).toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-center text-xs text-muted-foreground" title={`CMM = ${(m.cmm || 0).toFixed(1)} / mês`}>
+                            {(m.cmd || 0).toFixed(2)}
+                          </td>
+                          <td className={cn("py-1.5 px-2 text-center text-xs", corAlcance(m.alcance_meses ?? 999))}>
+                            {alcanceUnit === 'dias'
+                              ? `${(m.alcance_estoque ?? 0).toFixed(1)}d`
+                              : `${(m.alcance_meses ?? 0).toFixed(2)}m`}
+                          </td>
+                          <td className="py-1.5 px-2 text-center text-xs font-semibold">
+                            {(m.proposta_compra || 0) > 0 ? (
+                              <span className="text-cic">{(m.proposta_compra || 0).toFixed(0)} {m.unidade}</span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
                           <td className="py-1.5 px-2 text-center text-xs">
                             {isEditing ? (
                               <Input type="number" className="h-7 text-xs w-14" value={editData.margem_seguranca_percentual}
