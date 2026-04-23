@@ -934,7 +934,8 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
       )}
 
       <main className={cn(
-        'flex-1 overflow-y-auto',
+        'flex min-h-0 flex-1 flex-col',
+        activeTab === 'materiais' ? 'overflow-hidden' : 'overflow-y-auto',
         isMobile ? 'pt-28 px-3 pb-4' : 'p-4 lg:p-6'
       )}>
         {!isMobile && (
