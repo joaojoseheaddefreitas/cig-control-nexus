@@ -33,6 +33,8 @@ const CHART_COLORS = {
   verdeEscuro: 'hsl(160, 65%, 40%)',
 };
 
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
 type CIFTab = 'dashboard' | 'estofados' | 'fluxo' | 'custos' | 'equilibrio' | 'rentabilidade' | 'auditoria' | 'analytics';
 
 const menuItems: { id: CIFTab; label: string; icon: typeof BarChart2 }[] = [
