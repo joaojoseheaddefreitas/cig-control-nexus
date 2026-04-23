@@ -33,10 +33,13 @@ const CHART_COLORS = {
   verdeEscuro: 'hsl(160, 65%, 40%)',
 };
 
-type CIFTab = 'dashboard' | 'fluxo' | 'custos' | 'equilibrio' | 'rentabilidade' | 'auditoria' | 'analytics';
+const MESES = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+type CIFTab = 'dashboard' | 'estofados' | 'fluxo' | 'custos' | 'equilibrio' | 'rentabilidade' | 'auditoria' | 'analytics';
 
 const menuItems: { id: CIFTab; label: string; icon: typeof BarChart2 }[] = [
   { id: 'dashboard', label: 'Dashboard Executivo', icon: BarChart2 },
+  { id: 'estofados', label: 'Performance Estofados', icon: Gauge },
   { id: 'fluxo', label: 'Fluxo de Caixa', icon: Wallet },
   { id: 'custos', label: 'Custos & Orçamento', icon: CreditCard },
   { id: 'equilibrio', label: 'Ponto de Equilíbrio', icon: Scale },
@@ -897,9 +900,286 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
     </div>
   );
 
+  // ====================== ESTOFADOS PERFORMANCE LAYER ======================
+  const renderEstofados = () => {
+    // ===== Camada 1: Inteligência =====
+    const faturamento = data!.faturamento;
+    const pe = pontoEquilibrioCalc;
+    const margemContribPerc = margemContribuicao * 100;
+    const lucroLiq = data!.ebitda;
+    const pctSobrePE = pe > 0 ? ((faturamento - pe) / pe) * 100 : 0;
+
+    let statusBadge: { label: string; emoji: string; className: string };
+    let interpretacaoIA: string;
+    if (faturamento < pe) {
+      statusBadge = { label: 'Risco', emoji: '🔴', className: 'bg-destructive/20 text-destructive border-destructive/40' };
+      interpretacaoIA = `A operação está ${Math.abs(pctSobrePE).toFixed(1)}% ABAIXO do Ponto de Equilíbrio — indica zona de PREJUÍZO. Reforce vendas ou reduza custo fixo.`;
+    } else if (pctSobrePE <= 20) {
+      statusBadge = { label: 'Atenção', emoji: '🟡', className: 'bg-warning/20 text-warning border-warning/40' };
+      interpretacaoIA = `A operação está ${pctSobrePE.toFixed(1)}% acima do PE — zona de ATENÇÃO. Margem de segurança baixa, ainda exposta a oscilações.`;
+    } else if (pctSobrePE <= 80) {
+      statusBadge = { label: 'Saudável', emoji: '🟢', className: 'bg-success/20 text-success border-success/40' };
+      interpretacaoIA = `A operação está ${pctSobrePE.toFixed(1)}% acima do PE — desempenho SAUDÁVEL com margem de segurança consistente.`;
+    } else {
+      statusBadge = { label: 'Alta Performance', emoji: '🚀', className: 'bg-cif/20 text-cif border-cif/40' };
+      interpretacaoIA = `A operação está ${pctSobrePE.toFixed(1)}% acima do PE — ALTA PERFORMANCE. Reaplique resultado em capacidade ou expansão.`;
+    }
+
+    // ===== Camada 2: Visual — Faturamento × Custo Total × Linha PE =====
+    const visualData = data!.receitaMensal.map(m => ({
+      mes: m.mes,
+      faturamento: m.receita,
+      custoTotal: m.despesa,
+      pontoEquilibrio: pe,
+    }));
+
+    // ===== Camada 3: Histórica — divisão de matéria-prima estofados =====
+    // Procura categorias específicas; se ausente, deriva via proxy proporcional do despesasByCat
+    const transacoesPagas = data!.transacoes.filter(t => t.status === 'PAGO');
+    const monthlyHist: Record<string, {
+      faturamento: number; custoFixo: number; espuma: number; tecido: number;
+      madeira: number; impostos: number; comissoes: number;
+    }> = {};
+
+    transacoesPagas.forEach(t => {
+      const d = new Date(t.data_emissao);
+      const key = `${MESES[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+      if (!monthlyHist[key]) {
+        monthlyHist[key] = { faturamento: 0, custoFixo: 0, espuma: 0, tecido: 0, madeira: 0, impostos: 0, comissoes: 0 };
+      }
+      const v = Number(t.valor);
+      const cat = (t.categoria || '').toLowerCase();
+      if (t.tipo === 'RECEITA') {
+        monthlyHist[key].faturamento += v;
+      } else {
+        if (cat.includes('espuma')) monthlyHist[key].espuma += v;
+        else if (cat.includes('tecido')) monthlyHist[key].tecido += v;
+        else if (cat.includes('madeira')) monthlyHist[key].madeira += v;
+        else if (cat.includes('imposto')) monthlyHist[key].impostos += v;
+        else if (cat.includes('comiss')) monthlyHist[key].comissoes += v;
+        else if (cat === 'aluguel' || cat === 'energia' || cat === 'administrativo' || cat === 'manutencao') {
+          monthlyHist[key].custoFixo += v;
+        } else if (cat === 'materiais') {
+          // Quebra proxy: 40% espuma, 35% tecido, 25% madeira (típico estofados)
+          monthlyHist[key].espuma += v * 0.40;
+          monthlyHist[key].tecido += v * 0.35;
+          monthlyHist[key].madeira += v * 0.25;
+        }
+      }
+      // Impostos/comissões derivados da config se não houver categoria explícita
+    });
+
+    const tabelaHistorica = Object.entries(monthlyHist).map(([mes, m]) => {
+      const impostosCalc = m.impostos > 0 ? m.impostos : m.faturamento * (configFin.impostos_percentual / 100);
+      const comissoesCalc = m.comissoes > 0 ? m.comissoes : m.faturamento * (configFin.comissoes_percentual / 100);
+      const custoVarTotal = m.espuma + m.tecido + m.madeira + impostosCalc + comissoesCalc;
+      const resultado = m.faturamento - m.custoFixo - custoVarTotal;
+      const resultadoPerc = m.faturamento > 0 ? (resultado / m.faturamento) * 100 : 0;
+      const margemContribMes = m.faturamento > 0 ? (m.faturamento - custoVarTotal) / m.faturamento : 0;
+      const peMes = margemContribMes > 0 ? m.custoFixo / margemContribMes : 0;
+      return {
+        mes,
+        faturamento: m.faturamento,
+        custoFixo: m.custoFixo,
+        espuma: m.espuma,
+        tecido: m.tecido,
+        madeira: m.madeira,
+        impostos: impostosCalc,
+        comissoes: comissoesCalc,
+        resultado,
+        resultadoPerc,
+        pe: peMes,
+      };
+    }).reverse();
+
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="p-3 rounded-lg bg-cif/10 border border-cif/30">
+          <p className="text-sm text-muted-foreground">
+            <strong className="text-cif">CIF Control · Performance Industrial — Fábrica de Estofados</strong> — Camada de Inteligência, Visual e Histórica integradas.
+          </p>
+        </div>
+
+        {/* ====== CAMADA 1: INTELIGÊNCIA (TOP CARDS) ====== */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Brain className="h-5 w-5 text-cif" />
+            <h3 className="text-lg font-bold text-foreground">Camada de Inteligência</h3>
+            <Badge className={cn("ml-auto text-sm font-bold border", statusBadge.className)}>
+              {statusBadge.emoji} {statusBadge.label}
+            </Badge>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="h-4 w-4 text-cif" />
+                <p className="text-xs text-muted-foreground">Faturamento</p>
+              </div>
+              <p className="text-2xl font-bold text-foreground">{fmt(faturamento)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Receita realizada</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <div className="flex items-center gap-2 mb-2">
+                <Scale className="h-4 w-4 text-warning" />
+                <p className="text-xs text-muted-foreground">Ponto de Equilíbrio</p>
+              </div>
+              <p className="text-2xl font-bold text-foreground">{fmt(pe)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Custo Fixo ÷ Margem</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <div className="flex items-center gap-2 mb-2">
+                <Target className="h-4 w-4 text-success" />
+                <p className="text-xs text-muted-foreground">Margem Contribuição</p>
+              </div>
+              <p className={cn("text-2xl font-bold", margemContribPerc > 0 ? "text-success" : "text-destructive")}>
+                {margemContribPerc.toFixed(1)}%
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">Receita - Custos Var.</p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-card border border-border/30">
+              <div className="flex items-center gap-2 mb-2">
+                <PiggyBank className="h-4 w-4 text-cif" />
+                <p className="text-xs text-muted-foreground">Lucro Líquido</p>
+              </div>
+              <p className={cn("text-2xl font-bold", lucroLiq >= 0 ? "text-success" : "text-destructive")}>
+                {fmt(lucroLiq)}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">{margemLiquida.toFixed(1)}% sobre receita</p>
+            </div>
+          </div>
+
+          {/* Interpretador IA */}
+          <div className="p-4 rounded-xl bg-cif/5 border border-cif/30">
+            <div className="flex items-start gap-3">
+              <div className="w-8 h-8 rounded-full bg-cif/20 flex items-center justify-center flex-shrink-0">
+                <Brain className="h-4 w-4 text-cif" />
+              </div>
+              <div className="flex-1">
+                <p className="text-xs font-semibold text-cif mb-1">🧠 INTERPRETADOR IA</p>
+                <p className="text-sm text-foreground leading-relaxed">{interpretacaoIA}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ====== CAMADA 2: VISUAL (BREAK-EVEN POINT) ====== */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <Activity className="h-5 w-5 text-cif" />
+            <h3 className="text-lg font-bold text-foreground">Camada Visual — Break-Even Point</h3>
+          </div>
+          <ModuleCard title="Faturamento × Custo Total × Linha de Ponto de Equilíbrio" variant="cif">
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={visualData}>
+                  <defs>
+                    <linearGradient id="fatGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS.verde} stopOpacity={0.4} />
+                      <stop offset="95%" stopColor={CHART_COLORS.verde} stopOpacity={0.05} />
+                    </linearGradient>
+                    <linearGradient id="custGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={CHART_COLORS.vermelho} stopOpacity={0.4} />
+                      <stop offset="95%" stopColor={CHART_COLORS.vermelho} stopOpacity={0.05} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="mes" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} />
+                  <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: 'hsl(var(--card))', border: '1px solid hsl(var(--border))', borderRadius: '8px' }}
+                    formatter={(value: number, name: string) => [`R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: '12px' }} />
+                  <Area type="monotone" dataKey="faturamento" stroke={CHART_COLORS.verde} strokeWidth={2.5} fill="url(#fatGrad)" name="Faturamento" />
+                  <Area type="monotone" dataKey="custoTotal" stroke={CHART_COLORS.vermelho} strokeWidth={2.5} fill="url(#custGrad)" name="Custo Total" />
+                  <Line type="monotone" dataKey="pontoEquilibrio" stroke={CHART_COLORS.amarelo} strokeWidth={3} strokeDasharray="6 4" dot={false} name="Ponto de Equilíbrio" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted-foreground">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.verde }} />Faturamento (Receita)</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm" style={{ backgroundColor: CHART_COLORS.vermelho }} />Custo Total</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-1 rounded-sm" style={{ backgroundColor: CHART_COLORS.amarelo }} />Linha PE — onde as áreas cruzam é o <strong className="text-warning">Break-Even Point</strong></span>
+            </div>
+          </ModuleCard>
+        </div>
+
+        {/* ====== CAMADA 3: HISTÓRICA (TABELA EVOLUÇÃO) ====== */}
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BarChart2 className="h-5 w-5 text-cif" />
+            <h3 className="text-lg font-bold text-foreground">Camada Histórica — Resultados em Função dos Valores Produzidos</h3>
+          </div>
+          <ModuleCard title="Evolução Mensal — Estofados (Espuma · Tecido · Madeira)" variant="cif">
+            <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '300px' }}>
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 z-10 bg-card">
+                  <tr className="border-b-2 border-border bg-secondary/50">
+                    <th className="text-left py-3 px-3 text-xs font-semibold text-muted-foreground">Mês</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-muted-foreground">Faturamento</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-muted-foreground">Custos Fixos</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-warning" title="Espuma">🟫 Espuma</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-cif" title="Tecido">🧵 Tecido</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-success" title="Madeira">🪵 Madeira</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-muted-foreground">Impostos</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-muted-foreground">Comissões</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-muted-foreground">Resultado R$</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-muted-foreground">Resultado %</th>
+                    <th className="text-right py-3 px-3 text-xs font-semibold text-muted-foreground">PE</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {tabelaHistorica.length === 0 ? (
+                    <tr><td colSpan={11} className="py-8 text-center text-muted-foreground">Sem dados financeiros cadastrados.</td></tr>
+                  ) : tabelaHistorica.map((row, i) => (
+                    <tr key={i} className={cn(
+                      "border-b border-border/30 hover:bg-secondary/30 transition-colors",
+                      row.resultado >= 0 ? "" : "bg-destructive/5"
+                    )}>
+                      <td className="py-2.5 px-3 font-medium text-foreground">{row.mes}</td>
+                      <td className="py-2.5 px-3 text-right font-semibold text-foreground">{fmt(row.faturamento)}</td>
+                      <td className="py-2.5 px-3 text-right text-muted-foreground">{fmt(row.custoFixo)}</td>
+                      <td className="py-2.5 px-3 text-right text-warning">{fmt(row.espuma)}</td>
+                      <td className="py-2.5 px-3 text-right text-cif">{fmt(row.tecido)}</td>
+                      <td className="py-2.5 px-3 text-right text-success">{fmt(row.madeira)}</td>
+                      <td className="py-2.5 px-3 text-right text-muted-foreground">{fmt(row.impostos)}</td>
+                      <td className="py-2.5 px-3 text-right text-muted-foreground">{fmt(row.comissoes)}</td>
+                      <td className={cn(
+                        "py-2.5 px-3 text-right font-bold",
+                        row.resultado >= 0 ? "text-success" : "text-destructive"
+                      )}>
+                        {row.resultado >= 0 ? '▲ ' : '▼ '}{fmt(row.resultado)}
+                      </td>
+                      <td className={cn(
+                        "py-2.5 px-3 text-right font-bold",
+                        row.resultadoPerc >= 0 ? "text-success" : "text-destructive"
+                      )}>
+                        {row.resultadoPerc.toFixed(1)}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right text-muted-foreground text-xs">{fmt(row.pe)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="mt-3 p-2 rounded bg-secondary/20 text-xs text-muted-foreground">
+              💡 <strong>Categorias de Estofados</strong>: ao registrar despesas, use <strong className="text-warning">espuma</strong>, <strong className="text-cif">tecido</strong> ou <strong className="text-success">madeira</strong> para classificação automática. Despesas em "materiais" são divididas por proporção típica (40/35/25%).
+            </div>
+          </ModuleCard>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case 'dashboard': return renderDashboard();
+      case 'estofados': return renderEstofados();
       case 'fluxo': return renderFluxo();
       case 'custos': return renderCustos();
       case 'equilibrio': return renderEquilibrio();

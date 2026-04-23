@@ -301,7 +301,7 @@ export function CICEstoqueMateriais() {
             ) : materiais.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">Nenhum material cadastrado.</div>
             ) : (
-              <div className="overflow-auto" style={{ maxHeight: '600px' }}>
+              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '300px' }}>
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-card">
                     <tr className="border-b border-border/50 bg-secondary/30">
@@ -513,7 +513,7 @@ export function CICEstoqueMateriais() {
 
         <TabsContent value="movimentacoes">
           <ModuleCard title="Últimas Movimentações" variant="cic">
-            <div className="overflow-auto" style={{ maxHeight: '500px' }}>
+            <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '300px' }}>
               {movimentacoes.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</div>
               ) : (
@@ -555,7 +555,7 @@ export function CICEstoqueMateriais() {
             {lixeira.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">Lixeira vazia.</div>
             ) : (
-              <div className="overflow-auto" style={{ maxHeight: '500px' }}>
+              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '300px' }}>
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 z-10 bg-card">
                     <tr className="border-b border-border/50 bg-secondary/30">
