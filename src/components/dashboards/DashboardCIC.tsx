@@ -684,46 +684,34 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
           <Plus className="h-4 w-4" /> Novo Material
         </Button>
       </div>
+
       <div className="flex gap-2 max-w-md">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input placeholder="Buscar material..." value={searchMat} onChange={(e) => setSearchMat(e.target.value)} className="pl-10" />
         </div>
       </div>
+
       <div className="min-h-0 flex-1 rounded-xl border border-border/30 bg-card/80 overflow-hidden">
         <ScrollArea className="h-full w-full">
           <table className="w-full text-sm">
-
-          <p className="text-sm text-muted-foreground"><strong className="text-cic">Gestão de Materiais</strong> — Edite inline, crie ou exclua materiais. Dados persistidos no banco.</p>
-        </div>
-        <Button onClick={() => setMatNewOpen(true)} className="bg-cic hover:bg-cic/80 text-white gap-2">
-          <Plus className="h-4 w-4" /> Novo Material
-        </Button>
-      </div>
-      <div className="flex gap-2 max-w-md">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input placeholder="Buscar material..." value={searchMat} onChange={(e) => setSearchMat(e.target.value)} className="pl-10" />
-        </div>
-      </div>
-      <div className="rounded-xl border border-border/30 bg-card/80 overflow-hidden">
-        <ScrollArea className="max-h-[600px]">
-          <table className="w-full text-sm">
-            <thead><tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
-              <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Código</th>
-              <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Material</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Categoria</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Unidade</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Tipo</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Lead Time</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">PP Calc.</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Alcance</th>
-              <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Status</th>
-              <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Ações</th>
-            </tr></thead>
+            <thead>
+              <tr className="border-b border-border/50 bg-secondary/30 sticky top-0 z-10">
+                <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Código</th>
+                <th className="text-left py-3 px-3 text-muted-foreground font-medium text-xs">Material</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Categoria</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Unidade</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Tipo</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Lead Time</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Margem %</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Estoque</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">PP Calc.</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Alcance</th>
+                <th className="text-right py-3 px-2 text-muted-foreground font-medium text-xs">Val Unit</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Status</th>
+                <th className="text-center py-3 px-2 text-muted-foreground font-medium text-xs">Ações</th>
+              </tr>
+            </thead>
             <tbody>
               {filteredMateriais.map(m => (
                 <tr key={m.id} className={cn("border-b border-border/30 hover:bg-secondary/30", m.status === 'critico' && "bg-destructive/5")}>
@@ -746,7 +734,7 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
                         <option value="DUAS_GAVETAS">2 Gavetas</option>
                       </select>
                     ) : (
-                      <Badge className={cn("text-[9px]", m.tipo_controle === 'DUAS_GAVETAS' ? 'bg-purple-500/20 text-purple-400' : 'bg-secondary text-muted-foreground')}>
+                      <Badge className={cn("text-[9px]", m.tipo_controle === 'DUAS_GAVETAS' ? 'bg-secondary text-foreground' : 'bg-secondary text-muted-foreground')}>
                         {m.tipo_controle === 'DUAS_GAVETAS' ? '2GAV' : 'MRP'}
                       </Badge>
                     )}
