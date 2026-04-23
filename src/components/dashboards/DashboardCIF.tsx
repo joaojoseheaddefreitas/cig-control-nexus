@@ -33,10 +33,11 @@ const CHART_COLORS = {
   verdeEscuro: 'hsl(160, 65%, 40%)',
 };
 
-type CIFTab = 'dashboard' | 'fluxo' | 'custos' | 'equilibrio' | 'rentabilidade' | 'auditoria' | 'analytics';
+type CIFTab = 'dashboard' | 'estofados' | 'fluxo' | 'custos' | 'equilibrio' | 'rentabilidade' | 'auditoria' | 'analytics';
 
 const menuItems: { id: CIFTab; label: string; icon: typeof BarChart2 }[] = [
   { id: 'dashboard', label: 'Dashboard Executivo', icon: BarChart2 },
+  { id: 'estofados', label: 'Performance Estofados', icon: Gauge },
   { id: 'fluxo', label: 'Fluxo de Caixa', icon: Wallet },
   { id: 'custos', label: 'Custos & Orçamento', icon: CreditCard },
   { id: 'equilibrio', label: 'Ponto de Equilíbrio', icon: Scale },
