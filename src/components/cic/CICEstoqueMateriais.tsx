@@ -301,9 +301,9 @@ export function CICEstoqueMateriais() {
             ) : materiais.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">Nenhum material cadastrado.</div>
             ) : (
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '300px' }}>
+              <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 z-10 bg-card">
+                  <thead className="bg-card">
                     <tr className="border-b border-border/50 bg-secondary/30">
                       <th className="text-left py-3 px-2 text-muted-foreground font-medium text-xs">Código</th>
                       <th className="text-left py-3 px-2 text-muted-foreground font-medium text-xs">Material</th>
@@ -513,7 +513,7 @@ export function CICEstoqueMateriais() {
 
         <TabsContent value="movimentacoes">
           <ModuleCard title="Últimas Movimentações" variant="cic">
-            <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '300px' }}>
+            <div className="overflow-x-auto w-full">
               {movimentacoes.length === 0 ? (
                 <div className="py-8 text-center text-muted-foreground">Nenhuma movimentação registrada.</div>
               ) : (
@@ -555,9 +555,9 @@ export function CICEstoqueMateriais() {
             {lixeira.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">Lixeira vazia.</div>
             ) : (
-              <div className="overflow-auto" style={{ maxHeight: 'calc(100vh - 380px)', minHeight: '300px' }}>
+              <div className="overflow-x-auto w-full">
                 <table className="w-full text-sm">
-                  <thead className="sticky top-0 z-10 bg-card">
+                  <thead className="bg-card">
                     <tr className="border-b border-border/50 bg-secondary/30">
                       <th className="text-left py-3 px-3 text-xs text-muted-foreground">Código</th>
                       <th className="text-left py-3 px-3 text-xs text-muted-foreground">Material</th>
