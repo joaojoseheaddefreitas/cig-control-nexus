@@ -675,9 +675,25 @@ export function DashboardCIC({ activeSubPage = 'dashboard', onGoHome }: Dashboar
   const renderMateriais = () => {
     const isEditing = (id: string) => matEditId === id;
     return (
-    <div className="space-y-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex items-center justify-between">
         <div className="p-3 rounded-lg bg-cic/10 border border-cic/30 flex-1 mr-3">
+          <p className="text-sm text-muted-foreground"><strong className="text-cic">Gestão de Materiais</strong> — Edite inline, crie ou exclua materiais. Dados persistidos no banco.</p>
+        </div>
+        <Button onClick={() => setMatNewOpen(true)} className="bg-cic hover:bg-cic/80 text-white gap-2">
+          <Plus className="h-4 w-4" /> Novo Material
+        </Button>
+      </div>
+      <div className="flex gap-2 max-w-md">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input placeholder="Buscar material..." value={searchMat} onChange={(e) => setSearchMat(e.target.value)} className="pl-10" />
+        </div>
+      </div>
+      <div className="min-h-0 flex-1 rounded-xl border border-border/30 bg-card/80 overflow-hidden">
+        <ScrollArea className="h-full w-full">
+          <table className="w-full text-sm">
+
           <p className="text-sm text-muted-foreground"><strong className="text-cic">Gestão de Materiais</strong> — Edite inline, crie ou exclua materiais. Dados persistidos no banco.</p>
         </div>
         <Button onClick={() => setMatNewOpen(true)} className="bg-cic hover:bg-cic/80 text-white gap-2">
