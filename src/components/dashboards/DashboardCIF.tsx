@@ -23,6 +23,8 @@ import { Button } from '@/components/ui/button';
 import { fetchCIFData, marcarComoPago, criarTransacao, type CIFDashboardData } from '@/services/cifService';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { SerieMensal2026 } from '@/components/shared/SerieMensal2026';
+import { DistribuicaoDiariaAbrilChart } from '@/components/shared/DistribuicaoDiariaAbrilChart';
 
 const CHART_COLORS = {
   azulMarinho: 'hsl(215, 75%, 48%)',
@@ -327,6 +329,22 @@ export function DashboardCIF({ onGoHome }: DashboardCIFProps) {
           </table>
         </div>
       </ModuleCard>
+
+      {/* === Evolução 2026 — Gráficos em valores R$ === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SerieMensal2026
+          metricas={['faturamento', 'compras']}
+          variant="cif"
+          title="Evolução Financeira 2026"
+          subtitle="Faturamento × Compras (Jan → Abr)"
+        />
+        <DistribuicaoDiariaAbrilChart
+          metricas={['vendas', 'compras']}
+          variant="cif"
+          title="Faturamento Diário – Abril/2026"
+          subtitle="Faturamento × Compras (R$)"
+        />
+      </div>
     </div>
   );
 
