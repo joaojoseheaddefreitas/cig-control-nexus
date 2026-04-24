@@ -63,21 +63,44 @@ export interface DistribuicaoDiariaAbril {
 }
 
 export async function fetchDistribuicaoDiariaAbril(): Promise<DistribuicaoDiariaAbril[]> {
-  const { data } = await (supabase as any)
+  // 1) Vendas e Compras vêm das transações financeiras
+  const { data: trans } = await (supabase as any)
     .from('transacoes')
     .select('tipo, categoria, valor, data_emissao')
     .gte('data_emissao', '2026-04-01')
     .lte('data_emissao', '2026-04-30');
 
+  // 2) Produção vem das OPs programadas (valor real produzido = valor dos itens)
+  const { data: ops } = await (supabase as any)
+    .from('ops')
+    .select('data_programada, item_pedido_id, itens_pedido!inner(valor_total)')
+    .gte('data_programada', '2026-04-01')
+    .lte('data_programada', '2026-04-30');
+
   const map = new Map<number, DistribuicaoDiariaAbril>();
-  (data || []).forEach((t: any) => {
-    const dia = new Date(t.data_emissao).getDate();
-    const slot = map.get(dia) || { dia, vendas: 0, producao: 0, compras: 0 };
+  // Inicializa todos os dias 1-30 para garantir continuidade no eixo X
+  for (let d = 1; d <= 30; d++) {
+    map.set(d, { dia: d, vendas: 0, producao: 0, compras: 0 });
+  }
+
+  (trans || []).forEach((t: any) => {
+    // Parse seguro de data (evita problemas de fuso)
+    const dia = parseInt((t.data_emissao || '').split('-')[2], 10);
+    if (!dia) return;
+    const slot = map.get(dia);
+    if (!slot) return;
     const valor = Number(t.valor) || 0;
     if (t.tipo === 'RECEITA' && t.categoria === 'vendas') slot.vendas += valor;
-    else if (t.tipo === 'DESPESA' && t.categoria === 'mao_de_obra') slot.producao += valor * 4;
     else if (t.tipo === 'DESPESA' && t.categoria === 'materiais') slot.compras += valor;
-    map.set(dia, slot);
+  });
+
+  (ops || []).forEach((o: any) => {
+    const dia = parseInt((o.data_programada || '').split('-')[2], 10);
+    if (!dia) return;
+    const slot = map.get(dia);
+    if (!slot) return;
+    const valor = Number(o.itens_pedido?.valor_total) || 0;
+    slot.producao += valor;
   });
 
   return Array.from(map.values()).sort((a, b) => a.dia - b.dia);
