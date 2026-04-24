@@ -7,6 +7,8 @@ import { IAAlertCard, IAAlert } from './dashboard/IAAlertCard';
 import { PedidoEmExecucaoCard } from './dashboard/PedidoEmExecucaoCard';
 import { CargaSetorChart } from './dashboard/CargaSetorChart';
 import { ProducaoMensalChart } from './dashboard/ProducaoMensalChart';
+import { SerieMensal2026 } from '@/components/shared/SerieMensal2026';
+import { DistribuicaoDiariaAbrilChart } from '@/components/shared/DistribuicaoDiariaAbrilChart';
 import { Badge } from '@/components/ui/badge';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useCapacidadeIndustrial } from '@/hooks/useCapacidadeIndustrial';
@@ -405,6 +407,22 @@ export function CIPDashboardNew() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Evolução mensal e diária - valores em R$ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <SerieMensal2026
+          metricas={['producao']}
+          variant="cip"
+          title="Produção Mensal 2026"
+          subtitle="Valor produzido Jan → Abr (R$)"
+        />
+        <DistribuicaoDiariaAbrilChart
+          metricas={['producao']}
+          variant="cip"
+          title="Produção Diária – Abril/2026"
+          subtitle="Distribuição diária do valor produzido (R$)"
+        />
       </div>
 
       {/* Footer */}

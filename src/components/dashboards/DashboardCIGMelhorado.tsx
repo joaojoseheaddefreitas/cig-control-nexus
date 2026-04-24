@@ -14,6 +14,8 @@ import { calcularCapacidadeFabrica, type CapacidadeFabrica } from '@/services/ca
 import { Button } from '@/components/ui/button';
 import { fetchMateriais, type Material } from '@/services/materiaisService';
 import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
+import { SerieMensal2026 } from '@/components/shared/SerieMensal2026';
+import { DistribuicaoDiariaAbrilChart } from '@/components/shared/DistribuicaoDiariaAbrilChart';
 
 const CHART_COLORS = {
   azulMarinho: 'hsl(215, 75%, 48%)',
@@ -945,6 +947,22 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
       )}
+
+      {/* === Evolução Consolidada 2026 (Faturamento × Produção × Compras) === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SerieMensal2026
+          metricas={['faturamento', 'producao', 'compras']}
+          variant="cig"
+          title="Evolução Mensal 2026 — Visão Consolidada"
+          subtitle="Faturamento × Produção × Compras (R$)"
+        />
+        <DistribuicaoDiariaAbrilChart
+          metricas={['vendas', 'producao', 'compras']}
+          variant="cig"
+          title="Distribuição Diária – Abril/2026"
+          subtitle="Vendas, produção e compras (R$)"
+        />
+      </div>
 
       {usandoExemplo && (
         <div className="text-center py-4 border-t border-border/30">
