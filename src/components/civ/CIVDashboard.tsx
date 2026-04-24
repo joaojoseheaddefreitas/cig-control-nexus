@@ -9,6 +9,8 @@ import { DollarSign, ShoppingCart, Target, TrendingUp, Percent, RefreshCw, Loade
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { SerieMensal2026 } from '@/components/shared/SerieMensal2026';
+import { DistribuicaoDiariaAbrilChart } from '@/components/shared/DistribuicaoDiariaAbrilChart';
 
 const STATUS_COLORS: Record<string, string> = {
   aguardando: 'hsl(45, 95%, 50%)',
@@ -135,6 +137,22 @@ export function CIVDashboard() {
           </ModuleCard>
         </div>
       )}
+
+      {/* Evolução mensal e diária - valores em R$ */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <SerieMensal2026
+          metricas={['faturamento']}
+          variant="civ"
+          title="Vendas Mensais 2026"
+          subtitle="Faturamento Jan → Abr (R$)"
+        />
+        <DistribuicaoDiariaAbrilChart
+          metricas={['vendas']}
+          variant="civ"
+          title="Vendas Diárias – Abril/2026"
+          subtitle="Distribuição diária do faturamento (R$)"
+        />
+      </div>
     </div>
   );
 }
