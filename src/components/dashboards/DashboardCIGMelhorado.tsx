@@ -930,22 +930,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </ModuleCard>
       )}
 
-      {/* === Evolução Consolidada 2026 (Faturamento × Produção × Compras) === */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SerieMensal2026
-          metricas={['faturamento', 'producao', 'compras']}
-          variant="cig"
-          title="Evolução Mensal 2026 — Visão Consolidada"
-          subtitle="Faturamento × Produção × Compras (R$)"
-        />
-        <DistribuicaoDiariaAbrilChart
-          metricas={['vendas', 'producao', 'compras']}
-          variant="cig"
-          title="Distribuição Diária – Abril/2026"
-          subtitle="Vendas, produção e compras (R$)"
-        />
-      </div>
-
       {usandoExemplo && (
         <div className="text-center py-4 border-t border-border/30">
           <p className="text-xs text-muted-foreground">
