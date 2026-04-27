@@ -371,7 +371,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
 
       // === DETECÇÃO DE DADOS DE EXEMPLO ===
       const temVendasReais = vendasMesAtual.some(v => v.valor > 0);
-      const temProducaoReal = producaoMesAtual.some(p => p.qtd > 0);
+      const temProducaoReal = producaoMesAtual.some(p => p.qtd > 0 || p.valor > 0);
       const temComparativoReal = comparativoAnual.some(c => c.vendido > 0 || c.produzido > 0);
       const temDadosGraficos = temVendasReais || temProducaoReal || temComparativoReal;
 
