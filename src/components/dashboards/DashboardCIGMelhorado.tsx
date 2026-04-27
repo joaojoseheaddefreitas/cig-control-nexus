@@ -716,45 +716,20 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </ModuleCard>
       </div>
 
-      {/* === ANÁLISE === */}
+      {/* === ANÁLISE — Evolução Consolidada 2026 + Distribuição Diária Abril === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Comparativo Anual Vendido vs Produzido em VALOR (R$) */}
-        <ModuleCard title="🔄 Vendido vs Produzido — 12 meses (R$)" variant="cig">
-          <div className="h-64">
-            {kpis.comparativoAnual.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={kpis.comparativoAnual.map(v => ({ ...v, label: mesLabel(v.mes) }))}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
-                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} />
-                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`R$ ${v.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`, '']} />
-                  <Legend />
-                  <Bar dataKey="vendido" fill={CHART_COLORS.verde} radius={[4, 4, 0, 0]} name="Vendido (R$)" />
-                  <Bar dataKey="produzido" fill={CHART_COLORS.laranja} radius={[4, 4, 0, 0]} name="Produzido (R$)" />
-                </ComposedChart>
-              </ResponsiveContainer>
-            ) : <EmptyChart />}
-          </div>
-        </ModuleCard>
-
-        {/* Carga por Setor */}
-        <ModuleCard title="⚙️ Carga por Setor (horas)" variant="cip">
-          <div className="h-64">
-            {kpis.setoresProducao.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={kpis.setoresProducao} layout="vertical">
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" horizontal={false} />
-                  <XAxis type="number" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} />
-                  <YAxis type="category" dataKey="nome" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 9 }} width={110} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number) => [`${v.toFixed(1)}h`, '']} />
-                  <Legend />
-                  <Bar dataKey="carga" fill={CHART_COLORS.laranja} radius={[0, 4, 4, 0]} name="Carga" />
-                  <Bar dataKey="capacidade" fill={CHART_COLORS.azulClaro} radius={[0, 4, 4, 0]} name="Capacidade" opacity={0.35} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <EmptyChart />}
-          </div>
-        </ModuleCard>
+        <SerieMensal2026
+          metricas={['faturamento', 'producao', 'compras']}
+          variant="cig"
+          title="Evolução Mensal 2026 — Visão Consolidada"
+          subtitle="Faturamento × Produção × Compras (R$)"
+        />
+        <DistribuicaoDiariaAbrilChart
+          metricas={['vendas', 'producao', 'compras']}
+          variant="cig"
+          title="Distribuição Diária – Abril/2026"
+          subtitle="Vendas, produção e compras (R$)"
+        />
       </div>
 
       {/* === FINANCEIRO DERIVADO — Receita × Custo × Lucro (origem real) === */}
@@ -954,22 +929,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
       )}
-
-      {/* === Evolução Consolidada 2026 (Faturamento × Produção × Compras) === */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SerieMensal2026
-          metricas={['faturamento', 'producao', 'compras']}
-          variant="cig"
-          title="Evolução Mensal 2026 — Visão Consolidada"
-          subtitle="Faturamento × Produção × Compras (R$)"
-        />
-        <DistribuicaoDiariaAbrilChart
-          metricas={['vendas', 'producao', 'compras']}
-          variant="cig"
-          title="Distribuição Diária – Abril/2026"
-          subtitle="Vendas, produção e compras (R$)"
-        />
-      </div>
 
       {usandoExemplo && (
         <div className="text-center py-4 border-t border-border/30">
