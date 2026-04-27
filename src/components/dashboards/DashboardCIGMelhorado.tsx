@@ -16,6 +16,7 @@ import { fetchMateriais, type Material } from '@/services/materiaisService';
 import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
 import { SerieMensal2026 } from '@/components/shared/SerieMensal2026';
 import { DistribuicaoDiariaAbrilChart } from '@/components/shared/DistribuicaoDiariaAbrilChart';
+import { fetchDistribuicaoDiariaAbril } from '@/services/serieMensalService';
 
 const CHART_COLORS = {
   azulMarinho: 'hsl(215, 75%, 48%)',
