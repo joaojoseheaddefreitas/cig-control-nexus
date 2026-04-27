@@ -287,10 +287,25 @@ export function CIPDashboardNew() {
         />
       </div>
 
-      {/* Charts Row */}
+      {/* Charts Row — Produção 2026 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CargaSetorChart data={cargaSetorData} />
-        <ProducaoMensalChart data={producaoMensalData} />
+        <SerieMensal2026
+          metricas={['producao']}
+          variant="cip"
+          title="Produção Mensal 2026"
+          subtitle="Valor produzido Jan → Abr (R$)"
+        />
+        <DistribuicaoDiariaAbrilChart
+          metricas={['producao']}
+          variant="cip"
+          title="Produção Diária – Abril/2026"
+          subtitle="Distribuição diária do valor produzido (R$)"
+        />
+      </div>
+
+      {/* Ocupação por Setor */}
+      <div className="grid grid-cols-1 gap-4">
+        <CargaSetorChart data={cargaSetorData} title="Ocupação por Setor" />
       </div>
 
       {/* Status dos Setores */}
