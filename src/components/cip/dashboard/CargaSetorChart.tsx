@@ -14,6 +14,7 @@ interface CargaSetorData {
 
 interface CargaSetorChartProps {
   data: CargaSetorData[];
+  title?: string;
 }
 
 const statusColors: Record<string, string> = {
@@ -24,11 +25,11 @@ const statusColors: Record<string, string> = {
   vermelho: '#ef4444',
 };
 
-export function CargaSetorChart({ data }: CargaSetorChartProps) {
+export function CargaSetorChart({ data, title = 'Carga por Setor' }: CargaSetorChartProps) {
   return (
     <div className="rounded-xl border border-border/30 bg-card/80 p-4">
       <div className="mb-4">
-        <h3 className="font-display font-bold text-foreground">Carga por Setor</h3>
+        <h3 className="font-display font-bold text-foreground">{title}</h3>
         <p className="text-xs text-muted-foreground">Percentual de ocupação e dias de carga por setor</p>
         
         {/* Legend */}
