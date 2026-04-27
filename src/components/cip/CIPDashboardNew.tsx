@@ -424,22 +424,6 @@ export function CIPDashboardNew() {
         </div>
       </div>
 
-      {/* Evolução mensal e diária - valores em R$ */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <SerieMensal2026
-          metricas={['producao']}
-          variant="cip"
-          title="Produção Mensal 2026"
-          subtitle="Valor produzido Jan → Abr (R$)"
-        />
-        <DistribuicaoDiariaAbrilChart
-          metricas={['producao']}
-          variant="cip"
-          title="Produção Diária – Abril/2026"
-          subtitle="Distribuição diária do valor produzido (R$)"
-        />
-      </div>
-
       {/* Footer */}
       <div className="text-center pt-4 border-t border-border/30">
         <p className="text-xs text-muted-foreground">
