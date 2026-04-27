@@ -294,27 +294,33 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         qtd: vendasDiaMap[d.dia]?.qtd || 0,
       }));
 
-      // Produção por dia útil do mês corrente (qtd + horas + VALOR R$)
-      // Valor produzido derivado: qtd × VALOR_MEDIO_PRODUTO (referência moveleira)
+      // Produção por dia útil do mês corrente — MESMA FONTE do gráfico "Distribuição Diária"
+      // (OPs programadas no PCP × valor_total dos itens vinculados, por data_programada)
+      const distribuicaoAbril = await fetchDistribuicaoDiariaAbril();
+      const producaoValorPorDia: Record<number, number> = {};
+      distribuicaoAbril.forEach(d => { producaoValorPorDia[d.dia] = d.producao; });
+
+      // Também mantém qtd/horas das OPs (por data_programada) para tooltip/horas
       const producaoDiaMap: Record<string, { qtd: number; horas: number }> = {};
       ops.forEach(op => {
-        if (op.status_producao === 'Producao Finalizada') {
-          const dt = new Date(op.created_at);
-          if (dt.getFullYear() === ano && dt.getMonth() === mesAtual) {
-            const k = diaKey(op.created_at);
-            if (!producaoDiaMap[k]) producaoDiaMap[k] = { qtd: 0, horas: 0 };
-            producaoDiaMap[k].qtd += Number(op.quantidade || 1);
-            producaoDiaMap[k].horas += Number(op.tempo_total || 0);
-          }
+        if (!op.data_programada) return;
+        const dt = new Date(op.data_programada);
+        if (dt.getFullYear() === ano && dt.getMonth() === mesAtual) {
+          const k = op.data_programada.slice(0, 10);
+          if (!producaoDiaMap[k]) producaoDiaMap[k] = { qtd: 0, horas: 0 };
+          producaoDiaMap[k].qtd += Number(op.quantidade || 1);
+          producaoDiaMap[k].horas += Number(op.tempo_total || 0);
         }
       });
       const producaoMesAtual = diasUteisMesAtual.map(d => {
+        const diaNum = parseInt(d.dia.split('-')[2], 10);
+        const valorReal = producaoValorPorDia[diaNum] || 0;
         const qtd = producaoDiaMap[d.dia]?.qtd || 0;
         return {
           ...d,
           qtd,
           horas: producaoDiaMap[d.dia]?.horas || 0,
-          valor: qtd * VALOR_MEDIO_PRODUTO,
+          valor: valorReal || qtd * VALOR_MEDIO_PRODUTO,
         };
       });
 
