@@ -9,21 +9,40 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts';
 
+// Carteira mantém APENAS 4 status oficiais:
+// Programado, Em Produção, Finalizado, Atrasado
 const STATUS_COLORS: Record<string, string> = {
-  aguardando: '#6b7280',
   programado: '#3b82f6',
   em_producao: '#f59e0b',
   finalizado: '#22c55e',
-  cancelado: '#ef4444',
+  atrasado: '#ef4444',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  aguardando: 'Aguardando',
   programado: 'Programado',
   em_producao: 'Em Produção',
   finalizado: 'Finalizado',
-  cancelado: 'Cancelado',
+  atrasado: 'Atrasado',
 };
+
+/**
+ * Normaliza o status efetivo do pedido para a carteira.
+ * - "finalizado" sempre se mantém
+ * - se prazo_entrega < hoje (e não finalizado) → "atrasado"
+ * - "em_producao" se mantém
+ * - qualquer outro (aguardando, aprovado, programado) → "programado"
+ */
+function getEffectiveStatus(p: any): 'programado' | 'em_producao' | 'finalizado' | 'atrasado' {
+  if (p.status === 'finalizado' || p.status_producao === 'finalizado') return 'finalizado';
+  const prazo = p.prazo_entrega ? new Date(p.prazo_entrega) : null;
+  if (prazo) {
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    prazo.setHours(0,0,0,0);
+    if (prazo.getTime() < hoje.getTime()) return 'atrasado';
+  }
+  if (p.status === 'em_producao' || p.status_producao === 'em_producao') return 'em_producao';
+  return 'programado';
+}
 
 const CANAL_COLORS = ['#22c55e', '#3b82f6', '#f97316', '#14b8a6'];
 
