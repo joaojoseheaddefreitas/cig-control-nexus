@@ -58,21 +58,25 @@ export function CIVCarteira() {
     setLoading(true);
     const { data, error } = await supabase
       .from('pedidos')
-      .select('id, codigo, cliente, produto, quantidade, valor_total, margem, canal, status, status_producao, prazo_entrega, op')
+      .select('id, codigo, cliente, produto, quantidade, valor_total, margem, canal, status, status_producao, prazo_entrega, op, observacoes')
       .order('created_at', { ascending: false });
     if (!error && data) setPedidos(data);
     setLoading(false);
   };
 
+  // Considera ativos todos exceto cancelado
   const ativos = pedidos.filter(p => p.status !== 'cancelado');
-  const totalPedidos = ativos.length;
-  const valorTotal = ativos.reduce((acc, p) => acc + Number(p.valor_total || 0), 0);
-  const emProducao = ativos.filter(p => p.status === 'programado' || p.status === 'em_producao').length;
-  const aguardando = ativos.filter(p => p.status === 'aguardando').length;
+  // Anexa o status efetivo (com regra de atraso)
+  const ativosNorm = ativos.map(p => ({ ...p, _statusEf: getEffectiveStatus(p) }));
 
-  // Pedidos por status
+  const totalPedidos = ativosNorm.length;
+  const valorTotal = ativosNorm.reduce((acc, p) => acc + Number(p.valor_total || 0), 0);
+  const emProducao = ativosNorm.filter(p => p._statusEf === 'em_producao' || p._statusEf === 'programado').length;
+  const atrasados = ativosNorm.filter(p => p._statusEf === 'atrasado').length;
+
+  // Pedidos por status (apenas 4 oficiais)
   const statusMap: Record<string, number> = {};
-  ativos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
+  ativosNorm.forEach(p => { statusMap[p._statusEf] = (statusMap[p._statusEf] || 0) + 1; });
   const pedidosPorStatus = Object.entries(statusMap).map(([status, count]) => ({
     status: STATUS_LABELS[status] || status,
     count,
@@ -81,7 +85,7 @@ export function CIVCarteira() {
 
   // Valor por canal
   const canalMap: Record<string, number> = {};
-  ativos.forEach(p => {
+  ativosNorm.forEach(p => {
     const canal = p.canal || 'Outros';
     canalMap[canal] = (canalMap[canal] || 0) + Number(p.valor_total || 0);
   });
