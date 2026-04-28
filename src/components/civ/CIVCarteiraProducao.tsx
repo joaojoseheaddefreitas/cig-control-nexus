@@ -337,7 +337,9 @@ export function CIVCarteiraProducao() {
                   <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Nenhum pedido encontrado</td></tr>
                 ) : (
                   filteredPedidos.map((pedido) => {
-                    const config = statusConfig[pedido.status] || statusConfig.aguardando;
+                    const statusEf = getEffectiveStatus(pedido);
+                    const isAtrasado = statusEf === 'atrasado';
+                    const config = statusConfig[statusEf] || statusConfig.programado;
                     const StatusIcon = config.icon;
                     return (
                       <tr key={pedido.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
@@ -345,7 +347,10 @@ export function CIVCarteiraProducao() {
                         <td className="py-3 px-4 text-foreground">{pedido.cliente}</td>
                         <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{pedido.produto}</td>
                         <td className="py-3 px-4 text-center text-foreground hidden lg:table-cell">{pedido.quantidade}</td>
-                        <td className="py-3 px-4 text-center text-muted-foreground hidden lg:table-cell">
+                        <td className={cn(
+                          "py-3 px-4 text-center hidden lg:table-cell",
+                          isAtrasado ? "text-destructive font-semibold" : "text-muted-foreground"
+                        )}>
                           {pedido.prazoEntrega ? new Date(pedido.prazoEntrega).toLocaleDateString('pt-BR') : '—'}
                         </td>
                         <td className="py-3 px-4 text-center">
