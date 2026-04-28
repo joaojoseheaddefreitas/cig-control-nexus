@@ -181,7 +181,10 @@ export function CIVCarteira() {
                 {pedidos.length === 0 ? (
                   <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Nenhum pedido cadastrado. Use o módulo CIV → Cadastro de Pedidos.</td></tr>
                 ) : (
-                  pedidos.map((pedido) => (
+                  pedidos.filter(p => p.status !== 'cancelado').map((pedido) => {
+                    const statusEf = getEffectiveStatus(pedido);
+                    const isAtrasado = statusEf === 'atrasado';
+                    return (
                     <tr key={pedido.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
                       <td className="py-3 px-4 font-mono text-foreground">{pedido.codigo}</td>
                       <td className="py-3 px-4 text-foreground">{pedido.cliente}</td>
@@ -196,15 +199,19 @@ export function CIVCarteira() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <Badge style={{ backgroundColor: STATUS_COLORS[pedido.status] || '#6b7280', color: '#fff' }}>
-                          {STATUS_LABELS[pedido.status] || pedido.status}
+                        <Badge style={{ backgroundColor: STATUS_COLORS[statusEf], color: '#fff' }}>
+                          {STATUS_LABELS[statusEf]}
                         </Badge>
                       </td>
-                      <td className="py-3 px-4 text-center text-muted-foreground hidden lg:table-cell">
+                      <td className={cn(
+                        "py-3 px-4 text-center hidden lg:table-cell",
+                        isAtrasado ? "text-destructive font-semibold" : "text-muted-foreground"
+                      )}>
                         {pedido.prazo_entrega ? new Date(pedido.prazo_entrega).toLocaleDateString('pt-BR') : '—'}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
