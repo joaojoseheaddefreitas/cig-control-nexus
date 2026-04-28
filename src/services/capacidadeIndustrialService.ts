@@ -313,7 +313,9 @@ export async function calcularCapacidadeFabrica(): Promise<CapacidadeFabrica> {
   const gargaloEmDias = setores.length > 0
     ? Math.max(...setores.map(s => s.diasGargalo))
     : 0;
-  const prazoVendasDias = Math.ceil(gargaloEmDias + FOLGA_OPERACIONAL);
+  // Prazo de vendas = dias reais do gargalo (sem folga adicional)
+  // Ex: 956.4h / 52.8h/dia = 18.1d → 19 dias úteis
+  const prazoVendasDias = Math.ceil(gargaloEmDias);
 
   const setorGargaloDiasObj = setores.length > 0
     ? setores.reduce((max, s) => s.diasGargalo > max.diasGargalo ? s : max, setores[0])
