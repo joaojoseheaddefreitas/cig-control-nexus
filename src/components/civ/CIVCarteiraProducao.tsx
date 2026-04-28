@@ -114,10 +114,13 @@ export function CIVCarteiraProducao() {
     p.produto.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalPedidos = pedidos.length;
-  const valorTotal = pedidos.reduce((acc, p) => acc + p.valorTotal, 0);
-  const emProducao = pedidos.filter(p => p.status === 'em_producao' || p.status === 'programado').length;
-  const aguardando = pedidos.filter(p => p.status === 'aguardando').length;
+  // Status efetivo (com regra de atraso) anexado
+  const pedidosNorm = pedidos.map(p => ({ ...p, statusEf: getEffectiveStatus(p) }));
+  const ativos = pedidosNorm.filter(p => p.statusEf !== 'cancelado');
+  const totalPedidos = ativos.length;
+  const valorTotal = ativos.reduce((acc, p) => acc + p.valorTotal, 0);
+  const emProducao = ativos.filter(p => p.statusEf === 'em_producao' || p.statusEf === 'programado').length;
+  const atrasados = ativos.filter(p => p.statusEf === 'atrasado').length;
 
   const handleNewPedido = () => {
     setEditingPedido(null);
