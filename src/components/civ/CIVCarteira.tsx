@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModuleCard } from '@/components/ui/ModuleCard';
@@ -9,21 +10,40 @@ import {
   PieChart, Pie, Cell,
 } from 'recharts';
 
+// Carteira mantém APENAS 4 status oficiais:
+// Programado, Em Produção, Finalizado, Atrasado
 const STATUS_COLORS: Record<string, string> = {
-  aguardando: '#6b7280',
   programado: '#3b82f6',
   em_producao: '#f59e0b',
   finalizado: '#22c55e',
-  cancelado: '#ef4444',
+  atrasado: '#ef4444',
 };
 
 const STATUS_LABELS: Record<string, string> = {
-  aguardando: 'Aguardando',
   programado: 'Programado',
   em_producao: 'Em Produção',
   finalizado: 'Finalizado',
-  cancelado: 'Cancelado',
+  atrasado: 'Atrasado',
 };
+
+/**
+ * Normaliza o status efetivo do pedido para a carteira.
+ * - "finalizado" sempre se mantém
+ * - se prazo_entrega < hoje (e não finalizado) → "atrasado"
+ * - "em_producao" se mantém
+ * - qualquer outro (aguardando, aprovado, programado) → "programado"
+ */
+function getEffectiveStatus(p: any): 'programado' | 'em_producao' | 'finalizado' | 'atrasado' {
+  if (p.status === 'finalizado' || p.status_producao === 'finalizado') return 'finalizado';
+  const prazo = p.prazo_entrega ? new Date(p.prazo_entrega) : null;
+  if (prazo) {
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    prazo.setHours(0,0,0,0);
+    if (prazo.getTime() < hoje.getTime()) return 'atrasado';
+  }
+  if (p.status === 'em_producao' || p.status_producao === 'em_producao') return 'em_producao';
+  return 'programado';
+}
 
 const CANAL_COLORS = ['#22c55e', '#3b82f6', '#f97316', '#14b8a6'];
 
@@ -39,21 +59,25 @@ export function CIVCarteira() {
     setLoading(true);
     const { data, error } = await supabase
       .from('pedidos')
-      .select('id, codigo, cliente, produto, quantidade, valor_total, margem, canal, status, status_producao, prazo_entrega, op')
+      .select('id, codigo, cliente, produto, quantidade, valor_total, margem, canal, status, status_producao, prazo_entrega, op, observacoes')
       .order('created_at', { ascending: false });
     if (!error && data) setPedidos(data);
     setLoading(false);
   };
 
+  // Considera ativos todos exceto cancelado
   const ativos = pedidos.filter(p => p.status !== 'cancelado');
-  const totalPedidos = ativos.length;
-  const valorTotal = ativos.reduce((acc, p) => acc + Number(p.valor_total || 0), 0);
-  const emProducao = ativos.filter(p => p.status === 'programado' || p.status === 'em_producao').length;
-  const aguardando = ativos.filter(p => p.status === 'aguardando').length;
+  // Anexa o status efetivo (com regra de atraso)
+  const ativosNorm = ativos.map(p => ({ ...p, _statusEf: getEffectiveStatus(p) }));
 
-  // Pedidos por status
+  const totalPedidos = ativosNorm.length;
+  const valorTotal = ativosNorm.reduce((acc, p) => acc + Number(p.valor_total || 0), 0);
+  const emProducao = ativosNorm.filter(p => p._statusEf === 'em_producao' || p._statusEf === 'programado').length;
+  const atrasados = ativosNorm.filter(p => p._statusEf === 'atrasado').length;
+
+  // Pedidos por status (apenas 4 oficiais)
   const statusMap: Record<string, number> = {};
-  ativos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
+  ativosNorm.forEach(p => { statusMap[p._statusEf] = (statusMap[p._statusEf] || 0) + 1; });
   const pedidosPorStatus = Object.entries(statusMap).map(([status, count]) => ({
     status: STATUS_LABELS[status] || status,
     count,
@@ -62,7 +86,7 @@ export function CIVCarteira() {
 
   // Valor por canal
   const canalMap: Record<string, number> = {};
-  ativos.forEach(p => {
+  ativosNorm.forEach(p => {
     const canal = p.canal || 'Outros';
     canalMap[canal] = (canalMap[canal] || 0) + Number(p.valor_total || 0);
   });
@@ -75,7 +99,7 @@ export function CIVCarteira() {
         <KPICard title="Total Pedidos" value={totalPedidos} subtitle="Em carteira" icon={<FileText className="h-5 w-5" />} variant="civ" />
         <KPICard title="Valor Total" value={`R$ ${(valorTotal / 1000).toFixed(0)}k`} subtitle="Carteira" icon={<DollarSign className="h-5 w-5" />} variant="civ" />
         <KPICard title="Em Produção" value={emProducao} subtitle="Com OP gerada" icon={<Package className="h-5 w-5" />} variant="civ" />
-        <KPICard title="Aguardando" value={aguardando} subtitle="Sem OP" icon={<Clock className="h-5 w-5" />} variant="civ" />
+        <KPICard title="Atrasados" value={atrasados} subtitle="Prazo vencido" icon={<Clock className="h-5 w-5" />} variant="civ" />
       </div>
 
       {/* Charts */}
@@ -158,7 +182,10 @@ export function CIVCarteira() {
                 {pedidos.length === 0 ? (
                   <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Nenhum pedido cadastrado. Use o módulo CIV → Cadastro de Pedidos.</td></tr>
                 ) : (
-                  pedidos.map((pedido) => (
+                  pedidos.filter(p => p.status !== 'cancelado').map((pedido) => {
+                    const statusEf = getEffectiveStatus(pedido);
+                    const isAtrasado = statusEf === 'atrasado';
+                    return (
                     <tr key={pedido.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
                       <td className="py-3 px-4 font-mono text-foreground">{pedido.codigo}</td>
                       <td className="py-3 px-4 text-foreground">{pedido.cliente}</td>
@@ -173,15 +200,19 @@ export function CIVCarteira() {
                         )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <Badge style={{ backgroundColor: STATUS_COLORS[pedido.status] || '#6b7280', color: '#fff' }}>
-                          {STATUS_LABELS[pedido.status] || pedido.status}
+                        <Badge style={{ backgroundColor: STATUS_COLORS[statusEf], color: '#fff' }}>
+                          {STATUS_LABELS[statusEf]}
                         </Badge>
                       </td>
-                      <td className="py-3 px-4 text-center text-muted-foreground hidden lg:table-cell">
+                      <td className={cn(
+                        "py-3 px-4 text-center hidden lg:table-cell",
+                        isAtrasado ? "text-destructive font-semibold" : "text-muted-foreground"
+                      )}>
                         {pedido.prazo_entrega ? new Date(pedido.prazo_entrega).toLocaleDateString('pt-BR') : '—'}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>

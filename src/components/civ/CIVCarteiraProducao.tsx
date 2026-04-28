@@ -34,16 +34,34 @@ interface Pedido {
   canal: string;
 }
 
+// Carteira mantém APENAS 4 status oficiais:
+// Programado, Em Produção, Finalizado, Atrasado
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
-  aguardando: { label: 'Aguardando', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: Clock },
   programado: { label: 'Programado', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: Calendar },
   em_producao: { label: 'Em Produção', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: Package },
-  produzido: { label: 'Produzido', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle2 },
   finalizado: { label: 'Finalizado', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle2 },
-  expedido: { label: 'Expedido', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: Truck },
-  faturado: { label: 'Faturado', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: FileText },
+  atrasado: { label: 'Atrasado', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: AlertTriangle },
   cancelado: { label: 'Cancelado', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: Ban },
 };
+
+/**
+ * Normaliza o status efetivo (regra oficial: 4 status + cancelado).
+ * - finalizado mantém
+ * - prazo < hoje → atrasado
+ * - em_producao mantém
+ * - resto → programado
+ */
+function getEffectiveStatus(p: { status: string; statusProducao?: string; prazoEntrega?: string }): string {
+  if (p.status === 'cancelado') return 'cancelado';
+  if (p.status === 'finalizado' || p.statusProducao === 'finalizado') return 'finalizado';
+  if (p.prazoEntrega) {
+    const prazo = new Date(p.prazoEntrega); prazo.setHours(0,0,0,0);
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    if (prazo.getTime() < hoje.getTime()) return 'atrasado';
+  }
+  if (p.status === 'em_producao' || p.statusProducao === 'em_producao') return 'em_producao';
+  return 'programado';
+}
 
 export function CIVCarteiraProducao() {
   const [search, setSearch] = useState('');
@@ -96,10 +114,13 @@ export function CIVCarteiraProducao() {
     p.produto.toLowerCase().includes(search.toLowerCase())
   );
 
-  const totalPedidos = pedidos.length;
-  const valorTotal = pedidos.reduce((acc, p) => acc + p.valorTotal, 0);
-  const emProducao = pedidos.filter(p => p.status === 'em_producao' || p.status === 'programado').length;
-  const aguardando = pedidos.filter(p => p.status === 'aguardando').length;
+  // Status efetivo (com regra de atraso) anexado
+  const pedidosNorm = pedidos.map(p => ({ ...p, statusEf: getEffectiveStatus(p) }));
+  const ativos = pedidosNorm.filter(p => p.statusEf !== 'cancelado');
+  const totalPedidos = ativos.length;
+  const valorTotal = ativos.reduce((acc, p) => acc + p.valorTotal, 0);
+  const emProducao = ativos.filter(p => p.statusEf === 'em_producao' || p.statusEf === 'programado').length;
+  const atrasados = ativos.filter(p => p.statusEf === 'atrasado').length;
 
   const handleNewPedido = () => {
     setEditingPedido(null);
@@ -276,7 +297,7 @@ export function CIVCarteiraProducao() {
         <KPICard title="Total Pedidos" value={totalPedidos} subtitle="Em carteira" icon={<FileText className="h-5 w-5" />} variant="civ" />
         <KPICard title="Valor Total" value={`R$ ${(valorTotal / 1000).toFixed(0)}k`} subtitle="Carteira ativa" icon={<BarChart3 className="h-5 w-5" />} variant="civ" />
         <KPICard title="Em Produção" value={emProducao} subtitle="Com OP" icon={<Package className="h-5 w-5" />} variant="civ" />
-        <KPICard title="Aguardando" value={aguardando} subtitle="Sem OP" icon={<Clock className="h-5 w-5" />} variant="civ" />
+        <KPICard title="Atrasados" value={atrasados} subtitle="Prazo vencido" icon={<AlertTriangle className="h-5 w-5" />} variant="civ" />
       </div>
 
       {/* Actions */}
@@ -316,7 +337,9 @@ export function CIVCarteiraProducao() {
                   <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">Nenhum pedido encontrado</td></tr>
                 ) : (
                   filteredPedidos.map((pedido) => {
-                    const config = statusConfig[pedido.status] || statusConfig.aguardando;
+                    const statusEf = getEffectiveStatus(pedido);
+                    const isAtrasado = statusEf === 'atrasado';
+                    const config = statusConfig[statusEf] || statusConfig.programado;
                     const StatusIcon = config.icon;
                     return (
                       <tr key={pedido.id} className="border-b border-border/30 hover:bg-secondary/30 transition-colors">
@@ -324,7 +347,10 @@ export function CIVCarteiraProducao() {
                         <td className="py-3 px-4 text-foreground">{pedido.cliente}</td>
                         <td className="py-3 px-4 text-muted-foreground hidden md:table-cell">{pedido.produto}</td>
                         <td className="py-3 px-4 text-center text-foreground hidden lg:table-cell">{pedido.quantidade}</td>
-                        <td className="py-3 px-4 text-center text-muted-foreground hidden lg:table-cell">
+                        <td className={cn(
+                          "py-3 px-4 text-center hidden lg:table-cell",
+                          isAtrasado ? "text-destructive font-semibold" : "text-muted-foreground"
+                        )}>
                           {pedido.prazoEntrega ? new Date(pedido.prazoEntrega).toLocaleDateString('pt-BR') : '—'}
                         </td>
                         <td className="py-3 px-4 text-center">
