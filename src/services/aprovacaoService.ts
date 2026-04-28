@@ -60,9 +60,18 @@ export async function aprovarPedido(
       return sum + (isNaN(tempo) ? 0 : tempo);
     }, 0);
 
-    // 3. Calculate deadline: prazo = ceil((carteira + nova_carga) / capacidade_diaria) + lead time materiais
-    const cargaTotal = horasCarteira + cargaNovoPedido;
-    const diasProducao = calcularDiasProducao(cargaTotal, config.capacidade_produtiva_diaria);
+    // 3. PRAZO PELO GARGALO
+    //    Regra: prazo (dias úteis) = ⌈(fila do gargalo + carga novo pedido no gargalo) / cap. diária do gargalo⌉
+    //    Não usa capacidade total da fábrica nem soma das capacidades.
+    const prazoGargalo = await calcularPrazoPorGargalo(
+      itens.map(i => ({
+        produto_id: i.produto_id,
+        produto_nome: i.produto_nome,
+        quantidade: i.quantidade,
+      })),
+      config.considerar_sabado
+    );
+    const diasProducao = prazoGargalo.prazoDiasUteis;
 
     // 3b. Get max lead time from BOM materials for all items
     let maiorLeadTimeMateriais = 0;
@@ -95,6 +104,11 @@ export async function aprovarPedido(
     const prazoTotalDias = diasProducao + maiorLeadTimeMateriais;
     const dataEntrega = calcularDataEntrega(new Date(), prazoTotalDias, config.considerar_sabado);
     const prazoEntregaStr = dataEntrega.toISOString().split("T")[0];
+    console.log(
+      `[Aprovação] Gargalo: ${prazoGargalo.setorGargalo} | Fila: ${prazoGargalo.filaGargaloHoras.toFixed(1)}h | ` +
+      `Novo: ${prazoGargalo.cargaNovoPedidoHoras.toFixed(1)}h | Cap/dia: ${prazoGargalo.capacidadeDiariaGargalo.toFixed(1)}h | ` +
+      `Prazo prod: ${diasProducao}d + LT mat: ${maiorLeadTimeMateriais}d = ${prazoTotalDias}d → ${prazoEntregaStr}`
+    );
 
     // 4. Ensure itens_pedido exist in DB (never send tempo_total)
     let dbItens: Array<{
