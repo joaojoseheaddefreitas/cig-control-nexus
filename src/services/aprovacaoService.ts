@@ -1,7 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import {
   fetchConfigCapacidade,
-  calcularDiasProducao,
   calcularDataEntrega,
 } from "./capacidadeService";
 import {
@@ -10,6 +9,7 @@ import {
   subtrairHorasCarteira,
 } from "./carteiraService";
 import { verificarMateriaisPedido } from "./pedidoBomService";
+import { calcularPrazoPorGargalo } from "./prazoGargaloService";
 
 interface ItemPedido {
   id?: string;
