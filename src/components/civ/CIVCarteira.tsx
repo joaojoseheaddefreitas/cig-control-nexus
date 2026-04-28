@@ -98,7 +98,7 @@ export function CIVCarteira() {
         <KPICard title="Total Pedidos" value={totalPedidos} subtitle="Em carteira" icon={<FileText className="h-5 w-5" />} variant="civ" />
         <KPICard title="Valor Total" value={`R$ ${(valorTotal / 1000).toFixed(0)}k`} subtitle="Carteira" icon={<DollarSign className="h-5 w-5" />} variant="civ" />
         <KPICard title="Em Produção" value={emProducao} subtitle="Com OP gerada" icon={<Package className="h-5 w-5" />} variant="civ" />
-        <KPICard title="Aguardando" value={aguardando} subtitle="Sem OP" icon={<Clock className="h-5 w-5" />} variant="civ" />
+        <KPICard title="Atrasados" value={atrasados} subtitle="Prazo vencido" icon={<Clock className="h-5 w-5" />} variant="civ" />
       </div>
 
       {/* Charts */}
