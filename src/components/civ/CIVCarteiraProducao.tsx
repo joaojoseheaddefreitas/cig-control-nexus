@@ -34,16 +34,34 @@ interface Pedido {
   canal: string;
 }
 
+// Carteira mantém APENAS 4 status oficiais:
+// Programado, Em Produção, Finalizado, Atrasado
 const statusConfig: Record<string, { label: string; color: string; icon: typeof Clock }> = {
-  aguardando: { label: 'Aguardando', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30', icon: Clock },
   programado: { label: 'Programado', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30', icon: Calendar },
   em_producao: { label: 'Em Produção', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30', icon: Package },
-  produzido: { label: 'Produzido', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle2 },
   finalizado: { label: 'Finalizado', color: 'bg-green-500/20 text-green-400 border-green-500/30', icon: CheckCircle2 },
-  expedido: { label: 'Expedido', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30', icon: Truck },
-  faturado: { label: 'Faturado', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', icon: FileText },
+  atrasado: { label: 'Atrasado', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: AlertTriangle },
   cancelado: { label: 'Cancelado', color: 'bg-red-500/20 text-red-400 border-red-500/30', icon: Ban },
 };
+
+/**
+ * Normaliza o status efetivo (regra oficial: 4 status + cancelado).
+ * - finalizado mantém
+ * - prazo < hoje → atrasado
+ * - em_producao mantém
+ * - resto → programado
+ */
+function getEffectiveStatus(p: { status: string; statusProducao?: string; prazoEntrega?: string }): string {
+  if (p.status === 'cancelado') return 'cancelado';
+  if (p.status === 'finalizado' || p.statusProducao === 'finalizado') return 'finalizado';
+  if (p.prazoEntrega) {
+    const prazo = new Date(p.prazoEntrega); prazo.setHours(0,0,0,0);
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    if (prazo.getTime() < hoje.getTime()) return 'atrasado';
+  }
+  if (p.status === 'em_producao' || p.statusProducao === 'em_producao') return 'em_producao';
+  return 'programado';
+}
 
 export function CIVCarteiraProducao() {
   const [search, setSearch] = useState('');
