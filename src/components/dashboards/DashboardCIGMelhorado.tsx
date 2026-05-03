@@ -1,12 +1,12 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  ComposedChart, Line, Legend, AreaChart, Area, LineChart,
+  ComposedChart, Line, Legend, AreaChart, Area,
 } from 'recharts';
 import { ModuleCard } from '@/components/ui/ModuleCard';
 import {
   LayoutDashboard, TrendingUp, Factory, DollarSign, Clock,
-  AlertTriangle, Activity, RefreshCw, Warehouse, Package,
+  AlertTriangle, Activity, RefreshCw, Warehouse, Inbox,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,9 +14,6 @@ import { calcularCapacidadeFabrica, type CapacidadeFabrica } from '@/services/ca
 import { Button } from '@/components/ui/button';
 import { fetchMateriais, type Material } from '@/services/materiaisService';
 import { fetchCIFData, type CIFDashboardData } from '@/services/cifService';
-import { SerieMensal2026 } from '@/components/shared/SerieMensal2026';
-import { DistribuicaoDiariaAbrilChart } from '@/components/shared/DistribuicaoDiariaAbrilChart';
-import { fetchDistribuicaoDiariaAbril } from '@/services/serieMensalService';
 
 const CHART_COLORS = {
   azulMarinho: 'hsl(215, 75%, 48%)',
@@ -24,7 +21,6 @@ const CHART_COLORS = {
   amarelo: 'hsl(45, 95%, 50%)',
   vermelho: 'hsl(0, 72%, 51%)',
   laranja: 'hsl(30, 90%, 50%)',
-  azulClaro: 'hsl(200, 75%, 50%)',
 };
 
 interface PedidoRow {
@@ -47,6 +43,9 @@ interface OPRow {
   data_programada: string | null;
 }
 
+interface DiaSerie { dia: string; label: string; valor: number; qtd?: number; horas?: number; }
+interface MesRef { ano: number; mes: number; rotulo: string; ehAtual: boolean; }
+
 interface KPIData {
   totalPedidos: number;
   pedidosEmProducao: number;
@@ -58,21 +57,18 @@ interface KPIData {
   opsEmProducao: number;
   totalSetores: number;
   capacidadeDiaria: number;
-  pedidosPorStatus: { status: string; count: number }[];
   pedidosPorCanal: { canal: string; valor: number }[];
-  setoresProducao: { nome: string; opsAtivas: number; capacidade: number; carga: number }[];
   alertas: string[];
   materiaisCriticos: Material[];
   valorEstoque: number;
   totalPropostaCompra: number;
   cifData: CIFDashboardData | null;
-  // Unified series — vendas e produção do mês corrente (por dia útil) — TUDO EM R$
-  vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[];
-  producaoMesAtual: { dia: string; label: string; valor: number; qtd: number; horas: number }[];
-  // Comparativo anual (vendido vs produzido em valor)
+  mesRef: MesRef | null;
+  vendasMesRef: DiaSerie[];
+  producaoMesRef: DiaSerie[];
+  comprasMesRef: DiaSerie[];
   comparativoAnual: { mes: string; vendido: number; produzido: number }[];
   pedidosAtrasados: number;
-  // === DERIVADO: Receita × Custo × Lucro diário (origem real) ===
   derivadoFinanceiroDiario: { dia: string; label: string; faturamento: number; custo: number; lucro: number; lucroAcumulado: number; margem: number }[];
   custoPorHoraReal: number;
   custoFixoMensal: number;
@@ -84,80 +80,23 @@ interface DashboardCIGMelhoradoProps {
   onGoHome?: () => void;
 }
 
-// Helper: format month key
-const mesKey = (d: string) => {
-  const dt = new Date(d);
-  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-};
-const mesLabel = (k: string) => {
-  const [y, m] = k.split('-');
-  const names = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
-  return `${names[parseInt(m) - 1]}/${y.slice(2)}`;
-};
+const MESES_PT = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+const mesKey = (d: string) => `${d.slice(0, 4)}-${d.slice(5, 7)}`;
 const diaKey = (d: string) => d.slice(0, 10);
-const diaLabel = (k: string) => {
-  const [, m, d] = k.split('-');
-  return `${d}/${m}`;
-};
 
-// Generate example data when DB is empty — mês corrente, dias úteis (seg-sex)
-// Estimativa com TENDÊNCIA DE CRESCIMENTO ao longo do mês (não aleatório puro)
-const VALOR_MEDIO_PRODUTO = 2800; // R$/unidade — referência moveleira
-function gerarDadosExemplo() {
-  const now = new Date();
-  const ano = now.getFullYear();
-  const mes = now.getMonth();
-  const ultimoDia = new Date(ano, mes + 1, 0).getDate();
-
-  const vendasMesAtual: { dia: string; label: string; valor: number; qtd: number }[] = [];
-  const producaoMesAtual: { dia: string; label: string; valor: number; qtd: number; horas: number }[] = [];
-
-  // tendência crescente: começa baixo, sobe ao longo do mês
-  let diaUtilIdx = 0;
-  for (let d = 1; d <= ultimoDia; d++) {
+function diasUteisDoMes(ano: number, mes: number): { dia: string; label: string }[] {
+  const ultimo = new Date(ano, mes + 1, 0).getDate();
+  const out: { dia: string; label: string }[] = [];
+  for (let d = 1; d <= ultimo; d++) {
     const dt = new Date(ano, mes, d);
     const dow = dt.getDay();
-    if (dow === 0 || dow === 6) continue; // só dias úteis
-    const key = dt.toISOString().slice(0, 10);
-    const label = String(d).padStart(2, '0');
-
-    // crescimento linear + leve variação (apresentação coerente)
-    const fator = 0.6 + (diaUtilIdx * 0.04); // sobe ~4% ao dia
-    const ruido = 0.85 + Math.random() * 0.30;
-    const valorVendas = Math.round(8000 * fator * ruido);
-    const qtdVendas = Math.max(1, Math.round(valorVendas / VALOR_MEDIO_PRODUTO));
-
-    // produção segue vendas com leve atraso (~90% do valor vendido)
-    const valorProducao = Math.round(valorVendas * (0.82 + Math.random() * 0.20));
-    const qtdProducao = Math.max(1, Math.round(valorProducao / VALOR_MEDIO_PRODUTO));
-
-    vendasMesAtual.push({ dia: key, label, valor: valorVendas, qtd: qtdVendas });
-    producaoMesAtual.push({
-      dia: key, label,
-      valor: valorProducao,
-      qtd: qtdProducao,
-      horas: Math.round(qtdProducao * 8.5),
-    });
-    diaUtilIdx++;
-  }
-
-  // Comparativo anual (12 meses) com crescimento progressivo
-  const comparativoAnual: { mes: string; vendido: number; produzido: number }[] = [];
-  for (let i = 11; i >= 0; i--) {
-    const dt = new Date(ano, mes - i, 1);
-    const k = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-    // crescimento ano → +3% ao mês com sazonalidade
-    const base = 95000 * (1 + (11 - i) * 0.03);
-    const sazonalidade = 0.88 + Math.random() * 0.24;
-    const vendido = Math.round(base * sazonalidade);
-    comparativoAnual.push({
-      mes: k,
-      vendido,
-      produzido: Math.round(vendido * (0.82 + Math.random() * 0.18)),
+    if (dow === 0 || dow === 6) continue;
+    out.push({
+      dia: `${ano}-${String(mes + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`,
+      label: String(d).padStart(2, '0'),
     });
   }
-
-  return { vendasMesAtual, producaoMesAtual, comparativoAnual };
+  return out;
 }
 
 export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) {
@@ -165,16 +104,17 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     totalPedidos: 0, pedidosEmProducao: 0, pedidosAguardando: 0, pedidosFinalizados: 0,
     valorCarteiraTotal: 0, horasCarteira: 0, totalOPs: 0, opsEmProducao: 0,
     totalSetores: 0, capacidadeDiaria: 8,
-    pedidosPorStatus: [], pedidosPorCanal: [], setoresProducao: [], alertas: [],
+    pedidosPorCanal: [], alertas: [],
     materiaisCriticos: [], valorEstoque: 0, totalPropostaCompra: 0, cifData: null,
-    vendasMesAtual: [], producaoMesAtual: [], comparativoAnual: [], pedidosAtrasados: 0,
+    mesRef: null,
+    vendasMesRef: [], producaoMesRef: [], comprasMesRef: [],
+    comparativoAnual: [], pedidosAtrasados: 0,
     derivadoFinanceiroDiario: [], custoPorHoraReal: 0, custoFixoMensal: 0, horasProduzidasMes: 0,
     custoEstimado: false,
   });
   const [capacidade, setCapacidade] = useState<CapacidadeFabrica | null>(null);
   const [loading, setLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
-  const [usandoExemplo, setUsandoExemplo] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -185,6 +125,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
       .on('postgres_changes', { event: '*', schema: 'public', table: 'setores_produtivos' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'materiais' }, () => loadData())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'op_route_steps' }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transacoes' }, () => loadData())
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
@@ -193,283 +134,177 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
   const loadData = async () => {
     setLoading(true);
     try {
-      const [pedidosRes, opsRes, carteiraRes, setoresRes, configRes, materiais, cifData, routeStepsRes, capFabrica] = await Promise.all([
+      const [pedidosRes, opsRes, setoresRes, configRes, materiais, cifData, transRes, capFabrica, custosFixosRes] = await Promise.all([
         supabase.from('pedidos').select('id, status, status_producao, valor_total, canal, data_entrada, quantidade').order('created_at', { ascending: false }),
         supabase.from('ops').select('id, status_producao, current_sector, tempo_total, created_at, quantidade, data_programada').neq('status_producao', 'cancelado'),
-        supabase.from('carteira_producao').select('total_horas_acumuladas').limit(1).maybeSingle(),
         supabase.from('setores_produtivos').select('*').eq('ativo', true).order('ordem'),
         supabase.from('configuracoes_capacidade').select('capacidade_produtiva_diaria').limit(1).maybeSingle(),
         fetchMateriais(),
         fetchCIFData(),
-        supabase.from('op_route_steps').select('op_id, setor_id, tempo_estimado'),
+        supabase.from('transacoes').select('tipo, categoria, valor, data_emissao'),
         calcularCapacidadeFabrica(),
+        supabase.from('custos_fixos').select('valor_mensal, ativo').eq('ativo', true),
       ]);
 
       const pedidos = (pedidosRes.data || []) as PedidoRow[];
       const ops = (opsRes.data || []) as OPRow[];
-      const horasCarteira = capFabrica.horasNecessarias;
       const setores = setoresRes.data || [];
+      const transacoes = (transRes.data || []) as { tipo: string; categoria: string; valor: number; data_emissao: string }[];
+      const horasCarteira = capFabrica.horasNecessarias;
       const capacidadeDiaria = capFabrica.capacidadeDiaria > 0 ? capFabrica.capacidadeDiaria : (configRes.data ? Number(configRes.data.capacidade_produtiva_diaria) : 8);
-      const routeSteps = routeStepsRes.data || [];
       setCapacidade(capFabrica);
 
-      // Status breakdown
-      const statusMap: Record<string, number> = {};
-      pedidos.forEach(p => { statusMap[p.status] = (statusMap[p.status] || 0) + 1; });
-      const statusLabels: Record<string, string> = {
-        aguardando: 'Aguardando', programado: 'Programado', em_producao: 'Em Produção',
-        finalizado: 'Finalizado', cancelado: 'Cancelado', aprovado: 'Aprovado',
-      };
-      const pedidosPorStatus = Object.entries(statusMap)
-        .filter(([s]) => s !== 'cancelado')
-        .map(([status, count]) => ({ status: statusLabels[status] || status, count }));
+      const pedidosAtivos = pedidos.filter(p => p.status !== 'cancelado');
 
-      // Canal breakdown
+      // === MÊS DE REFERÊNCIA: atual; fallback = último mês com qualquer dado ===
+      const now = new Date();
+      const mesAtualKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+      // Coleta todos os meses com dados (vendas / produção / compras)
+      const mesesComDados = new Set<string>();
+      pedidosAtivos.forEach(p => p.data_entrada && mesesComDados.add(mesKey(p.data_entrada)));
+      ops.forEach(o => { if (o.data_programada) mesesComDados.add(mesKey(o.data_programada)); });
+      transacoes.forEach(t => t.data_emissao && mesesComDados.add(mesKey(t.data_emissao)));
+
+      let mesRef: MesRef | null = null;
+      if (mesesComDados.has(mesAtualKey)) {
+        mesRef = { ano: now.getFullYear(), mes: now.getMonth(), rotulo: `${MESES_PT[now.getMonth()]}/${now.getFullYear()}`, ehAtual: true };
+      } else if (mesesComDados.size > 0) {
+        const ultimo = [...mesesComDados].sort().reverse()[0];
+        const [y, m] = ultimo.split('-').map(Number);
+        mesRef = { ano: y, mes: m - 1, rotulo: `${MESES_PT[m - 1]}/${y}`, ehAtual: false };
+      }
+
+      // Canal breakdown (geral, base toda — não filtra mês)
       const canalMap: Record<string, number> = {};
-      pedidos.filter(p => p.status !== 'cancelado').forEach(p => {
+      pedidosAtivos.forEach(p => {
         const canal = p.canal || 'Outros';
         canalMap[canal] = (canalMap[canal] || 0) + Number(p.valor_total || 0);
       });
-      const pedidosPorCanal = Object.entries(canalMap)
-        .map(([canal, valor]) => ({ canal, valor }))
-        .sort((a, b) => b.valor - a.valor);
-
-      // Sector load
-      const activeOpIds = new Set(ops.filter(o => o.status_producao !== 'Producao Finalizada').map(o => o.id));
-      const setorCargaMap: Record<string, number> = {};
-      (routeSteps as any[]).forEach((step: any) => {
-        if (activeOpIds.has(step.op_id)) {
-          setorCargaMap[step.setor_id] = (setorCargaMap[step.setor_id] || 0) + Number(step.tempo_estimado || 0);
-        }
-      });
-      const setoresProducaoData = setores.map((s: any) => {
-        const cap = (s.mao_de_obra + s.maquinas_automaticas) * s.horas_turno * s.eficiencia;
-        return { nome: s.nome.replace(' / ', '/').substring(0, 16), opsAtivas: 0, capacidade: cap, carga: setorCargaMap[s.id] || 0 };
-      });
-      ops.forEach(op => {
-        if (op.current_sector) {
-          const found = setoresProducaoData.find(s => op.current_sector?.includes(s.nome.substring(0, 8)));
-          if (found) found.opsAtivas++;
-        }
-      });
+      const pedidosPorCanal = Object.entries(canalMap).map(([canal, valor]) => ({ canal, valor })).sort((a, b) => b.valor - a.valor);
 
       const materiaisCriticos = materiais.filter(m => m.status === 'critico');
       const valorEstoque = materiais.reduce((s, m) => s + (m.valor_estoque || 0), 0);
       const totalPropostaCompra = materiais.reduce((s, m) => s + (m.proposta_compra || 0) * m.valor_unitario, 0);
 
-      // === SÉRIES TEMPORAIS UNIFICADAS ===
-      const pedidosAtivos = pedidos.filter(p => p.status !== 'cancelado');
+      // === SÉRIES DIÁRIAS DO MÊS DE REFERÊNCIA ===
+      let vendasMesRef: DiaSerie[] = [];
+      let producaoMesRef: DiaSerie[] = [];
+      let comprasMesRef: DiaSerie[] = [];
 
-      const now = new Date();
-      const ano = now.getFullYear();
-      const mesAtual = now.getMonth();
-      const ultimoDiaMes = new Date(ano, mesAtual + 1, 0).getDate();
+      if (mesRef) {
+        const dias = diasUteisDoMes(mesRef.ano, mesRef.mes);
 
-      // Construir todos os dias úteis do mês corrente como base
-      const diasUteisMesAtual: { dia: string; label: string }[] = [];
-      for (let d = 1; d <= ultimoDiaMes; d++) {
-        const dt = new Date(ano, mesAtual, d);
-        const dow = dt.getDay();
-        if (dow === 0 || dow === 6) continue;
-        diasUteisMesAtual.push({
-          dia: dt.toISOString().slice(0, 10),
-          label: String(d).padStart(2, '0'),
+        const vendasDiaMap: Record<string, { valor: number; qtd: number }> = {};
+        pedidosAtivos.forEach(p => {
+          if (!p.data_entrada) return;
+          const k = diaKey(p.data_entrada);
+          const dt = new Date(p.data_entrada);
+          if (dt.getFullYear() === mesRef!.ano && dt.getMonth() === mesRef!.mes) {
+            if (!vendasDiaMap[k]) vendasDiaMap[k] = { valor: 0, qtd: 0 };
+            vendasDiaMap[k].valor += Number(p.valor_total || 0);
+            vendasDiaMap[k].qtd += Number(p.quantidade || 0);
+          }
         });
+        vendasMesRef = dias.map(d => ({ ...d, valor: vendasDiaMap[d.dia]?.valor || 0, qtd: vendasDiaMap[d.dia]?.qtd || 0 }));
+
+        const producaoDiaMap: Record<string, { qtd: number; horas: number }> = {};
+        ops.forEach(op => {
+          if (!op.data_programada) return;
+          const dt = new Date(op.data_programada);
+          if (dt.getFullYear() === mesRef!.ano && dt.getMonth() === mesRef!.mes) {
+            const k = op.data_programada.slice(0, 10);
+            if (!producaoDiaMap[k]) producaoDiaMap[k] = { qtd: 0, horas: 0 };
+            producaoDiaMap[k].qtd += Number(op.quantidade || 1);
+            producaoDiaMap[k].horas += Number(op.tempo_total || 0);
+          }
+        });
+        // Valor da produção: usa ticket médio do mês (vendas/qtd) se houver, senão 0
+        const totalQtdVendas = vendasMesRef.reduce((s, v) => s + (v.qtd || 0), 0);
+        const totalValorVendas = vendasMesRef.reduce((s, v) => s + v.valor, 0);
+        const ticketMedio = totalQtdVendas > 0 ? totalValorVendas / totalQtdVendas : 0;
+        producaoMesRef = dias.map(d => {
+          const r = producaoDiaMap[d.dia];
+          return { ...d, qtd: r?.qtd || 0, horas: r?.horas || 0, valor: r ? r.qtd * ticketMedio : 0 };
+        });
+
+        const comprasDiaMap: Record<string, number> = {};
+        transacoes.forEach(t => {
+          if (t.tipo !== 'DESPESA' || t.categoria !== 'materiais') return;
+          if (!t.data_emissao) return;
+          const dt = new Date(t.data_emissao);
+          if (dt.getFullYear() === mesRef!.ano && dt.getMonth() === mesRef!.mes) {
+            const k = diaKey(t.data_emissao);
+            comprasDiaMap[k] = (comprasDiaMap[k] || 0) + Number(t.valor || 0);
+          }
+        });
+        comprasMesRef = dias.map(d => ({ ...d, valor: comprasDiaMap[d.dia] || 0 }));
       }
 
-      // Vendas por dia útil do mês corrente (R$ + qtd)
-      const vendasDiaMap: Record<string, { valor: number; qtd: number }> = {};
-      pedidosAtivos.forEach(p => {
-        const k = diaKey(p.data_entrada);
-        const dt = new Date(p.data_entrada);
-        if (dt.getFullYear() === ano && dt.getMonth() === mesAtual) {
-          if (!vendasDiaMap[k]) vendasDiaMap[k] = { valor: 0, qtd: 0 };
-          vendasDiaMap[k].valor += Number(p.valor_total || 0);
-          vendasDiaMap[k].qtd += Number(p.quantidade || 0);
-        }
-      });
-      const vendasMesAtual = diasUteisMesAtual.map(d => ({
-        ...d,
-        valor: vendasDiaMap[d.dia]?.valor || 0,
-        qtd: vendasDiaMap[d.dia]?.qtd || 0,
-      }));
-
-      // Produção por dia útil do mês corrente — MESMA FONTE do gráfico "Distribuição Diária"
-      // (OPs programadas no PCP × valor_total dos itens vinculados, por data_programada)
-      const distribuicaoAbril = await fetchDistribuicaoDiariaAbril();
-      const producaoValorPorDia: Record<number, number> = {};
-      distribuicaoAbril.forEach(d => { producaoValorPorDia[d.dia] = d.producao; });
-
-      // Também mantém qtd/horas das OPs (por data_programada) para tooltip/horas
-      const producaoDiaMap: Record<string, { qtd: number; horas: number }> = {};
-      ops.forEach(op => {
-        if (!op.data_programada) return;
-        const dt = new Date(op.data_programada);
-        if (dt.getFullYear() === ano && dt.getMonth() === mesAtual) {
-          const k = op.data_programada.slice(0, 10);
-          if (!producaoDiaMap[k]) producaoDiaMap[k] = { qtd: 0, horas: 0 };
-          producaoDiaMap[k].qtd += Number(op.quantidade || 1);
-          producaoDiaMap[k].horas += Number(op.tempo_total || 0);
-        }
-      });
-      const producaoMesAtual = diasUteisMesAtual.map(d => {
-        const diaNum = parseInt(d.dia.split('-')[2], 10);
-        const valorReal = producaoValorPorDia[diaNum] || 0;
-        const qtd = producaoDiaMap[d.dia]?.qtd || 0;
-        return {
-          ...d,
-          qtd,
-          horas: producaoDiaMap[d.dia]?.horas || 0,
-          valor: valorReal || qtd * VALOR_MEDIO_PRODUTO,
-        };
-      });
-
-      // Comparativo anual: vendido vs produzido EM VALOR (R$) — últimos 12 meses
+      // Comparativo anual (12 meses até mesRef)
+      const baseAno = mesRef?.ano ?? now.getFullYear();
+      const baseMes = mesRef?.mes ?? now.getMonth();
       const vendasMensalMap: Record<string, number> = {};
-      pedidosAtivos.forEach(p => {
-        const k = mesKey(p.data_entrada);
-        vendasMensalMap[k] = (vendasMensalMap[k] || 0) + Number(p.valor_total || 0);
-      });
-      // Produção em valor: usa o valor médio do pedido vinculado, ou tempo_total como proxy se ausente.
-      // Aproximação simples: somatório de valor dos pedidos cujas OPs finalizaram no mês.
-      const opsByPedido: Record<string, number> = {};
-      ops.forEach(op => { if (op.tempo_total) opsByPedido[op.id] = Number(op.tempo_total); });
-      const producaoMensalValorMap: Record<string, number> = {};
-      ops.forEach(op => {
-        if (op.status_producao === 'Producao Finalizada') {
-          const k = mesKey(op.created_at);
-          // proxy: valor por hora médio = receita_total / horas_total
-          producaoMensalValorMap[k] = (producaoMensalValorMap[k] || 0) + Number(op.tempo_total || 0);
-        }
-      });
-      // Converter horas produzidas para valor usando ticket médio (R$/hora)
-      const totalHorasFinalizadas = Object.values(producaoMensalValorMap).reduce((a, b) => a + b, 0);
-      const totalValorVendas = Object.values(vendasMensalMap).reduce((a, b) => a + b, 0);
-      const valorPorHora = totalHorasFinalizadas > 0 ? totalValorVendas / totalHorasFinalizadas : 0;
-
+      pedidosAtivos.forEach(p => { if (p.data_entrada) { const k = mesKey(p.data_entrada); vendasMensalMap[k] = (vendasMensalMap[k] || 0) + Number(p.valor_total || 0); } });
+      const horasMensalMap: Record<string, number> = {};
+      ops.forEach(op => { if (op.status_producao === 'Producao Finalizada') { const k = mesKey(op.created_at); horasMensalMap[k] = (horasMensalMap[k] || 0) + Number(op.tempo_total || 0); } });
+      const totalHoras = Object.values(horasMensalMap).reduce((a, b) => a + b, 0);
+      const totalVendas = Object.values(vendasMensalMap).reduce((a, b) => a + b, 0);
+      const valorPorHora = totalHoras > 0 ? totalVendas / totalHoras : 0;
       const comparativoAnual: { mes: string; vendido: number; produzido: number }[] = [];
       for (let i = 11; i >= 0; i--) {
-        const dt = new Date(ano, mesAtual - i, 1);
+        const dt = new Date(baseAno, baseMes - i, 1);
         const k = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
-        comparativoAnual.push({
-          mes: k,
-          vendido: vendasMensalMap[k] || 0,
-          produzido: (producaoMensalValorMap[k] || 0) * valorPorHora,
-        });
+        comparativoAnual.push({ mes: k, vendido: vendasMensalMap[k] || 0, produzido: (horasMensalMap[k] || 0) * valorPorHora });
       }
 
-      // Pedidos atrasados — comparar prazo com hoje
+      // Pedidos atrasados
       const hojeStr = new Date().toISOString().slice(0, 10);
       const { data: pedidosCompletos } = await supabase
         .from('pedidos')
         .select('id, status, prazo_entrega')
         .neq('status', 'cancelado')
         .neq('status', 'finalizado');
-      const pedidosAtrasados = (pedidosCompletos || []).filter((p: any) =>
-        p.prazo_entrega && p.prazo_entrega < hojeStr
-      ).length;
+      const pedidosAtrasados = (pedidosCompletos || []).filter((p: any) => p.prazo_entrega && p.prazo_entrega < hojeStr).length;
 
-      // === DETECÇÃO DE DADOS DE EXEMPLO ===
-      const temVendasReais = vendasMesAtual.some(v => v.valor > 0);
-      const temProducaoReal = producaoMesAtual.some(p => p.qtd > 0 || p.valor > 0);
-      const temComparativoReal = comparativoAnual.some(c => c.vendido > 0 || c.produzido > 0);
-      const temDadosGraficos = temVendasReais || temProducaoReal || temComparativoReal;
-
-      let dadosExemplo: ReturnType<typeof gerarDadosExemplo> | null = null;
-      if (!temDadosGraficos) {
-        dadosExemplo = gerarDadosExemplo();
-        setUsandoExemplo(true);
-      } else {
-        setUsandoExemplo(false);
-      }
-
-      // === ALERTAS — ÚNICA FONTE DE VERDADE: capFabrica (mesmo motor do CIP) ===
+      // === ALERTAS ===
       const alertas: string[] = [];
-      // Prazo de vendas = MAX(diasGargalo) + folga — MESMA fonte do KPI "PRAZO" do CIP
       const prazoVendasReal = capFabrica.prazoVendasDias;
+      if (pedidosAtivos.length > 0 && prazoVendasReal > 25) alertas.push(`🔴 Sobrecarga crítica: ${prazoVendasReal}d de prazo (gargalo: ${capFabrica.setorGargaloDias})`);
+      else if (pedidosAtivos.length > 0 && prazoVendasReal > 18) alertas.push(`🟡 Carga alta: ${prazoVendasReal}d de prazo (gargalo: ${capFabrica.setorGargaloDias})`);
 
-      // Sobrecarga real: baseada no prazo do gargalo (não no cálculo médio)
-      if (pedidosAtivos.length > 0 && prazoVendasReal > 25) {
-        alertas.push(`🔴 Sobrecarga crítica: ${prazoVendasReal}d de prazo (gargalo: ${capFabrica.setorGargaloDias})`);
-      } else if (pedidosAtivos.length > 0 && prazoVendasReal > 18) {
-        alertas.push(`🟡 Carga alta: ${prazoVendasReal}d de prazo (gargalo: ${capFabrica.setorGargaloDias})`);
-      }
-
-      // Pedidos aguardando programação — só status 'aguardando' (real)
       const aguardando = pedidos.filter(p => p.status === 'aguardando').length;
       if (aguardando > 10) alertas.push(`🔴 ${aguardando} pedidos aguardando programação`);
       else if (aguardando > 0) alertas.push(`🟡 ${aguardando} pedido(s) aguardando programação`);
 
-      // Materiais críticos — apenas se realmente existirem materiais com status='critico'
       if (materiais.length > 0 && materiaisCriticos.length > 0) {
-        if (materiaisCriticos.length > 3) {
-          alertas.push(`🔴 ${materiaisCriticos.length} materiais em nível CRÍTICO`);
-        } else {
-          alertas.push(`🟡 ${materiaisCriticos.length} material(is) em nível crítico`);
-        }
+        if (materiaisCriticos.length > 3) alertas.push(`🔴 ${materiaisCriticos.length} materiais em nível CRÍTICO`);
+        else alertas.push(`🟡 ${materiaisCriticos.length} material(is) em nível crítico`);
       }
-
-      // Setores sobrecarregados — usa carga_percent (mesma métrica do CIP)
       const setoresSobrecarga = (capFabrica.setores || []).filter((s: any) => s.carga_percent > 90);
       if (setoresSobrecarga.length > 0) {
         const nomes = setoresSobrecarga.slice(0, 2).map((s: any) => s.nome.split(' ')[0]).join(', ');
         alertas.push(`🟡 ${setoresSobrecarga.length} setor(es) com carga >90% (${nomes}${setoresSobrecarga.length > 2 ? '...' : ''})`);
       }
-
-      // Pedidos atrasados (prazo de entrega vencido)
-      if (pedidosAtrasados > 0) {
-        alertas.push(`🔴 ${pedidosAtrasados} pedido(s) com prazo vencido`);
-      }
-
-      // Margem só se houver receita real
+      if (pedidosAtrasados > 0) alertas.push(`🔴 ${pedidosAtrasados} pedido(s) com prazo vencido`);
       if (cifData && cifData.receita > 0) {
         const margemLiq = (cifData.ebitda / cifData.receita) * 100;
         if (margemLiq < 0) alertas.push(`🔴 EBITDA negativo: margem ${margemLiq.toFixed(1)}%`);
         else if (margemLiq < 15) alertas.push(`🟡 Margem abaixo de 15%: ${margemLiq.toFixed(1)}%`);
       }
+      if (mesRef && !mesRef.ehAtual) alertas.unshift(`ℹ️ Mês atual sem dados — exibindo ${mesRef.rotulo} (último mês com dados)`);
+      if (alertas.length === 0) alertas.push('✅ Operação normal — sem alertas críticos');
 
-      // Sem dados suficientes — modo demonstração
-      if (alertas.length === 0) {
-        if (pedidosAtivos.length === 0 && materiais.length === 0) {
-          alertas.push('ℹ️ Dados insuficientes — Modo demonstração');
-        } else {
-          alertas.push('✅ Operação normal — sem alertas críticos');
-        }
-      }
-
-
-      // === DERIVAÇÃO FINANCEIRA (REGRA: origem em dado real, fallback estimado quando faltar) ===
-      // 1. Custo fixo mensal vem do CIF (custos_fixos ativos)
-      const { data: custosFixosRows } = await supabase
-        .from('custos_fixos')
-        .select('valor_mensal, ativo')
-        .eq('ativo', true);
-      const custoFixoMensal = (custosFixosRows || []).reduce((s, c) => s + Number(c.valor_mensal || 0), 0);
-
-      // 2. Horas produzidas no mês (já calculado em producaoMesAtual)
-      const horasProduzidasMes = producaoMesAtual.reduce((s, d) => s + d.horas, 0);
-
-      // 3. Custo por hora REAL = custos fixos ÷ horas produzidas
+      // === DERIVAÇÃO FINANCEIRA ===
+      const custoFixoMensal = (custosFixosRes.data || []).reduce((s, c: any) => s + Number(c.valor_mensal || 0), 0);
+      const horasProduzidasMes = producaoMesRef.reduce((s, d) => s + (d.horas || 0), 0);
       const custoPorHoraReal = horasProduzidasMes > 0 ? custoFixoMensal / horasProduzidasMes : 0;
-
-      // 4. Determinar fonte do custo (REAL ou ESTIMADO)
-      // Se faltar custo fixo OU horas produzidas, usa fator operacional 65% sobre vendas
-      // (referência industrial: custo total ≈ 65% do faturamento em moveleiro)
       const FATOR_CUSTO_ESTIMADO = 0.65;
       const usarCustoEstimado = custoPorHoraReal === 0;
 
-      const producaoDiaIdx: Record<string, number> = {};
-      producaoMesAtual.forEach(p => { producaoDiaIdx[p.dia] = p.horas; });
-
-      // Base diária — se não há vendas reais, usar dadosExemplo gerados
-      const baseVendasDiaria = (dadosExemplo ? dadosExemplo.vendasMesAtual : vendasMesAtual);
-      const baseProducaoDiariaIdx: Record<string, number> = {};
-      (dadosExemplo ? dadosExemplo.producaoMesAtual : producaoMesAtual)
-        .forEach(p => { baseProducaoDiariaIdx[p.dia] = p.horas || 0; });
-
       let acumLucro = 0;
-      const derivadoFinanceiroDiario = baseVendasDiaria.map(v => {
-        const horasDoDia = baseProducaoDiariaIdx[v.dia] || 0;
+      const derivadoFinanceiroDiario = vendasMesRef.map(v => {
+        const horasDoDia = producaoMesRef.find(p => p.dia === v.dia)?.horas || 0;
         const custo = usarCustoEstimado
           ? Math.round(v.valor * FATOR_CUSTO_ESTIMADO)
           : Math.round(horasDoDia * custoPorHoraReal);
@@ -477,25 +312,16 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         acumLucro += lucro;
         const margem = v.valor > 0 ? (lucro / v.valor) * 100 : 0;
         return {
-          dia: v.dia,
-          label: v.label,
-          faturamento: v.valor,
-          custo,
-          lucro,
-          lucroAcumulado: acumLucro,
-          margem: Number(margem.toFixed(1)),
+          dia: v.dia, label: v.label, faturamento: v.valor, custo, lucro,
+          lucroAcumulado: acumLucro, margem: Number(margem.toFixed(1)),
         };
       });
 
-      // 5. Alerta inteligente baseado na derivação real
       if (custoPorHoraReal > 0 && derivadoFinanceiroDiario.length > 0) {
         const totalLucro = derivadoFinanceiroDiario.reduce((s, d) => s + d.lucro, 0);
         const totalFat = derivadoFinanceiroDiario.reduce((s, d) => s + d.faturamento, 0);
-        if (totalFat > 0 && totalLucro < 0) {
-          alertas.unshift(`🔴 Prejuízo derivado: produção × custo > vendas no mês`);
-        } else if (totalFat > 0 && totalLucro / totalFat < 0.10) {
-          alertas.unshift(`🟡 Margem derivada baixa: ${((totalLucro / totalFat) * 100).toFixed(1)}%`);
-        }
+        if (totalFat > 0 && totalLucro < 0) alertas.unshift(`🔴 Prejuízo derivado: produção × custo > vendas no mês`);
+        else if (totalFat > 0 && totalLucro / totalFat < 0.10) alertas.unshift(`🟡 Margem derivada baixa: ${((totalLucro / totalFat) * 100).toFixed(1)}%`);
       }
 
       setKpis({
@@ -507,16 +333,13 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         horasCarteira, totalOPs: ops.length,
         opsEmProducao: ops.filter(o => o.status_producao !== 'Producao Finalizada' && o.status_producao !== 'aguardando').length,
         totalSetores: setores.length, capacidadeDiaria,
-        pedidosPorStatus, pedidosPorCanal, setoresProducao: setoresProducaoData,
+        pedidosPorCanal,
         alertas, materiaisCriticos, valorEstoque, totalPropostaCompra, cifData,
-        vendasMesAtual: dadosExemplo ? dadosExemplo.vendasMesAtual : vendasMesAtual,
-        producaoMesAtual: dadosExemplo ? dadosExemplo.producaoMesAtual : producaoMesAtual,
-        comparativoAnual: dadosExemplo ? dadosExemplo.comparativoAnual : comparativoAnual,
+        mesRef, vendasMesRef, producaoMesRef, comprasMesRef,
+        comparativoAnual,
         pedidosAtrasados,
         derivadoFinanceiroDiario,
-        custoPorHoraReal,
-        custoFixoMensal,
-        horasProduzidasMes,
+        custoPorHoraReal, custoFixoMensal, horasProduzidasMes,
         custoEstimado: usarCustoEstimado,
       });
       setLastUpdate(new Date());
@@ -526,18 +349,19 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
     setLoading(false);
   };
 
-  const temDados = kpis.totalPedidos > 0 || usandoExemplo;
   const diasCarteira = capacidade ? capacidade.diasNecessarios : 0;
-  // OCUPAÇÃO DO GARGALO (não a média) — coerente com CIP que mostra Acabamento 89%
-  const setorGargaloOcup = capacidade?.setores
-    ? Math.max(...capacidade.setores.map(s => s.carga_percent), 0)
-    : 0;
-  const cargaPercentual = setorGargaloOcup; // mostra a do gargalo, não a média
+  const setorGargaloOcup = capacidade?.setores ? Math.max(...capacidade.setores.map(s => s.carga_percent), 0) : 0;
+  const cargaPercentual = setorGargaloOcup;
   const prazoVendas = capacidade?.prazoVendasDias ?? 0;
   const gargaloNome = capacidade?.setorGargaloDias ?? 'N/A';
   const fmt = (v: number) => v >= 999500 ? `R$ ${(v / 1000000).toFixed(2)}M` : v >= 1000 ? `R$ ${(v / 1000).toFixed(0)}k` : `R$ ${v.toFixed(0)}`;
-
   const tooltipStyle = { backgroundColor: 'hsl(220, 20%, 14%)', border: '1px solid hsl(220, 18%, 22%)', borderRadius: '8px', color: 'hsl(210, 20%, 95%)' };
+
+  const temVendasMes = kpis.vendasMesRef.some(v => v.valor > 0);
+  const temProducaoMes = kpis.producaoMesRef.some(p => (p.qtd || 0) > 0 || p.valor > 0);
+  const temComprasMes = kpis.comprasMesRef.some(c => c.valor > 0);
+  const temComparativo = kpis.comparativoAnual.some(c => c.vendido > 0 || c.produzido > 0);
+  const rotuloMes = kpis.mesRef?.rotulo ?? new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   return (
     <div className="p-4 md:p-6 space-y-6 animate-fade-in h-full overflow-y-auto">
@@ -551,7 +375,9 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             Dashboard Executivo
           </h2>
           <p className="text-muted-foreground mt-1 text-sm">
-            Dados em tempo real • Atualizado: {lastUpdate.toLocaleTimeString('pt-BR')}
+            Período: <span className="text-foreground font-medium">{rotuloMes}</span>
+            {kpis.mesRef && !kpis.mesRef.ehAtual && <span className="text-warning ml-2">(fallback — mês atual vazio)</span>}
+            {' • '}Atualizado: {lastUpdate.toLocaleTimeString('pt-BR')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -559,15 +385,9 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
             <RefreshCw className={cn('h-4 w-4', loading && 'animate-spin')} />
             Atualizar
           </Button>
-          <div className={cn('flex items-center gap-2 px-4 py-2 rounded-lg border',
-            usandoExemplo
-              ? 'bg-warning/10 border-warning/30'
-              : 'bg-success/10 border-success/30'
-          )}>
-            <div className={cn('w-2 h-2 rounded-full animate-pulse', usandoExemplo ? 'bg-warning' : 'bg-success')} />
-            <span className={cn('text-sm font-medium', usandoExemplo ? 'text-warning' : 'text-success')}>
-              {usandoExemplo ? 'Dados de Exemplo' : 'Dados Reais'}
-            </span>
+          <div className="flex items-center gap-2 px-4 py-2 rounded-lg border bg-success/10 border-success/30">
+            <div className="w-2 h-2 rounded-full animate-pulse bg-success" />
+            <span className="text-sm font-medium text-success">Dados Reais</span>
           </div>
         </div>
       </div>
@@ -580,6 +400,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
               'p-3 rounded-lg border text-sm font-medium',
               alerta.startsWith('🔴') ? 'bg-destructive/10 border-destructive/30 text-destructive' :
               alerta.startsWith('🟡') ? 'bg-warning/10 border-warning/30 text-warning' :
+              alerta.startsWith('ℹ️') ? 'bg-primary/10 border-primary/30 text-primary' :
               'bg-success/10 border-success/30 text-success'
             )}>
               {alerta}
@@ -588,9 +409,8 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       )}
 
-      {/* KPIs Row 1 */}
+      {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
-        {/* PRAZO DE VENDAS */}
         <div className={cn('p-4 rounded-xl border-2',
           prazoVendas > 20 ? 'bg-destructive/15 border-destructive/50' : prazoVendas > 12 ? 'bg-warning/15 border-warning/50' : 'bg-success/10 border-success/30'
         )}>
@@ -603,7 +423,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-[10px] text-muted-foreground mt-0.5">Gargalo: {gargaloNome}</p>
         </div>
 
-        {/* PEDIDOS */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-civ/20 to-civ/5 border border-civ/30">
           <div className="flex items-center justify-between mb-2">
             <TrendingUp className="h-5 w-5 text-civ" />
@@ -614,7 +433,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-xs text-civ mt-1">{kpis.pedidosAguardando} aguardando</p>
         </div>
 
-        {/* EM PRODUÇÃO */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-cip/20 to-cip/5 border border-cip/30">
           <div className="flex items-center justify-between mb-2">
             <Factory className="h-5 w-5 text-cip" />
@@ -625,7 +443,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-xs text-cip mt-1">{kpis.totalOPs} OPs | {kpis.opsEmProducao} ativas</p>
         </div>
 
-        {/* CARTEIRA */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-success/20 to-success/5 border border-success/30">
           <div className="flex items-center justify-between mb-2">
             <DollarSign className="h-5 w-5 text-success" />
@@ -636,7 +453,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <p className="text-xs text-success mt-1">{kpis.pedidosFinalizados} finalizados</p>
         </div>
 
-        {/* CAPACIDADE */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-warning/20 to-warning/5 border border-warning/30">
           <div className="flex items-center justify-between mb-2">
             <Activity className="h-5 w-5 text-warning" />
@@ -652,7 +468,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </div>
 
-        {/* ESTOQUE */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-cic/20 to-cic/5 border border-cic/30">
           <div className="flex items-center justify-between mb-2">
             <Warehouse className="h-5 w-5 text-cic" />
@@ -665,7 +480,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </p>
         </div>
 
-        {/* FINANCEIRO */}
         <div className="p-4 rounded-xl bg-gradient-to-br from-cif/20 to-cif/5 border border-cif/30">
           <div className="flex items-center justify-between mb-2">
             <DollarSign className="h-5 w-5 text-cif" />
@@ -679,13 +493,13 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       </div>
 
-      {/* === VENDAS + PRODUÇÃO — Lado a lado (50/50) === */}
+      {/* === VENDAS + PRODUÇÃO === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title={`📊 Vendas — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (R$/dia útil)`} variant="civ">
+        <ModuleCard title={`📊 Vendas — ${rotuloMes} (R$/dia útil)`} variant="civ">
           <div className="h-64">
-            {kpis.vendasMesAtual.length > 0 ? (
+            {temVendasMes ? (
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={kpis.vendasMesAtual}>
+                <ComposedChart data={kpis.vendasMesRef}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                   <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
@@ -698,11 +512,11 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
 
-        <ModuleCard title={`🏭 Produção — ${new Date().toLocaleDateString('pt-BR', { month: 'long' })} (R$/dia útil)`} variant="cip">
+        <ModuleCard title={`🏭 Produção — ${rotuloMes} (R$/dia útil)`} variant="cip">
           <div className="h-64">
-            {kpis.producaoMesAtual.length > 0 ? (
+            {temProducaoMes ? (
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={kpis.producaoMesAtual}>
+                <ComposedChart data={kpis.producaoMesRef}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
                   <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                   <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
@@ -716,23 +530,52 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </ModuleCard>
       </div>
 
-      {/* === ANÁLISE — Evolução Consolidada 2026 + Distribuição Diária Abril === */}
+      {/* === EVOLUÇÃO ANUAL + DISTRIBUIÇÃO DIÁRIA CONSOLIDADA === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <SerieMensal2026
-          metricas={['faturamento', 'producao', 'compras']}
-          variant="cig"
-          title="Evolução Mensal 2026 — Visão Consolidada"
-          subtitle="Faturamento × Produção × Compras (R$)"
-        />
-        <DistribuicaoDiariaAbrilChart
-          metricas={['vendas', 'producao', 'compras']}
-          variant="cig"
-          title="Distribuição Diária – Abril/2026"
-          subtitle="Vendas, produção e compras (R$)"
-        />
+        <ModuleCard title="📈 Evolução Anual — Vendido × Produzido (R$)" variant="cig">
+          <div className="h-64">
+            {temComparativo ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={kpis.comparativoAnual}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="mes" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} tickFormatter={(k) => { const [y, m] = k.split('-'); return `${MESES_PT[+m - 1].slice(0, 3)}/${y.slice(2)}`; }} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${Number(v).toLocaleString('pt-BR')}`, n]} />
+                  <Legend />
+                  <Bar dataKey="vendido" fill={CHART_COLORS.verde} name="Vendido" radius={[3, 3, 0, 0]} />
+                  <Line type="monotone" dataKey="produzido" stroke={CHART_COLORS.azulMarinho} strokeWidth={2} dot={{ r: 3 }} name="Produzido" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
+
+        <ModuleCard title={`📅 Distribuição Diária — ${rotuloMes}`} variant="cig">
+          <div className="h-64">
+            {(temVendasMes || temProducaoMes || temComprasMes) ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={kpis.vendasMesRef.map((v, i) => ({
+                  label: v.label,
+                  vendas: v.valor,
+                  producao: kpis.producaoMesRef[i]?.valor || 0,
+                  compras: kpis.comprasMesRef[i]?.valor || 0,
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
+                  <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v: number, n: string) => [`R$ ${Number(v).toLocaleString('pt-BR')}`, n]} labelFormatter={(l) => `Dia ${l}`} />
+                  <Legend />
+                  <Bar dataKey="vendas" fill={CHART_COLORS.verde} name="Vendas" radius={[2, 2, 0, 0]} />
+                  <Line type="monotone" dataKey="producao" stroke={CHART_COLORS.azulMarinho} strokeWidth={2} dot={false} name="Produção" />
+                  <Line type="monotone" dataKey="compras" stroke={CHART_COLORS.laranja} strokeWidth={2} dot={false} name="Compras" />
+                </ComposedChart>
+              </ResponsiveContainer>
+            ) : <EmptyChart />}
+          </div>
+        </ModuleCard>
       </div>
 
-      {/* === FINANCEIRO DERIVADO — Receita × Custo × Lucro (origem real) === */}
+      {/* === FINANCEIRO DERIVADO === */}
       <ModuleCard
         title="💰 Financeiro Derivado — Origem: Vendas (CIV) × Produção (CIP) × Custo Fixo (CIF)"
         variant="cif"
@@ -746,7 +589,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">Horas Produzidas</p>
             <p className="text-sm font-bold text-foreground">{kpis.horasProduzidasMes.toFixed(1)}h</p>
-            <p className="text-[9px] text-muted-foreground">CIP · OPs finalizadas no mês</p>
+            <p className="text-[9px] text-muted-foreground">CIP · OPs do mês ref.</p>
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
@@ -765,9 +608,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
               const totalLucro = kpis.derivadoFinanceiroDiario.reduce((s, d) => s + d.lucro, 0);
               return (
                 <>
-                  <p className={cn('text-sm font-bold', totalLucro >= 0 ? 'text-success' : 'text-destructive')}>
-                    {fmt(totalLucro)}
-                  </p>
+                  <p className={cn('text-sm font-bold', totalLucro >= 0 ? 'text-success' : 'text-destructive')}>{fmt(totalLucro)}</p>
                   <p className="text-[9px] text-muted-foreground">= Vendas − Custo derivado</p>
                 </>
               );
@@ -775,7 +616,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </div>
 
-        {kpis.custoEstimado && (
+        {kpis.custoEstimado && temVendasMes && (
           <div className="mb-3 p-2 rounded-md bg-warning/10 border border-warning/30 flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-warning shrink-0" />
             <p className="text-xs text-warning">
@@ -786,17 +627,13 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         )}
 
         <div className="h-72">
-          {kpis.derivadoFinanceiroDiario.length > 0 ? (
+          {temVendasMes ? (
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={kpis.derivadoFinanceiroDiario}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 10 }} interval={1} />
                 <YAxis tick={{ fill: 'hsl(215, 15%, 55%)', fontSize: 11 }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  formatter={(v: number, name: string) => [`R$ ${Number(v).toLocaleString('pt-BR')}`, name]}
-                  labelFormatter={(l) => `Dia ${l}`}
-                />
+                <Tooltip contentStyle={tooltipStyle} formatter={(v: number, name: string) => [`R$ ${Number(v).toLocaleString('pt-BR')}`, name]} labelFormatter={(l) => `Dia ${l}`} />
                 <Legend />
                 <Bar dataKey="faturamento" fill={CHART_COLORS.verde} radius={[3, 3, 0, 0]} name="Receita" opacity={0.85} />
                 <Bar dataKey="custo" fill={CHART_COLORS.vermelho} radius={[3, 3, 0, 0]} name={kpis.custoEstimado ? 'Custo (estimado)' : 'Custo (real)'} opacity={0.75} />
@@ -807,11 +644,11 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
         </div>
       </ModuleCard>
 
-      {/* === FINANCEIRO — Lucro Acumulado + Margem Diária (lado a lado) === */}
+      {/* === Lucro Acumulado + Margem === */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ModuleCard title="📈 Lucro Acumulado — Mês corrente (R$)" variant="cif">
+        <ModuleCard title={`📈 Lucro Acumulado — ${rotuloMes} (R$)`} variant="cif">
           <div className="h-64">
-            {kpis.derivadoFinanceiroDiario.length > 0 ? (
+            {temVendasMes ? (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={kpis.derivadoFinanceiroDiario}>
                   <defs>
@@ -833,7 +670,7 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
 
         <ModuleCard title="📊 Margem Diária — % (Lucro ÷ Receita)" variant="cif">
           <div className="h-64">
-            {kpis.derivadoFinanceiroDiario.length > 0 ? (
+            {temVendasMes ? (
               <ResponsiveContainer width="100%" height="100%">
                 <ComposedChart data={kpis.derivadoFinanceiroDiario}>
                   <CartesianGrid strokeDasharray="3 3" stroke="hsl(220, 18%, 22%)" vertical={false} />
@@ -848,7 +685,6 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
       </div>
-
 
       {kpis.cifData && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -929,23 +765,15 @@ export function DashboardCIGMelhorado({ onGoHome }: DashboardCIGMelhoradoProps) 
           </div>
         </ModuleCard>
       )}
-
-      {usandoExemplo && (
-        <div className="text-center py-4 border-t border-border/30">
-          <p className="text-xs text-muted-foreground">
-            📋 Os gráficos de vendas e produção exibem <span className="text-warning font-medium">dados de exemplo</span> para demonstração.
-            Cadastre pedidos e OPs para visualizar dados reais.
-          </p>
-        </div>
-      )}
     </div>
   );
 }
 
 function EmptyChart() {
   return (
-    <div className="h-64 flex items-center justify-center text-muted-foreground text-sm">
-      Sem dados cadastrados
+    <div className="h-64 flex flex-col items-center justify-center text-muted-foreground gap-2">
+      <Inbox className="h-8 w-8 opacity-50" />
+      <span className="text-sm">Sem dados cadastrados no período</span>
     </div>
   );
 }
